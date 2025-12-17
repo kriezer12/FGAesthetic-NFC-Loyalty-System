@@ -58,13 +58,8 @@ Create `backend/.env` file:
 SUPABASE_URL=https://xxxxx.supabase.co
 SUPABASE_KEY=your_supabase_anon_key_here
 
-# Clinic Configuration
-CLINIC_ID=your_clinic_uuid
-CLINIC_NAME=FG Aesthetic Centre - Main
-
 # App Configuration
-SECRET_KEY=your_secret_key_here
-ENVIRONMENT=development
+JWT_SECRET=your_secret_key_here
 ```
 
 **⚠️ IMPORTANT:** 
@@ -72,15 +67,6 @@ ENVIRONMENT=development
 - Ask your team lead for the actual values
 - Each team member should create their own `.env` file
 
-### Frontend (.env)
-
-Create `frontend/.env` file:
-
-```env
-VITE_API_URL=http://localhost:8000
-```
-
----
 
 ## Step 3: Start the Project with Docker
 
@@ -89,6 +75,7 @@ VITE_API_URL=http://localhost:8000
 ```bash
 # Make sure Docker Desktop is running
 
+ON YOUR VSCODE TERMINAL
 # Start all services
 docker-compose up --build
 
@@ -100,7 +87,7 @@ docker-compose up -d --build
 - Builds backend container
 - Builds frontend container
 - Starts both services
-- Backend runs on `http://localhost:8000`
+- Backend runs on `http://localhost:5000`
 - Frontend runs on `http://localhost:5173`
 
 **To stop:**
@@ -130,11 +117,11 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+ON TERMINAL
+python -m app.main
 ```
 
-Backend will be available at `http://localhost:8000`
+Backend will be available at `http://localhost:5000`
 
 ### Frontend Setup (New Terminal)
 
@@ -143,7 +130,11 @@ Backend will be available at `http://localhost:8000`
 cd frontend
 
 # Install dependencies
+npm create vite@latest frontend -- --template react
+cd frontend
 npm install
+npm install -D tailwindcss@3 postcss autoprefixer react-router-dom
+npx tailwindcss init
 
 # Run development server
 npm run dev
@@ -156,9 +147,7 @@ Frontend will be available at `http://localhost:5173`
 ## Step 5: Verify Everything Works
 
 ### Check Backend
-Open browser to: `http://localhost:8000/docs`
-
-You should see the FastAPI Swagger documentation.
+Open browser to: `http://localhost:5000/`
 
 ### Check Frontend
 Open browser to: `http://localhost:5173`
@@ -214,7 +203,7 @@ docker-compose up
 # Make sure everything works!
 
 # 7. Commit your changes
-git add .
+git add {file to push}
 git commit -m "feat(scope): description of what you did"
 
 # 8. Push to your feature branch
@@ -243,126 +232,11 @@ git push origin feature/your-task-name
 # 6. Create Pull Request on GitHub
 # Go to GitHub → Your branch → "Create Pull Request"
 # Request review from team lead
-```
-
----
-
-## Common Issues & Solutions
-
-### Issue: Docker containers won't start
-
-**Solution:**
-```bash
-# Stop all containers
-docker-compose down
-
-# Remove old containers and volumes
-docker-compose down -v
-
-# Rebuild from scratch
-docker-compose up --build
-```
-
-### Issue: Port already in use (8000 or 5173)
-
-**Solution:**
-```bash
-# Find and kill process using the port
-# Windows:
-netstat -ano | findstr :8000
-taskkill /PID <PID_NUMBER> /F
-
-# Mac/Linux:
-lsof -ti:8000 | xargs kill -9
-```
-
-### Issue: Permission denied on Linux/Mac
-
-**Solution:**
-```bash
-# Make sure you have proper permissions
-sudo chown -R $USER:$USER .
-
-# Or run docker with sudo
-sudo docker-compose up
-```
-
-### Issue: Module not found errors
-
-**Backend:**
-```bash
-# Reinstall dependencies
-pip install -r requirements.txt --force-reinstall
-```
-
-**Frontend:**
-```bash
-# Delete and reinstall
-rm -rf node_modules package-lock.json
-npm install
-```
-
-### Issue: Git conflicts when merging
-
-**Solution:**
-```bash
-# Pull latest changes
-git pull origin dev
-
-# If conflicts appear, open the files in VS Code
-# Look for <<<<<<< HEAD markers
-# Choose which code to keep
-# Then:
-git add .
-git commit -m "fix: resolve merge conflicts"
-```
-
----
-
-## Project Structure Overview
-
-```
-FGAesthetic-NFC-Loyalty-System/
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI entry point
-│   │   ├── config.py            # Configuration
-│   │   ├── routes/              # API endpoints
-│   │   │   ├── auth.py          # Login/logout
-│   │   │   ├── clients.py       # Client management
-│   │   │   ├── loyalty.py       # Loyalty points
-│   │   │   └── nfc.py           # NFC scanning
-│   │   └── services/            # Business logic
-│   │       ├── auth_service.py
-│   │       ├── supabase_client.py
-│   │       └── nfc_service.py
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── components/          # React components
-│   │   ├── pages/               # Page components
-│   │   ├── services/            # API calls
-│   │   └── App.jsx
-│   ├── package.json
-│   └── Dockerfile
-└── docker-compose.yml
-```
-
 ---
 
 ## Git Commit Message Convention
 
 Use this format:
-```
-<type>(<scope>): <description>
-
-Examples:
-feat(auth): add login form validation
-fix(nfc): resolve card reading timeout
-chore(deps): update React to v18.3
-docs: update README with setup steps
-```
 
 **Types:**
 - `feat` - New feature
@@ -384,9 +258,11 @@ chore/maintenance-task  # Maintenance
 docs/documentation      # Documentation
 
 Examples:
-feature/client-registration
-fix/login-timeout
-chore/update-dependencies
+osorio-feature/client-registration
+molina-feature/loyalty-dashboard
+delavega-fix/nfc-timeout-error
+devera-chore/update-react-version
+caling-docs/api-endpoints
 ```
 
 ---
@@ -444,7 +320,7 @@ git push origin feature/task-name
 - [ ] On `dev` branch
 - [ ] `.env` files created (ask team lead for values)
 - [ ] Docker containers running successfully
-- [ ] Can access backend (`http://localhost:8000/docs`)
+- [ ] Can access backend (`http://localhost:5000`)
 - [ ] Can access frontend (`http://localhost:5173`)
 - [ ] Created your feature branch
 - [ ] Ready to code! 🚀
@@ -473,3 +349,4 @@ git push origin feature/task-name
 ---
 
 Good luck and happy coding! 🎉
+
