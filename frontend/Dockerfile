@@ -13,6 +13,16 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Build arguments for environment variables
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_JWT_SECRET
+
+# Set environment variables for Vite build
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_JWT_SECRET=$VITE_JWT_SECRET
+
 # Copy package files first for better caching
 COPY package*.json ./
 

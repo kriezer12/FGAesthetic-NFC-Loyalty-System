@@ -31,10 +31,15 @@ services:
 
   # ==================== Frontend App ====================
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_JWT_SECRET: ${VITE_JWT_SECRET}
     container_name: fgaesthetic-frontend
     ports:
-      - "80:80"
+      - "5173:80"
     depends_on:
       - backend
     restart: unless-stopped
