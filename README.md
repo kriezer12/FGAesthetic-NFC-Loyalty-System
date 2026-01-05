@@ -1,12 +1,22 @@
 # FG Aesthetic NFC Loyalty System
 
-Full-stack loyalty card system with NFC integration.
+Full-stack loyalty card system with NFC integration for beauty clinics. Features customer management, points tracking, and seamless NFC card scanning for quick check-ins.
+
+## Features
+
+- 🎫 **NFC Card Scanning** - Tap-to-identify using USB NFC readers (keyboard HID)
+- 👥 **Customer Management** - Full customer database with search, filters, and pagination
+- ⭐ **Points & Rewards** - Track loyalty points and visit history
+- 📋 **Beauty Clinic Fields** - Skin type, allergies, emergency contacts
+- 🔐 **Secure Auth** - Supabase authentication with email/password
+- 📱 **Responsive Design** - Works on desktop and mobile devices
 
 ## Tech Stack
 
-**Frontend:** React 19 + Vite + Tailwind CSS + shadcn/ui  
+**Frontend:** React 19 + Vite 7 + Tailwind CSS 4 + shadcn/ui  
 **Backend:** Flask + Supabase (PostgreSQL)  
-**Auth:** Supabase Auth (Email/Password + Google OAuth)
+**Auth:** Supabase Auth (Email/Password + Google OAuth)  
+**NFC:** USB HID readers (keyboard emulation - no special drivers needed)
 
 ---
 
@@ -42,8 +52,14 @@ docker-compose up --build
 ```
 
 5. **Access the app:**
-- **Frontend:** http://localhost
+- **Frontend:** http://localhost:5173
 - **Backend API:** http://localhost:5000
+
+6. **Default Routes:**
+- `/login` - Login page
+- `/signup` - Registration page
+- `/dashboard` - Main NFC scanner dashboard
+- `/dashboard/customers` - Customer management
 
 ---
 
@@ -85,10 +101,18 @@ npm run dev
 │   │   ├── main.jsx             # App entry point & routes
 │   │   ├── login.jsx            # Login page
 │   │   ├── signup.jsx           # Signup page
+│   │   ├── dashboard.tsx        # Main dashboard with NFC scanner
+│   │   ├── customers.tsx        # Customers list page
 │   │   ├── components/
+│   │   │   ├── app-sidebar.tsx  # Navigation sidebar
+│   │   │   ├── nfc-scanner.tsx  # NFC card scanning component
+│   │   │   ├── customer-info.tsx # Customer details & points
+│   │   │   ├── register-card.tsx # New card registration form
 │   │   │   ├── login-form.tsx   # Login form with Supabase auth
 │   │   │   ├── signup-form.tsx  # Signup form with Supabase auth
 │   │   │   └── ui/              # shadcn/ui components
+│   │   ├── hooks/
+│   │   │   └── use-mobile.ts    # Mobile detection hook
 │   │   └── lib/
 │   │       ├── supabase.ts      # Supabase client
 │   │       └── utils.ts         # Utility functions
@@ -97,6 +121,52 @@ npm run dev
 │   └── nginx.conf
 ├── docker-compose.yml
 └── README.md
+```
+
+---
+
+## NFC Reader Setup
+
+This system works with any USB NFC reader that operates in **keyboard HID mode** (most common type). When a card is tapped, the reader types the card's UID directly into the focused input field.
+
+**Supported readers:** ACR122U, ACR1252U, or any HID keyboard-emulating NFC reader.
+
+**How it works:**
+1. User navigates to the NFC Scanner page
+2. The input field automatically stays focused
+3. User taps their NFC card on the reader
+4. Reader types the 10-digit UID + Enter
+5. System looks up the card in the database
+6. If found → Shows customer info with points management
+7. If not found → Opens registration form for new customer
+
+---
+
+## Customer Database Schema
+
+The `customers` table in Supabase requires these columns:
+
+```sql
+CREATE TABLE customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nfc_uid VARCHAR(50) UNIQUE NOT NULL,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  name VARCHAR(200),
+  email VARCHAR(255),
+  phone VARCHAR(50) NOT NULL,
+  date_of_birth DATE,
+  gender VARCHAR(20),
+  address TEXT,
+  emergency_contact VARCHAR(200),
+  skin_type VARCHAR(50),
+  allergies TEXT,
+  notes TEXT,
+  points INTEGER DEFAULT 0,
+  visits INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_visit TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
 ---
