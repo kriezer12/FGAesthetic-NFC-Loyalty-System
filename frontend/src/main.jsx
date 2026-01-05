@@ -20,6 +20,8 @@ import './index.css'
 // Page components
 import LoginPage from './login.jsx'
 import SignupPage from './signup.jsx'
+import Dashboard from './dashboard.tsx'
+import CustomersPage from './customers.tsx'
 
 // Mount the React application
 createRoot(document.getElementById('root')).render(
@@ -33,8 +35,11 @@ createRoot(document.getElementById('root')).render(
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         
-        {/* TODO: Add protected routes */}
-        {/* <Route path="/dashboard" element={<Dashboard />} /> */}
+        {/* Dashboard routes */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/scan" element={<Dashboard />} />
+        <Route path="/dashboard/customers" element={<CustomersPage />} />
+        <Route path="/dashboard/*" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
