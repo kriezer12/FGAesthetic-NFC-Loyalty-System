@@ -1,51 +1,29 @@
-import * as React from "react"
-import { useState, useEffect } from "react"
-import { 
-  Search, 
-  Filter, 
-  Users, 
-  Phone, 
-  Mail, 
-  CreditCard,
+import { useCallback, useEffect, useMemo, useState } from "react"
+import {
   Award,
   Calendar,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
+  Eye,
+  Filter,
+  Mail,
+  Phone,
+  Search,
+  Users,
   X,
-  Eye
 } from "lucide-react"
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { useCounter } from "@/hooks/use-counter"
 import { AppSidebar } from "@/components/app-sidebar"
-import { Separator } from "@/components/ui/separator"
-import { Input } from "@/components/ui/input"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb"
+import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { supabase } from "@/lib/supabase"
 
-interface Customer {
-  id: string
-  nfc_uid: string
-  first_name: string
-  last_name: string
-  name: string
-  email: string
-  phone: string
-  date_of_birth: string
-  gender: string
-  address: string
-  skin_type: string
-  allergies: string
-  points: number
-  visits: number
-  created_at: string
-  last_visit: string
-}
+import type { Customer } from "@/types/customer"
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -53,23 +31,34 @@ export default function CustomersPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  
-  // Filters
+
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
   const [showFilters, setShowFilters] = useState(false)
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  useEffect(() => {
-    fetchCustomers()
-  }, [])
+  const totalClients = customers.length
+  const totalPointsIssued = useMemo(
+    () => customers.reduce((sum, c) => sum + (c.points || 0), 0),
+    [customers],
+  )
+  const totalVisits = useMemo(
+    () => customers.reduce((sum, c) => sum + (c.visits || 0), 0),
+    [customers],
+  )
+  const registeredCards = customers.length
+
+  const totalClientsCount = useCounter(totalClients, 1500)
+  const totalPointsCount = useCounter(totalPointsIssued, 1500)
+  const totalVisitsCount = useCounter(totalVisits, 1500)
+  const registeredCardsCount = useCounter(registeredCards, 1500)
 
   useEffect(() => {
-    filterCustomers()
-  }, [customers, searchQuery, skinTypeFilter, genderFilter])
+    document.title = "Customers - FG Aesthetic Centre"
+    fetchCustomers()
+  }, [])
 
   const fetchCustomers = async () => {
     setIsLoading(true)
@@ -88,10 +77,9 @@ export default function CustomersPage() {
     }
   }
 
-  const filterCustomers = () => {
+  const filterCustomers = useCallback(() => {
     let filtered = [...customers]
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -101,23 +89,25 @@ export default function CustomersPage() {
           c.last_name?.toLowerCase().includes(query) ||
           c.email?.toLowerCase().includes(query) ||
           c.phone?.includes(query) ||
-          c.nfc_uid?.toLowerCase().includes(query)
+          c.nfc_uid?.toLowerCase().includes(query),
       )
     }
 
-    // Skin type filter
     if (skinTypeFilter) {
       filtered = filtered.filter((c) => c.skin_type === skinTypeFilter)
     }
 
-    // Gender filter
     if (genderFilter) {
       filtered = filtered.filter((c) => c.gender === genderFilter)
     }
 
     setFilteredCustomers(filtered)
     setCurrentPage(1)
-  }
+  }, [customers, genderFilter, searchQuery, skinTypeFilter])
+
+  useEffect(() => {
+    filterCustomers()
+  }, [filterCustomers])
 
   const clearFilters = () => {
     setSearchQuery("")
@@ -125,7 +115,7 @@ export default function CustomersPage() {
     setGenderFilter("")
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A"
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -134,12 +124,10 @@ export default function CustomersPage() {
     })
   }
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
-
-  const hasActiveFilters = skinTypeFilter || genderFilter
+  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter)
 
   return (
     <SidebarProvider>
@@ -158,62 +146,48 @@ export default function CustomersPage() {
         </header>
 
         <main className="flex-1 p-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Clients
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{customers.length}</div>
+                <div className="text-2xl font-bold">{totalClientsCount.toLocaleString()}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Points Issued
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Points Issued</CardTitle>
                 <Award className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {customers.reduce((sum, c) => sum + (c.points || 0), 0)}
-                </div>
+                <div className="text-2xl font-bold">{totalPointsCount.toLocaleString()}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Visits
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {customers.reduce((sum, c) => sum + (c.visits || 0), 0)}
-                </div>
+                <div className="text-2xl font-bold">{totalVisitsCount.toLocaleString()}</div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Registered Cards
-                </CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Registered Cards</CardTitle>
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{customers.length}</div>
+                <div className="text-2xl font-bold">{registeredCardsCount.toLocaleString()}</div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Search and Filters */}
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="mb-6 flex flex-col gap-4 md:flex-row">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by name, email, phone, or NFC ID..."
                 className="pl-10"
@@ -221,23 +195,17 @@ export default function CustomersPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button
-              variant={showFilters ? "secondary" : "outline"}
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
+            <Button variant={showFilters ? "secondary" : "outline"} onClick={() => setShowFilters(!showFilters)}>
+              <Filter className="mr-2 h-4 w-4" />
               Filters
               {hasActiveFilters && (
-                <span className="ml-2 rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-xs">
-                  Active
-                </span>
+                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">Active</span>
               )}
             </Button>
           </div>
 
-          {/* Filter Panel */}
           {showFilters && (
-            <div className="flex flex-wrap gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
+            <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-muted/50 p-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Skin Type</label>
                 <select
@@ -269,7 +237,7 @@ export default function CustomersPage() {
               {hasActiveFilters && (
                 <div className="flex items-end">
                   <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    <X className="h-4 w-4 mr-1" />
+                    <X className="mr-1 h-4 w-4" />
                     Clear Filters
                   </Button>
                 </div>
@@ -277,24 +245,22 @@ export default function CustomersPage() {
             </div>
           )}
 
-          {/* Results count */}
-          <div className="text-sm text-muted-foreground mb-4">
+          <div className="mb-4 text-sm text-muted-foreground">
             Showing {paginatedCustomers.length} of {filteredCustomers.length} clients
           </div>
 
-          {/* Customers Table */}
           <div className="rounded-lg border bg-card">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left p-4 font-medium">Client</th>
-                    <th className="text-left p-4 font-medium">Contact</th>
-                    <th className="text-left p-4 font-medium">NFC Card</th>
-                    <th className="text-left p-4 font-medium">Points</th>
-                    <th className="text-left p-4 font-medium">Visits</th>
-                    <th className="text-left p-4 font-medium">Last Visit</th>
-                    <th className="text-left p-4 font-medium">Actions</th>
+                    <th className="p-4 text-left font-medium">Client</th>
+                    <th className="p-4 text-left font-medium">Contact</th>
+                    <th className="p-4 text-left font-medium">NFC Card</th>
+                    <th className="p-4 text-left font-medium">Points</th>
+                    <th className="p-4 text-left font-medium">Visits</th>
+                    <th className="p-4 text-left font-medium">Last Visit</th>
+                    <th className="p-4 text-left font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -312,18 +278,20 @@ export default function CustomersPage() {
                     </tr>
                   ) : (
                     paginatedCustomers.map((customer) => (
-                      <tr key={customer.id} className="border-b hover:bg-muted/30 transition-colors">
+                      <tr key={customer.id} className="border-b transition-colors hover:bg-muted/30">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                               <span className="text-sm font-medium text-primary">
                                 {customer.first_name?.[0] || customer.name?.[0] || "?"}
                                 {customer.last_name?.[0] || ""}
                               </span>
                             </div>
                             <div>
-                              <div className="font-medium">{customer.name || `${customer.first_name} ${customer.last_name}`}</div>
-                              <div className="text-xs text-muted-foreground capitalize">
+                              <div className="font-medium">
+                                {customer.name || `${customer.first_name} ${customer.last_name}`}
+                              </div>
+                              <div className="text-xs capitalize text-muted-foreground">
                                 {customer.skin_type && `${customer.skin_type} skin`}
                                 {customer.gender && customer.skin_type && " • "}
                                 {customer.gender}
@@ -348,23 +316,15 @@ export default function CustomersPage() {
                           </div>
                         </td>
                         <td className="p-4">
-                          <code className="text-xs bg-muted px-2 py-1 rounded">
-                            {customer.nfc_uid}
-                          </code>
+                          <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
                         </td>
                         <td className="p-4">
                           <span className="font-semibold text-primary">{customer.points || 0}</span>
                         </td>
                         <td className="p-4">{customer.visits || 0}</td>
-                        <td className="p-4 text-sm text-muted-foreground">
-                          {formatDate(customer.last_visit)}
-                        </td>
+                        <td className="p-4 text-sm text-muted-foreground">{formatDate(customer.last_visit)}</td>
                         <td className="p-4">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedCustomer(customer)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedCustomer(customer)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </td>
@@ -375,9 +335,8 @@ export default function CustomersPage() {
               </table>
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between p-4 border-t">
+              <div className="flex items-center justify-between border-t p-4">
                 <div className="text-sm text-muted-foreground">
                   Page {currentPage} of {totalPages}
                 </div>
@@ -406,16 +365,13 @@ export default function CustomersPage() {
           </div>
         </main>
 
-        {/* Customer Detail Modal */}
         {selectedCustomer && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-lg max-h-[85vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <Card className="max-h-[85vh] w-full max-w-lg overflow-y-auto">
               <CardHeader className="flex flex-row items-start justify-between">
                 <div>
                   <CardTitle>{selectedCustomer.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Client since {formatDate(selectedCustomer.created_at)}
-                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">Client since {formatDate(selectedCustomer.created_at)}</p>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedCustomer(null)}>
                   <X className="h-4 w-4" />
@@ -424,19 +380,17 @@ export default function CustomersPage() {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="rounded-lg bg-primary/10 p-4 text-center">
-                    <Award className="h-6 w-6 text-primary mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-primary">{selectedCustomer.points}</p>
+                    <Award className="mx-auto mb-2 h-6 w-6 text-primary" />
                     <p className="text-xs text-muted-foreground">Points</p>
                   </div>
                   <div className="rounded-lg bg-muted p-4 text-center">
-                    <Calendar className="h-6 w-6 mx-auto mb-2" />
-                    <p className="text-2xl font-bold">{selectedCustomer.visits}</p>
+                    <Calendar className="mx-auto mb-2 h-6 w-6" />
                     <p className="text-xs text-muted-foreground">Visits</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-sm">Contact Information</h4>
+                  <h4 className="text-sm font-semibold">Contact Information</h4>
                   {selectedCustomer.phone && (
                     <div className="flex items-center gap-3 text-sm">
                       <Phone className="h-4 w-4 text-muted-foreground" />
@@ -449,33 +403,29 @@ export default function CustomersPage() {
                       {selectedCustomer.email}
                     </div>
                   )}
-                  {selectedCustomer.address && (
-                    <div className="text-sm text-muted-foreground">
-                      {selectedCustomer.address}
-                    </div>
-                  )}
+                  {selectedCustomer.address && <div className="text-sm text-muted-foreground">{selectedCustomer.address}</div>}
                 </div>
 
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-sm">Profile Details</h4>
+                  <h4 className="text-sm font-semibold">Profile Details</h4>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="text-muted-foreground">NFC Card:</div>
                     <div className="font-mono">{selectedCustomer.nfc_uid}</div>
-                    
+
                     {selectedCustomer.date_of_birth && (
                       <>
                         <div className="text-muted-foreground">Birthday:</div>
                         <div>{formatDate(selectedCustomer.date_of_birth)}</div>
                       </>
                     )}
-                    
+
                     {selectedCustomer.gender && (
                       <>
                         <div className="text-muted-foreground">Gender:</div>
                         <div className="capitalize">{selectedCustomer.gender}</div>
                       </>
                     )}
-                    
+
                     {selectedCustomer.skin_type && (
                       <>
                         <div className="text-muted-foreground">Skin Type:</div>
@@ -487,16 +437,12 @@ export default function CustomersPage() {
 
                 {selectedCustomer.allergies && (
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-sm">Allergies</h4>
-                    <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                      {selectedCustomer.allergies}
-                    </p>
+                    <h4 className="text-sm font-semibold">Allergies</h4>
+                    <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selectedCustomer.allergies}</p>
                   </div>
                 )}
 
-                <div className="text-xs text-muted-foreground">
-                  Last visit: {formatDate(selectedCustomer.last_visit)}
-                </div>
+                <div className="text-xs text-muted-foreground">Last visit: {formatDate(selectedCustomer.last_visit)}</div>
               </CardContent>
             </Card>
           </div>

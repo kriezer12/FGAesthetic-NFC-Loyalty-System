@@ -1,33 +1,17 @@
-import * as React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { NFCScanner } from "@/components/nfc-scanner"
 import { CustomerInfo } from "@/components/customer-info"
 import { RegisterCard } from "@/components/register-card"
 import { Separator } from "@/components/ui/separator"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 
-interface Customer {
-  id: string
-  nfc_uid: string
-  name: string
-  email: string
-  phone: string
-  points: number
-  visits: number
-  created_at: string
-  last_visit: string
-}
+import type { Customer } from "@/types/customer"
 
 type ViewState = "scanning" | "customer" | "register"
 
-export default function Dashboard() {
+export default function NFCScanPage() {
   const [viewState, setViewState] = useState<ViewState>("scanning")
   const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null)
   const [pendingNfcUid, setPendingNfcUid] = useState<string | null>(null)
@@ -58,6 +42,10 @@ export default function Dashboard() {
     setCurrentCustomer(updatedCustomer)
   }
 
+  useEffect(() => {
+    document.title = "NFC Scanner - FG Aesthetic Centre"
+  }, [])
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -74,28 +62,17 @@ export default function Dashboard() {
           </Breadcrumb>
         </header>
         <main className="flex-1 p-6">
-          <div className="flex items-center justify-center min-h-[calc(100vh-10rem)]">
+          <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
             {viewState === "scanning" && (
-              <NFCScanner
-                onCustomerFound={handleCustomerFound}
-                onNewCard={handleNewCard}
-              />
+              <NFCScanner onCustomerFound={handleCustomerFound} onNewCard={handleNewCard} />
             )}
-            
+
             {viewState === "customer" && currentCustomer && (
-              <CustomerInfo
-                customer={currentCustomer}
-                onClose={handleClose}
-                onUpdate={handleCustomerUpdate}
-              />
+              <CustomerInfo customer={currentCustomer} onClose={handleClose} onUpdate={handleCustomerUpdate} />
             )}
-            
+
             {viewState === "register" && pendingNfcUid && (
-              <RegisterCard
-                nfcUid={pendingNfcUid}
-                onSuccess={handleRegistrationSuccess}
-                onCancel={handleClose}
-              />
+              <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
             )}
           </div>
         </main>

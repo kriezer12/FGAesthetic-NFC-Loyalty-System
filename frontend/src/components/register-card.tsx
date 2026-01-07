@@ -1,5 +1,4 @@
-import * as React from "react"
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { UserPlus, CreditCard, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -7,9 +6,11 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 
+import type { Customer } from "@/types/customer"
+
 interface RegisterCardProps {
   nfcUid: string
-  onSuccess: (customer: any) => void
+  onSuccess: (customer: Customer) => void
   onCancel: () => void
 }
 
@@ -30,7 +31,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
     notes: "",
   })
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     
@@ -75,7 +76,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
         return
       }
 
-      onSuccess(data)
+      onSuccess(data as Customer)
     } catch (err) {
       setError("Failed to register card. Please try again.")
       console.error("Registration error:", err)

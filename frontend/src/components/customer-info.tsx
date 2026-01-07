@@ -5,23 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { supabase } from "@/lib/supabase"
 
-interface Customer {
-  id: string
-  nfc_uid: string
-  first_name?: string
-  last_name?: string
-  name: string
-  email: string
-  phone: string
-  date_of_birth?: string
-  gender?: string
-  skin_type?: string
-  allergies?: string
-  points: number
-  visits: number
-  created_at: string
-  last_visit: string
-}
+import type { Customer } from "@/types/customer"
 
 interface CustomerInfoProps {
   customer: Customer
@@ -32,7 +16,7 @@ interface CustomerInfoProps {
 export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps) {
   const [isUpdating, setIsUpdating] = React.useState(false)
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A"
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",

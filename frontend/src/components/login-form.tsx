@@ -6,7 +6,7 @@
  * Supports email/password and Google OAuth login.
  */
 
-import { useState } from "react"
+import { useState, type ComponentProps, type FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
-interface LoginFormProps extends React.ComponentProps<"div"> {}
+type LoginFormProps = ComponentProps<"div">
 
 export function LoginForm({ className, ...props }: LoginFormProps) {
   const navigate = useNavigate()
@@ -40,7 +40,7 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
   /**
    * Handle email/password form submission
    */
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)

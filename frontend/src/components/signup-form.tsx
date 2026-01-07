@@ -7,7 +7,7 @@
  * and Google OAuth registration.
  */
 
-import { useState } from "react"
+import { useState, type ComponentProps, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input"
 // Minimum password length requirement
 const MIN_PASSWORD_LENGTH = 8
 
-interface SignupFormProps extends React.ComponentProps<typeof Card> {}
+type SignupFormProps = ComponentProps<typeof Card>
 
 export function SignupForm({ ...props }: SignupFormProps) {
   // Form state
@@ -61,7 +61,7 @@ export function SignupForm({ ...props }: SignupFormProps) {
   /**
    * Handle email/password form submission
    */
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
 

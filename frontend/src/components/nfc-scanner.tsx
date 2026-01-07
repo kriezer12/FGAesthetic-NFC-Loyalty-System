@@ -1,21 +1,10 @@
-import * as React from "react"
-import { useState, useRef, useEffect } from "react"
-import { CreditCard, UserPlus, Loader2 } from "lucide-react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { CreditCard, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 
-interface Customer {
-  id: string
-  nfc_uid: string
-  name: string
-  email: string
-  phone: string
-  points: number
-  visits: number
-  created_at: string
-  last_visit: string
-}
+import type { Customer } from "@/types/customer"
 
 interface NFCScannerProps {
   onCustomerFound: (customer: Customer) => void
@@ -23,7 +12,6 @@ interface NFCScannerProps {
 }
 
 export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
-  const [isScanning, setIsScanning] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [lastScanned, setLastScanned] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -31,7 +19,7 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
   // Keep input focused for NFC scanning
   useEffect(() => {
     const focusInput = () => {
-      if (inputRef.current && isScanning) {
+      if (inputRef.current) {
         inputRef.current.focus()
       }
     }
@@ -40,11 +28,12 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     const interval = setInterval(focusInput, 500)
     
     return () => clearInterval(interval)
-  }, [isScanning])
+  }, [])
 
-  const handleScan = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleScan = async (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      const uid = (e.target as HTMLInputElement).value.trim()
+      const target = e.currentTarget
+      const uid = target.value.trim()
       
       if (!uid || uid.length < 8) {
         return
@@ -52,7 +41,7 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
 
       // Prevent duplicate scans
       if (uid === lastScanned) {
-        (e.target as HTMLInputElement).value = ""
+        target.value = ""
         return
       }
 
