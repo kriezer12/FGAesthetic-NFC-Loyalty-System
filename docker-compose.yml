@@ -1,0 +1,45 @@
+# ================================
+# FG Aesthetic NFC Loyalty System
+# Docker Compose Configuration
+# ================================
+#
+# Usage:
+#   Development: docker-compose up
+#   Production:  docker-compose -f docker-compose.yml up -d
+#
+# Environment variables should be set in .env file at project root
+
+version: '3.8'
+
+services:
+  # ==================== Backend API ====================
+  backend:
+    build: ./backend
+    container_name: fgaesthetic-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - FRONTEND_URL=http://localhost:80
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==================== Frontend App ====================
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_JWT_SECRET: ${VITE_JWT_SECRET}
+    container_name: fgaesthetic-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
