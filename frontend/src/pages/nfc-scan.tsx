@@ -68,7 +68,11 @@ export default function NFCScanPage() {
             )}
 
             {viewState === "customer" && currentCustomer && (
-              <CustomerInfo customer={currentCustomer} onClose={handleClose} onUpdate={handleCustomerUpdate} />
+              <CustomerInfo 
+                customer={currentCustomer} 
+                onClose={handleClose} 
+                onUpdate={handleCustomerUpdate}
+              />
             )}
 
             {viewState === "register" && pendingNfcUid && (
