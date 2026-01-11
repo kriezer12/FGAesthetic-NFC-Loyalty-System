@@ -17,6 +17,7 @@ import { createRoot } from "react-dom/client"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import "./index.css"
 
+import CheckinLogsPage from "./pages/checkin-logs.tsx"
 import CustomersPage from "./pages/customers.tsx"
 import Dashboard from "./pages/dashboard.tsx"
 import NFCScanPage from "./pages/nfc-scan.tsx"
@@ -33,6 +34,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/scan" element={<NFCScanPage />} />
         <Route path="/dashboard/customers" element={<CustomersPage />} />
+        <Route path="/dashboard/checkin-logs" element={<CheckinLogsPage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
