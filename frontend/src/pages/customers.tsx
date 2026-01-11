@@ -381,10 +381,12 @@ export default function CustomersPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="rounded-lg bg-primary/10 p-4 text-center">
                     <Award className="mx-auto mb-2 h-6 w-6 text-primary" />
+                    <p className="text-2xl font-bold text-primary">{selectedCustomer.points || 0}</p>
                     <p className="text-xs text-muted-foreground">Points</p>
                   </div>
                   <div className="rounded-lg bg-muted p-4 text-center">
                     <Calendar className="mx-auto mb-2 h-6 w-6" />
+                    <p className="text-2xl font-bold">{selectedCustomer.visits || 0}</p>
                     <p className="text-xs text-muted-foreground">Visits</p>
                   </div>
                 </div>
