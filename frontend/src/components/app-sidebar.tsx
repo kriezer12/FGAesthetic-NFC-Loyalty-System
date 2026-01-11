@@ -4,8 +4,8 @@ import {
   Home,
   Users,
   Settings,
-  BarChart3,
   LogOut,
+  ClipboardList,
 } from "lucide-react"
 
 import {
@@ -40,9 +40,9 @@ const navMain = [
     url: "/dashboard/customers",
   },
   {
-    title: "Analytics",
-    icon: BarChart3,
-    url: "/dashboard/analytics",
+    title: "Check-in Logs",
+    icon: ClipboardList,
+    url: "/dashboard/checkin-logs",
   },
   {
     title: "Settings",
