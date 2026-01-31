@@ -1,9 +1,10 @@
 import * as React from "react"
-import { User, Phone, Mail, Award, Calendar, CreditCard, Plus, Minus, AlertTriangle } from "lucide-react"
+import { User, Phone, Mail, Award, Calendar, CreditCard, Plus, Minus, AlertTriangle, History } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { supabase } from "@/lib/supabase"
+import { CheckinHistory } from "./checkin-history"
 
 import type { Customer } from "@/types/customer"
 
@@ -15,6 +16,8 @@ interface CustomerInfoProps {
 
 export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps) {
   const [isUpdating, setIsUpdating] = React.useState(false)
+  const [showHistory, setShowHistory] = React.useState(false)
+  const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0)
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A"
@@ -42,6 +45,18 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
         .single()
 
       if (!error && data) {
+        // Log the check-in
+        await supabase
+          .from("checkin_logs")
+          .insert({
+            customer_id: customer.id,
+            checked_in_at: new Date().toISOString(),
+            points_added: amount,
+          })
+        
+        // Refresh the history
+        setHistoryRefreshKey((k) => k + 1)
+        
         onUpdate(data)
       }
     } catch (err) {
@@ -137,6 +152,19 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
             Add 10
           </Button>
         </div>
+
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => setShowHistory(!showHistory)}
+        >
+          <History className="h-4 w-4 mr-2" />
+          {showHistory ? "Hide" : "View"} Check-in History
+        </Button>
+
+        {showHistory && (
+          <CheckinHistory customerId={customer.id} refreshKey={historyRefreshKey} />
+        )}
       </CardContent>
       <CardFooter>
         <Button variant="ghost" className="w-full" onClick={onClose}>
