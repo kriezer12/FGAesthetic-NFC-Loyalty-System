@@ -27,6 +27,7 @@ import Dashboard from "./pages/dashboard.tsx"
 import NFCScanPage from "./pages/nfc-scan.tsx"
 import LoginPage from "./pages/login.tsx"
 import SignupPage from "./pages/signup.tsx"
+import UserManagementPage from "./pages/user-management.tsx"
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -67,6 +68,13 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/checkin-logs" element={
             <ProtectedRoute>
               <CheckinLogsPage />
+            </ProtectedRoute>
+          } />
+          
+          {/* Admin routes - require users:read permission */}
+          <Route path="/dashboard/users" element={
+            <ProtectedRoute requiredPermissions={["users:read"]}>
+              <UserManagementPage />
             </ProtectedRoute>
           } />
         </Routes>

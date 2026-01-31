@@ -6,6 +6,9 @@ import {
   Settings,
   LogOut,
   ClipboardList,
+  Building2,
+  Shield,
+  UserCog,
 } from "lucide-react"
 
 import {
@@ -22,8 +25,19 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
+import type { Permission } from "@/types/auth"
 
-const navMain = [
+interface NavItem {
+  title: string
+  icon: React.ElementType
+  url: string
+  /** Permissions required (any of these) */
+  permissions?: Permission[]
+}
+
+// Main navigation items available to all authenticated users
+const navMain: NavItem[] = [
   {
     title: "Dashboard",
     icon: Home,
@@ -33,29 +47,67 @@ const navMain = [
     title: "NFC Scanner",
     icon: CreditCard,
     url: "/dashboard/scan",
+    permissions: ["checkins:create"],
   },
   {
     title: "Customers",
     icon: Users,
     url: "/dashboard/customers",
+    permissions: ["customers:read"],
   },
   {
     title: "Check-in Logs",
     icon: ClipboardList,
     url: "/dashboard/checkin-logs",
+    permissions: ["checkins:read"],
+  },
+]
+
+// Admin navigation items (super_admin and branch_admin)
+const navAdmin: NavItem[] = [
+  {
+    title: "User Management",
+    icon: UserCog,
+    url: "/dashboard/users",
+    permissions: ["users:read"],
   },
   {
-    title: "Settings",
-    icon: Settings,
-    url: "/dashboard/settings",
+    title: "Branches",
+    icon: Building2,
+    url: "/dashboard/branches",
+    permissions: ["branches:create", "branches:update"],
+  },
+]
+
+// Super admin only items
+const navSuperAdmin: NavItem[] = [
+  {
+    title: "System Settings",
+    icon: Shield,
+    url: "/dashboard/system-settings",
+    permissions: ["settings:update"],
   },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { hasAnyPermission, role, profile } = useAuth()
+  
   const handleLogout = async () => {
     await supabase.auth.signOut()
     window.location.href = "/login"
   }
+
+  // Filter nav items based on permissions
+  const filterNavItems = (items: NavItem[]) => {
+    return items.filter(item => {
+      if (!item.permissions) return true
+      return hasAnyPermission(item.permissions)
+    })
+  }
+
+  const mainItems = filterNavItems(navMain)
+  const adminItems = filterNavItems(navAdmin)
+  const superAdminItems = filterNavItems(navSuperAdmin)
 
   return (
     <Sidebar {...props}>
@@ -69,13 +121,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <span className="text-xs text-muted-foreground">NFC Loyalty</span>
           </div>
         </div>
+        {/* User info */}
+        {profile && (
+          <div className="px-4 pb-2">
+            <p className="text-sm font-medium truncate">{profile.full_name}</p>
+            <p className="text-xs text-muted-foreground capitalize">
+              {role?.replace('_', ' ')}
+            </p>
+          </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
+        {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navMain.map((item) => (
+              {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <a href={item.url}>
@@ -88,9 +150,59 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin Navigation */}
+        {adminItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <a href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Super Admin Navigation */}
+        {superAdminItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>System</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {superAdminItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <a href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <a href="/dashboard/settings">
+                <Settings className="h-4 w-4" />
+                <span>Settings</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout}>
               <LogOut className="h-4 w-4" />

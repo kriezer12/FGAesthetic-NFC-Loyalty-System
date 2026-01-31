@@ -91,9 +91,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [user?.id, fetchProfile])
 
   useEffect(() => {
-    // Flag to track if this is the initial session fetch
-    let isInitialCheck = true
-
     // Get initial session
     const getInitialSession = async () => {
       try {
@@ -101,16 +98,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setSession(session)
         setUser(session?.user ?? null)
         
-        // Fetch profile if user exists
+        // Fetch profile in background (don't block loading)
         if (session?.user?.id) {
-          await fetchProfile(session.user.id)
+          fetchProfile(session.user.id)
         }
       } catch (error) {
         console.error("Error getting session:", error)
       } finally {
-        if (isInitialCheck) {
-          setInitialLoading(false)
-        }
+        setInitialLoading(false)
       }
     }
 
@@ -124,15 +119,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         // Fetch profile on auth change
         if (session?.user?.id) {
-          await fetchProfile(session.user.id)
+          fetchProfile(session.user.id)
         } else {
           setProfile(null)
-        }
-        
-        // Only update loading on initial check
-        if (isInitialCheck) {
-          setInitialLoading(false)
-          isInitialCheck = false
         }
       }
     )

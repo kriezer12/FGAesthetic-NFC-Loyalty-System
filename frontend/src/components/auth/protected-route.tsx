@@ -53,12 +53,16 @@ export function ProtectedRoute({
   anyPermissions,
   unauthorizedFallback,
 }: ProtectedRouteProps) {
-  const { user, profile, role, loading, hasPermission, hasAllPermissions, hasAnyPermission } = useAuth()
+  const { user, profile, role, loading, hasAllPermissions, hasAnyPermission } = useAuth()
   const location = useLocation()
 
-  // Render nothing while checking initial auth state (avoids loading flash)
+  // Show a minimal loading indicator while checking initial auth state
   if (loading) {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
   }
 
   // Redirect to login if not authenticated
