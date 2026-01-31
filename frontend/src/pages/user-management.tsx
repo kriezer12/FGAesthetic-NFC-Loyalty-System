@@ -119,15 +119,17 @@ export default function UserManagement() {
 
     try {
       setUpdating(userId)
+      // Convert "none" to null for database
+      const actualBranchId = branchId === "none" ? null : branchId
       const { error: updateError } = await supabase
         .from("user_profiles")
-        .update({ branch_id: branchId })
+        .update({ branch_id: actualBranchId })
         .eq("id", userId)
 
       if (updateError) throw updateError
 
       setUsers(users.map(u => 
-        u.id === userId ? { ...u, branch_id: branchId } : u
+        u.id === userId ? { ...u, branch_id: actualBranchId } : u
       ))
     } catch (err) {
       console.error("Error updating branch:", err)
@@ -320,7 +322,7 @@ export default function UserManagement() {
                       <td className="py-3 px-4">
                         {canUpdateUsers ? (
                           <Select
-                            value={user.branch_id || ""}
+                            value={user.branch_id || "none"}
                             onValueChange={(value) => updateUserBranch(user.id, value || null)}
                             disabled={updating === user.id}
                           >
@@ -328,7 +330,7 @@ export default function UserManagement() {
                               <SelectValue placeholder="No Branch" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">No Branch</SelectItem>
+                              <SelectItem value="none">No Branch</SelectItem>
                               {branches.map((branch) => (
                                 <SelectItem key={branch.id} value={branch.id}>
                                   {branch.name}
