@@ -19,6 +19,13 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/co
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { 
   UserCog, 
   Search, 
@@ -289,17 +296,20 @@ export default function UserManagement() {
                       </td>
                       <td className="py-3 px-4">
                         {canManageRoles ? (
-                          <select
+                          <Select
                             value={user.role}
-                            onChange={(e) => updateUserRole(user.id, e.target.value as UserRole)}
+                            onValueChange={(value) => updateUserRole(user.id, value as UserRole)}
                             disabled={updating === user.id}
-                            className="text-sm rounded-md border border-input bg-background px-2 py-1"
-                            title="Select user role"
                           >
-                            <option value="super_admin">Super Admin</option>
-                            <option value="branch_admin">Branch Admin</option>
-                            <option value="staff">Staff</option>
-                          </select>
+                            <SelectTrigger className="w-[160px]" size="sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="super_admin">Super Admin</SelectItem>
+                              <SelectItem value="branch_admin">Branch Admin</SelectItem>
+                              <SelectItem value="staff">Staff</SelectItem>
+                            </SelectContent>
+                          </Select>
                         ) : (
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeClass(user.role)}`}>
                             <Shield className="h-3 w-3" />
@@ -309,20 +319,23 @@ export default function UserManagement() {
                       </td>
                       <td className="py-3 px-4">
                         {canUpdateUsers ? (
-                          <select
+                          <Select
                             value={user.branch_id || ""}
-                            onChange={(e) => updateUserBranch(user.id, e.target.value || null)}
+                            onValueChange={(value) => updateUserBranch(user.id, value || null)}
                             disabled={updating === user.id}
-                            className="text-sm rounded-md border border-input bg-background px-2 py-1"
-                            title="Select branch"
                           >
-                            <option value="">No Branch</option>
-                            {branches.map((branch) => (
-                              <option key={branch.id} value={branch.id}>
-                                {branch.name}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger className="w-[180px]" size="sm">
+                              <SelectValue placeholder="No Branch" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">No Branch</SelectItem>
+                              {branches.map((branch) => (
+                                <SelectItem key={branch.id} value={branch.id}>
+                                  {branch.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-sm">
                             <Building2 className="h-3 w-3 text-muted-foreground" />
