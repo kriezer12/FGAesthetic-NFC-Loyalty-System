@@ -90,7 +90,7 @@ const navSuperAdmin: NavItem[] = [
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { hasAnyPermission, role, profile } = useAuth()
+  const { hasAnyPermission, role, profile, profileLoading } = useAuth()
   
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -98,16 +98,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   // Filter nav items based on permissions
+  // While profile is loading, show all items without permission requirements
   const filterNavItems = (items: NavItem[]) => {
     return items.filter(item => {
       if (!item.permissions) return true
+      // If still loading profile, hide permission-gated items
+      if (profileLoading || !profile) return false
       return hasAnyPermission(item.permissions)
     })
   }
 
-  const mainItems = filterNavItems(navMain)
-  const adminItems = filterNavItems(navAdmin)
-  const superAdminItems = filterNavItems(navSuperAdmin)
+  // Show all main items only after profile loads
+  const mainItems = profileLoading ? navMain.filter(i => !i.permissions) : filterNavItems(navMain)
+  const adminItems = profileLoading ? [] : filterNavItems(navAdmin)
+  const superAdminItems = profileLoading ? [] : filterNavItems(navSuperAdmin)
 
   return (
     <Sidebar {...props}>

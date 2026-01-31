@@ -25,6 +25,7 @@ interface AuthContextType {
   
   // RBAC state
   profile: UserProfile | null
+  profileLoading: boolean
   role: UserRole | null
   branchId: string | null
   
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
   // Track only the initial auth check to avoid flash on page navigation
   const [initialLoading, setInitialLoading] = useState(true)
 
@@ -55,6 +57,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * Fetch user profile from user_profiles table
    */
   const fetchProfile = useCallback(async (userId: string) => {
+    setProfileLoading(true)
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -78,6 +81,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error) {
       console.error('Error fetching profile:', error)
       setProfile(null)
+    } finally {
+      setProfileLoading(false)
     }
   }, [])
 
@@ -161,6 +166,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     
     // RBAC state
     profile,
+    profileLoading,
     role: profile?.role ?? null,
     branchId: profile?.branch_id ?? null,
     
