@@ -25,16 +25,9 @@ export function PublicRoute({ children }: PublicRouteProps) {
   const { user, loading } = useAuth()
   const location = useLocation()
 
-  // Show loading spinner while checking auth state
+  // Render nothing while checking initial auth state (avoids loading flash)
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground text-sm">Loading...</p>
-        </div>
-      </div>
-    )
+    return null
   }
 
   // Redirect to dashboard if already authenticated
