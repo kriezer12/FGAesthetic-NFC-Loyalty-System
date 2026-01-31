@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
-import { AppSidebar } from "@/components/app-sidebar"
+import { AppSidebar } from "@/components/layout"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
+import { AppSidebar } from "@/components/layout"
 import { Separator } from "@/components/ui/separator"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,7 +50,7 @@ export default function Dashboard() {
       const { count: recentCount } = await supabase
         .from('customers')
         .select('*', { count: 'exact', head: true })
-        .gte('updated_at', sevenDaysAgo.toISOString())
+        .gte('last_visit', sevenDaysAgo.toISOString())
 
       setStats({
         totalCustomers: customerCount || 0,

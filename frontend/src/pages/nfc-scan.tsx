@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { NFCScanner } from "@/components/nfc-scanner"
-import { CustomerInfo } from "@/components/customer-info"
-import { RegisterCard } from "@/components/register-card"
+import { AppSidebar } from "@/components/layout"
+import { NFCScanner, RegisterCard } from "@/components/features/nfc"
+import { CustomerInfo } from "@/components/features/customers"
 import { Separator } from "@/components/ui/separator"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 
