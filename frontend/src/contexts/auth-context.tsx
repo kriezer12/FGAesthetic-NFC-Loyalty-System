@@ -11,7 +11,7 @@
  *   const { user, profile, hasPermission, signOut } = useAuth()
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import { supabase } from "@/lib/supabase"
 import type { User, Session } from "@supabase/supabase-js"
 import type { UserProfile, Permission, UserRole } from "@/types/auth"
@@ -52,12 +52,79 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profileLoading, setProfileLoading] = useState(false)
   // Track only the initial auth check to avoid flash on page navigation
   const [initialLoading, setInitialLoading] = useState(true)
+  // Rate limiting: track last profile fetch timestamp
+  const lastProfileFetchRef = useRef<number>(0)
+  const PROFILE_CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+  const PROFILE_RATE_LIMIT = 1000 // 1 second between fetches
 
   /**
-   * Fetch user profile from user_profiles table
+   * Load profile from cache (localStorage)
    */
-  const fetchProfile = useCallback(async (userId: string) => {
+  const loadProfileFromCache = useCallback((userId: string): UserProfile | null => {
+    try {
+      const cacheKey = `user_profile_${userId}`
+      const cached = localStorage.getItem(cacheKey)
+      if (!cached) return null
+
+      const { profile: cachedProfile, timestamp } = JSON.parse(cached)
+      const now = Date.now()
+      
+      // Check if cache is still valid (5 minutes)
+      if (now - timestamp < PROFILE_CACHE_DURATION) {
+        return cachedProfile as UserProfile
+      }
+      
+      // Cache expired, remove it
+      localStorage.removeItem(cacheKey)
+      return null
+    } catch (error) {
+      console.error('Error loading profile from cache:', error)
+      return null
+    }
+  }, [])
+
+  /**
+   * Save profile to cache (localStorage)
+   */
+  const saveProfileToCache = useCallback((userId: string, profile: UserProfile) => {
+    try {
+      const cacheKey = `user_profile_${userId}`
+      localStorage.setItem(cacheKey, JSON.stringify({
+        profile,
+        timestamp: Date.now()
+      }))
+    } catch (error) {
+      console.error('Error saving profile to cache:', error)
+    }
+  }, [])
+
+  /**
+   * Fetch user profile from user_profiles table with rate limiting
+   */
+  const fetchProfile = useCallback(async (userId: string, forceRefresh = false) => {
+    // Rate limiting: prevent fetching too frequently
+    const now = Date.now()
+    const timeSinceLastFetch = now - lastProfileFetchRef.current
+    
+    if (!forceRefresh && timeSinceLastFetch < PROFILE_RATE_LIMIT) {
+      console.log('Rate limit: Skipping profile fetch (too soon)')
+      return
+    }
+
+    // Try loading from cache first
+    if (!forceRefresh) {
+      const cachedProfile = loadProfileFromCache(userId)
+      if (cachedProfile) {
+        console.log('Loading profile from cache')
+        setProfile(cachedProfile)
+        setProfileLoading(false)
+        return
+      }
+    }
+
     setProfileLoading(true)
+    lastProfileFetchRef.current = now
+
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -77,21 +144,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return
       }
 
-      setProfile(data as UserProfile)
+      const fetchedProfile = data as UserProfile
+      setProfile(fetchedProfile)
+      saveProfileToCache(userId, fetchedProfile)
     } catch (error) {
       console.error('Error fetching profile:', error)
       setProfile(null)
     } finally {
       setProfileLoading(false)
     }
-  }, [])
+  }, [loadProfileFromCache, saveProfileToCache])
 
   /**
-   * Refresh the user profile
+   * Refresh the user profile (force fetch from API)
    */
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      await fetchProfile(user.id)
+      await fetchProfile(user.id, true)
     }
   }, [user?.id, fetchProfile])
 
@@ -139,6 +208,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = async () => {
     setProfile(null)
+    // Clear profile cache on logout
+    if (user?.id) {
+      localStorage.removeItem(`user_profile_${user.id}`)
+    }
     await supabase.auth.signOut()
   }
 
