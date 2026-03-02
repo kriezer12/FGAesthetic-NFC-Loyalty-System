@@ -20,6 +20,7 @@ import "./index.css"
 
 import { AuthProvider } from "./contexts/auth-context.tsx"
 import { ProtectedRoute, PublicRoute } from "./components/auth"
+import { DashboardLayout } from "./components/layout"
 
 import CheckinLogsPage from "./pages/checkin-logs.tsx"
 import CustomersPage from "./pages/customers.tsx"
@@ -48,27 +49,13 @@ createRoot(document.getElementById('root')).render(
             </PublicRoute>
           } />
           
-          {/* Protected routes - require authentication */}
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/dashboard/scan" element={
-            <ProtectedRoute>
-              <NFCScanPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/dashboard/customers" element={
-            <ProtectedRoute>
-              <CustomersPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/dashboard/checkin-logs" element={
-            <ProtectedRoute>
-              <CheckinLogsPage />
-            </ProtectedRoute>
-          } />
+          {/* Protected routes - shared navbar layout */}
+          <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/scan" element={<NFCScanPage />} />
+            <Route path="/dashboard/customers" element={<CustomersPage />} />
+            <Route path="/dashboard/checkin-logs" element={<CheckinLogsPage />} />
+          </Route>
         </Routes>
       </AuthProvider>
     </BrowserRouter>

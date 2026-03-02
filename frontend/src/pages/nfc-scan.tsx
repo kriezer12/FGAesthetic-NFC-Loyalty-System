@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react"
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/layout"
 import { NFCScanner, RegisterCard } from "@/components/features/nfc"
 import { CustomerInfo } from "@/components/features/customers"
-import { Separator } from "@/components/ui/separator"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 
 import type { Customer } from "@/types/customer"
 
@@ -46,22 +42,7 @@ export default function NFCScanPage() {
   }, [])
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>NFC Scanner</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
-        <main className="flex-1 p-6">
-          <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
+    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
             {viewState === "scanning" && (
               <NFCScanner onCustomerFound={handleCustomerFound} onNewCard={handleNewCard} />
             )}
@@ -73,9 +54,6 @@ export default function NFCScanPage() {
             {viewState === "register" && pendingNfcUid && (
               <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
             )}
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    </div>
   )
 }
