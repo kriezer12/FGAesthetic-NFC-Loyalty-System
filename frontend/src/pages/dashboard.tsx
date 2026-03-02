@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, CreditCard, TrendingUp, Activity } from "lucide-react"
 import { supabase } from "@/lib/supabase"
@@ -238,9 +239,9 @@ export default function Dashboard() {
               { href: "/dashboard/checkin-logs", icon: Activity, label: "Check-in Logs", desc: "View full visit history" },
               { href: "/dashboard/scan", icon: TrendingUp, label: "Register New Card", desc: "Link a card to a customer" },
             ].map(({ href, icon: Icon, label, desc }) => (
-              <a
+              <Link
                 key={label}
-                href={href}
+                to={href}
                 className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
               >
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
@@ -250,7 +251,7 @@ export default function Dashboard() {
                   <p className="text-sm font-medium leading-tight">{label}</p>
                   <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
                 </div>
-              </a>
+              </Link>
             ))}
           </CardContent>
         </Card>
