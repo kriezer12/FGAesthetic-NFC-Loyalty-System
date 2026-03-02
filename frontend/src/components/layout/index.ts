@@ -5,4 +5,5 @@
  * Export all layout-related components from a single entry point.
  */
 
-export { AppSidebar } from "./app-sidebar"
+export { AppNavbar } from "./app-navbar"
+export { DashboardLayout } from "./dashboard-layout"

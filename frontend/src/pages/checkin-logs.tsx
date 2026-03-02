@@ -8,13 +8,9 @@ import {
   User,
   Award,
 } from "lucide-react"
-import { AppSidebar } from "@/components/layout"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { supabase } from "@/lib/supabase"
 
 interface CheckinLogWithCustomer {
@@ -42,15 +38,7 @@ export default function CheckinLogsPage() {
   const fetchLogs = useCallback(async () => {
     setIsLoading(true)
     try {
-      // Get total count first
-      const { count } = await supabase
-        .from("checkin_logs")
-        .select("*", { count: "exact", head: true })
-      
-      setTotalCount(count || 0)
-
-      // Fetch paginated logs with customer info
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("checkin_logs")
         .select(`
           id,
@@ -63,13 +51,14 @@ export default function CheckinLogsPage() {
             first_name,
             last_name
           )
-        `)
+        `, { count: "exact" })
         .order("checked_in_at", { ascending: false })
         .range(currentPage * LOGS_PER_PAGE, (currentPage + 1) * LOGS_PER_PAGE - 1)
 
-      if (!error && data) {
-        setLogs(data)
-      }
+      if (error) throw error
+
+      setTotalCount(count || 0)
+      setLogs((data as unknown as CheckinLogWithCustomer[]) || [])
     } catch (err) {
       console.error("Error fetching check-in logs:", err)
     } finally {
@@ -128,24 +117,9 @@ export default function CheckinLogsPage() {
   ).length
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>Check-in Logs</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
-
-        <main className="flex-1 p-6">
-          {/* Stats */}
-          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div>
+      {/* Stats */}
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Check-ins</CardTitle>
@@ -276,9 +250,7 @@ export default function CheckinLogsPage() {
                 </div>
               </div>
             )}
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   )
 }

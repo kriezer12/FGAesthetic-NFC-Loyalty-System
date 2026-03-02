@@ -14,13 +14,9 @@ import {
   X,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
-import { AppSidebar } from "@/components/layout"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { supabase } from "@/lib/supabase"
 
 import type { Customer } from "@/types/customer"
@@ -130,23 +126,8 @@ export default function CustomersPage() {
   const hasActiveFilters = Boolean(skinTypeFilter || genderFilter)
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>Customers</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
-
-        <main className="flex-1 p-6">
-          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+    <div>
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
@@ -363,9 +344,7 @@ export default function CustomersPage() {
               </div>
             )}
           </div>
-        </main>
-
-        {selectedCustomer && (
+      {selectedCustomer && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <Card className="max-h-[85vh] w-full max-w-lg overflow-y-auto">
               <CardHeader className="flex flex-row items-start justify-between">
@@ -447,7 +426,6 @@ export default function CustomersPage() {
             </Card>
           </div>
         )}
-      </SidebarInset>
-    </SidebarProvider>
+    </div>
   )
 }

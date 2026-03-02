@@ -2,9 +2,10 @@
   "compilerOptions": {
     "composite": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },
-  "include": ["vite.config.*", "eslint.config.js"]
+  "files": ["vite.config.js", "eslint.config.js"]
 }
