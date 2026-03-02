@@ -1,352 +1,284 @@
-# GLAM-ID Team Onboarding Guide
+# FG Aesthetic NFC Loyalty System
 
-## 🚀 Getting Started for New Team Members
+Full-stack loyalty card system with NFC integration for beauty clinics. Features customer management, points tracking, and seamless NFC card scanning for quick check-ins.
 
-This guide will help you set up the project on your local machine and start working on tasks.
+## Features
 
----
+- 🎫 **NFC Card Scanning** - Tap-to-identify using USB NFC readers (keyboard HID)
+- 👥 **Customer Management** - Full customer database with search, filters, and pagination
+- ⭐ **Points & Rewards** - Track loyalty points and visit history
+- 📋 **Beauty Clinic Fields** - Skin type, allergies, emergency contacts
+- 🔐 **Secure Auth** - Supabase authentication with email/password
+- 📱 **Responsive Design** - Works on desktop and mobile devices
 
-## Prerequisites
+## Tech Stack
 
-Install these first:
-
-- **Git** - https://git-scm.com/downloads
-- **Docker Desktop** - https://www.docker.com/products/docker-desktop/
-- **Node.js** (v18+) - https://nodejs.org/
-- **Python** (3.10+) - https://www.python.org/downloads/
-- **VS Code** (recommended) - https://code.visualstudio.com/
-
-Verify installations:
-```bash
-git --version
-docker --version
-node --version
-python --version
-```
+**Frontend:** React 19 + Vite 7 + Tailwind CSS 4 + shadcn/ui  
+**Backend:** Flask + Supabase (PostgreSQL)  
+**Auth:** Supabase Auth (Email/Password + Google OAuth)  
+**NFC:** USB HID readers (keyboard emulation - no special drivers needed)
 
 ---
 
-## Step 1: Clone the Repository
+## Quick Start with Docker
 
+### Prerequisites
+- Docker Desktop installed ([download](https://www.docker.com/products/docker-desktop))
+- Supabase account ([signup](https://supabase.com))
+
+### Setup
+
+1. **Clone the repository:**
 ```bash
-# Navigate to your workspace
-cd C:\Users\YourName\Desktop\Workspace
-
-# Clone the repository
-git clone https://github.com/YourOrg/FGAesthetic-NFC-Loyalty-System.git
-
-# Enter the project
+git clone <your-repo-url>
 cd FGAesthetic-NFC-Loyalty-System
+```
 
-# Switch to dev branch
-git checkout dev
+2. **Create `.env` file in project root:**
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+```
 
-# Pull latest changes
-git pull origin dev
+3. **Create `.env` file in frontend folder:**
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+4. **Start the application:**
+```bash
+docker-compose up --build
+```
+
+5. **Access the app:**
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:5000
+
+6. **Default Routes:**
+- `/login` - Login page
+- `/signup` - Registration page
+- `/dashboard` - Main NFC scanner dashboard
+- `/dashboard/customers` - Customer management
+
+---
+
+## Local Development (without Docker)
+
+### Backend
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+python -m app.main
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
 
-## Step 2: Set Up Environment Variables
+## Project Structure
 
-### Backend (.env)
-
-Create `backend/.env` file:
-
-```env
-# Supabase Configuration (Ask team lead for actual values)
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_KEY=your_supabase_anon_key_here
-
-# App Configuration
-JWT_SECRET=your_secret_key_here
+```
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py          # Package init
+│   │   ├── main.py              # Flask app factory
+│   │   ├── config.py            # Environment config
+│   │   ├── routes/              # API route blueprints
+│   │   └── services/
+│   │       └── supabase_client.py  # Supabase client
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── main.jsx             # App entry point & routes
+│   │   ├── login.jsx            # Login page
+│   │   ├── signup.jsx           # Signup page
+│   │   ├── dashboard.tsx        # Main dashboard with NFC scanner
+│   │   ├── customers.tsx        # Customers list page
+│   │   ├── components/
+│   │   │   ├── app-sidebar.tsx  # Navigation sidebar
+│   │   │   ├── nfc-scanner.tsx  # NFC card scanning component
+│   │   │   ├── customer-info.tsx # Customer details & points
+│   │   │   ├── register-card.tsx # New card registration form
+│   │   │   ├── login-form.tsx   # Login form with Supabase auth
+│   │   │   ├── signup-form.tsx  # Signup form with Supabase auth
+│   │   │   └── ui/              # shadcn/ui components
+│   │   ├── hooks/
+│   │   │   └── use-mobile.ts    # Mobile detection hook
+│   │   └── lib/
+│   │       ├── supabase.ts      # Supabase client
+│   │       └── utils.ts         # Utility functions
+│   ├── package.json
+│   ├── Dockerfile
+│   └── nginx.conf
+├── docker-compose.yml
+└── README.md
 ```
 
-**⚠️ IMPORTANT:** 
-- **DO NOT commit** the `.env` file to Git
-- Ask your team lead for the actual values
-- Each team member should create their own `.env` file
+---
 
+## NFC Reader Setup
 
-## Step 3: Start the Project with Docker
+This system works with any USB NFC reader that operates in **keyboard HID mode** (most common type). When a card is tapped, the reader types the card's UID directly into the focused input field.
 
-### Option A: Using Docker (Recommended - Easiest)
+**Supported readers:** ACR122U, ACR1252U, or any HID keyboard-emulating NFC reader.
 
+**How it works:**
+1. User navigates to the NFC Scanner page
+2. The input field automatically stays focused
+3. User taps their NFC card on the reader
+4. Reader types the 10-digit UID + Enter
+5. System looks up the card in the database
+6. If found → Shows customer info with points management
+7. If not found → Opens registration form for new customer
+
+---
+
+## Customer Database Schema
+
+The `customers` table in Supabase requires these columns:
+
+```sql
+CREATE TABLE customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nfc_uid VARCHAR(50) UNIQUE NOT NULL,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  name VARCHAR(200),
+  email VARCHAR(255),
+  phone VARCHAR(50) NOT NULL,
+  date_of_birth DATE,
+  gender VARCHAR(20),
+  address TEXT,
+  emergency_contact VARCHAR(200),
+  skin_type VARCHAR(50),
+  allergies TEXT,
+  notes TEXT,
+  points INTEGER DEFAULT 0,
+  visits INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_visit TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## API Endpoints
+
+### Health Check
+- `GET /health` - Returns `{"status": "healthy"}`
+- `GET /` - API information
+
+### Authentication
+Authentication is handled directly by Supabase Auth on the frontend.
+The backend validates Supabase JWT tokens for protected routes.
+
+---
+
+## Team Workflow
+
+### For New Team Members
+
+1. Install Docker Desktop
+2. Clone repo
+3. Get `.env` credentials from team lead
+4. Run `docker-compose up --build`
+5. Access app at `http://localhost`
+
+### Making Changes
+
+**Backend changes:**
+- Edit files in `backend` folder
+- Restart container: `docker-compose restart backend`
+
+**Frontend changes:**
+- Edit files in `frontend/src`
+- Rebuild: `docker-compose up --build frontend`
+
+**Restart containers:**
 ```bash
-# Make sure Docker Desktop is running
-
-ON YOUR VSCODE TERMINAL
-# Start all services
-docker-compose up --build
-
-# Or run in background
-docker-compose up -d --build
+docker-compose restart
 ```
 
-**What this does:**
-- Builds backend container
-- Builds frontend container
-- Starts both services
-- Backend runs on `http://localhost:5000`
-- Frontend runs on `http://localhost:5173`
+**Rebuild after dependency changes:**
+```bash
+docker-compose up --build
+```
 
-**To stop:**
+**Stop containers:**
 ```bash
 docker-compose down
 ```
 
 ---
 
-## Step 4: Alternative - Run Without Docker
-
-### Backend Setup
+## Docker Commands
 
 ```bash
-# Navigate to backend
-cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# Mac/Linux:
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-ON TERMINAL
-python -m app.main
-```
-
-Backend will be available at `http://localhost:5000`
-
-### Frontend Setup (New Terminal)
-
-```bash
-# Navigate to frontend
-cd frontend
-
-# Install dependencies
-npm create vite@latest frontend -- --template react
-cd frontend
-npm install
-npm install -D tailwindcss@3 postcss autoprefixer react-router-dom
-npx tailwindcss init
-
-# Run development server
-npm run dev
-```
-
-Frontend will be available at `http://localhost:5173`
-
----
-
-## Step 5: Verify Everything Works
-
-### Check Backend
-Open browser to: `http://localhost:5000/`
-
-### Check Frontend
-Open browser to: `http://localhost:5173`
-
-You should see the GLAM-ID login page.
-
----
-
-## Step 6: Create Your Feature Branch
-
-**NEVER work directly on `dev` or `main` branch!**
-
-```bash
-# Make sure you're on dev
-git checkout dev
-
-# Pull latest changes
-git pull origin dev
-
-# Create your feature branch
-git checkout -b feature/your-task-name
-
-# Examples:
-# git checkout -b feature/client-registration
-# git checkout -b feature/nfc-scanner
-# git checkout -b feature/loyalty-points
-```
-
----
-
-## Step 7: Working on Your Task
-
-### Daily Workflow
-
-```bash
-# 1. Start your day - pull latest changes
-git checkout dev
-git pull origin dev
-
-# 2. Switch to your feature branch
-git checkout feature/your-task-name
-
-# 3. Merge latest dev changes into your branch
-git merge dev
-
-# 4. Start Docker or local servers
+# Start everything
 docker-compose up
 
-# 5. Code your feature
-# ... do your work ...
+# Start in background (detached)
+docker-compose up -d
 
-# 6. Test your changes
-# Make sure everything works!
+# Rebuild after code changes
+docker-compose up --build
 
-# 7. Commit your changes
-git add {file to push}
-git commit -m "feat(scope): description of what you did"
-
-# 8. Push to your feature branch
-git push origin feature/your-task-name
-```
-
-### When You're Ready to Merge
-
-```bash
-# 1. Make sure your code is committed
-git status
-
-# 2. Pull latest dev changes
-git checkout dev
-git pull origin dev
-
-# 3. Go back to your branch
-git checkout feature/your-task-name
-
-# 4. Merge dev into your branch (resolve conflicts if any)
-git merge dev
-
-# 5. Push your branch
-git push origin feature/your-task-name
-
-# 6. Create Pull Request on GitHub
-# Go to GitHub → Your branch → "Create Pull Request"
-# Request review from team lead
----
-
-## Git Commit Message Convention
-
-Use this format:
-
-**Types:**
-- `feat` - New feature
-- `fix` - Bug fix
-- `chore` - Maintenance
-- `docs` - Documentation
-- `style` - Code formatting
-- `refactor` - Code restructuring
-- `test` - Adding tests
-
----
-
-## Branch Naming Convention
-
-```
-feature/task-name       # New features
-fix/bug-description     # Bug fixes
-chore/maintenance-task  # Maintenance
-docs/documentation      # Documentation
-
-Examples:
-osorio-feature/client-registration
-molina-feature/loyalty-dashboard
-delavega-fix/nfc-timeout-error
-devera-chore/update-react-version
-caling-docs/api-endpoints
-```
-
----
-
-## Need Help?
-
-1. **Check GitHub Issues** - Someone might have had the same problem
-2. **Ask in Team Chat** - Don't hesitate to ask questions
-3. **Check Documentation** - `docs/` folder has detailed guides
-4. **Ask Team Lead** - For environment variables and access
-
----
-
-## Quick Commands Reference
-
-```bash
-# Start project
-docker-compose up
-
-# Stop project
+# Stop everything
 docker-compose down
 
 # View logs
 docker-compose logs -f
 
-# Rebuild containers
-docker-compose up --build
-
-# Check git status
-git status
-
-# Pull latest changes
-git pull origin dev
-
-# Create new branch
-git checkout -b feature/task-name
-
-# Commit changes
-git add .
-git commit -m "feat: description"
-
-# Push changes
-git push origin feature/task-name
+# Restart a single service
+docker-compose restart backend
+docker-compose restart frontend
 ```
 
 ---
 
-## Checklist Before Starting
+## Environment Variables
 
-- [ ] Git installed
-- [ ] Docker Desktop installed and running
-- [ ] Node.js installed
-- [ ] Python installed
-- [ ] Repository cloned
-- [ ] On `dev` branch
-- [ ] `.env` files created (ask team lead for values)
-- [ ] Docker containers running successfully
-- [ ] Can access backend (`http://localhost:5000`)
-- [ ] Can access frontend (`http://localhost:5173`)
-- [ ] Created your feature branch
-- [ ] Ready to code! 🚀
+### Root `.env` (for Docker)
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+```
 
----
-
-## Important Rules
-
-❌ **NEVER commit:**
-- `.env` files
-- `node_modules/`
-- `__pycache__/`
-- Personal API keys
-
-❌ **NEVER push directly to:**
-- `main` branch
-- `dev` branch
-
-✅ **ALWAYS:**
-- Work on feature branches
-- Pull latest changes before starting
-- Test your code before committing
-- Write clear commit messages
-- Create Pull Requests for review
+### Frontend `.env`
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
 
 ---
 
-Good luck and happy coding! 🎉
+## Troubleshooting
 
+**Port conflicts:**
+```bash
+docker-compose down
+docker-compose up
+```
+
+**Database connection issues:**
+- Verify Supabase credentials in `.env`
+- Check Supabase project status
+
+**CORS errors:**
+- Ensure backend `FRONTEND_URL` matches frontend URL
+- Check Flask-CORS configuration in `backend/app/main.py`
+
+---
+
+## License
+
+MIT

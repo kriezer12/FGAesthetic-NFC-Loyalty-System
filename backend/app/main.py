@@ -1,0 +1,74 @@
+"""
+Flask Application Entry Point
+=============================
+
+Main application factory and server entry point.
+Uses the factory pattern for better testing and configuration.
+
+Endpoints:
+- GET /         : API information
+- GET /health   : Health check for monitoring
+"""
+
+from flask import Flask, jsonify
+from flask_cors import CORS
+from app.config import config
+
+
+def create_app() -> Flask:
+    """
+    Application factory function.
+    
+    Creates and configures the Flask application with:
+    - CORS support for frontend communication
+    - Health check endpoint
+    - API information endpoint
+    
+    Returns:
+        Flask: Configured Flask application instance.
+    """
+    app = Flask(__name__)
+
+    # Configure CORS for frontend communication
+    CORS(
+        app,
+        origins=[
+            config.FRONTEND_URL,
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://localhost:5175",
+        ],
+        supports_credentials=True
+    )
+
+    # ==================== Routes ====================
+
+    @app.route("/health", methods=["GET"])
+    def health():
+        """Health check endpoint for monitoring and load balancers."""
+        return jsonify({"status": "healthy"}), 200
+
+    @app.route("/", methods=["GET"])
+    def root():
+        """Root endpoint - returns API information."""
+        return jsonify({
+            "name": "FG Aesthetic NFC Loyalty System API",
+            "version": "1.0.0",
+            "status": "running",
+            "endpoints": {
+                "health": "/health",
+            }
+        }), 200
+
+    # TODO: Register additional blueprints here
+    # from app.routes.loyalty import loyalty_bp
+    # app.register_blueprint(loyalty_bp)
+
+    return app
+
+
+# ==================== Entry Point ====================
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(host="0.0.0.0", port=5000, debug=True)
