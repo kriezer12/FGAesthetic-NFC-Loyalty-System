@@ -5,6 +5,7 @@ const navLinks = [
   { title: "NFC Scanner", url: "/dashboard/scan" },
   { title: "Customers", url: "/dashboard/customers" },
   { title: "Check-in Logs", url: "/dashboard/checkin-logs" },
+  { title: "Appointments", url: "/dashboard/appointments" },
 ]
 
 export function NavbarLinks() {
