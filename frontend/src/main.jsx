@@ -28,6 +28,7 @@ import Dashboard from "./pages/dashboard.tsx"
 import NFCScanPage from "./pages/nfc-scan.tsx"
 import LoginPage from "./pages/login.tsx"
 import SignupPage from "./pages/signup.tsx"
+import AppointmentsPage from "./pages/appointments.tsx"
 import UploadPage from "./pages/upload.tsx"
 
 createRoot(document.getElementById('root')).render(
@@ -56,6 +57,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/dashboard/scan" element={<NFCScanPage />} />
             <Route path="/dashboard/customers" element={<CustomersPage />} />
             <Route path="/dashboard/checkin-logs" element={<CheckinLogsPage />} />
+            <Route path="/dashboard/appointments" element={<AppointmentsPage />} />
             <Route path="/dashboard/upload" element={<UploadPage />} />
           </Route>
         </Routes>

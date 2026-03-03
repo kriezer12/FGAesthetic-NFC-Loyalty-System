@@ -1,0 +1,51 @@
+/**
+ * Appointment & Calendar Types
+ * ============================
+ *
+ * TypeScript interfaces for the calendar/appointment feature.
+ * Used across all calendar components.
+ */
+
+export type AppointmentStatus =
+  | "scheduled"
+  | "confirmed"
+  | "in-progress"
+  | "completed"
+  | "cancelled"
+
+export interface Appointment {
+  id: string
+  customer_id?: string
+  customer_name?: string
+  staff_id: string
+  staff_name: string
+  title: string
+  start_time: string // ISO datetime
+  end_time: string   // ISO datetime
+  status: AppointmentStatus
+  notes?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface StaffMember {
+  id: string
+  name: string
+  role: string
+  color: string // hex color used for appointment cards
+}
+
+export interface BlockedTime {
+  id: string
+  staff_id: string
+  start_time: string // ISO datetime
+  end_time: string   // ISO datetime
+  reason: string     // e.g. "Lunch Break", "Staff Off"
+}
+
+export type IntervalMinutes = 15 | 30 | 60
+
+export interface ClinicHours {
+  open: number  // hour of day 0-23
+  close: number // hour of day 0-23
+}
