@@ -10,7 +10,6 @@ import {
 } from "lucide-react"
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -167,9 +166,9 @@ export function SettingsModal({ open, onOpenChange, initialSection = "general" }
           </nav>
 
           {/* Content area */}
-          <DialogBody className="flex-1">
+          <div className="flex-1">
             <SectionPlaceholder item={activeItem} />
-          </DialogBody>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -2,7 +2,6 @@ import { useState, useEffect } from "react"
 import { Camera, Loader2 } from "lucide-react"
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -150,7 +149,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="flex flex-col gap-8">
+        <div className="flex flex-col gap-8">
 
           {/* ── Profile ─────────────────────────────────────────── */}
           <section className="flex flex-col gap-5">
@@ -299,7 +298,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             </div>
           </section>
 
-        </DialogBody>
+        </div>
       </DialogContent>
     </Dialog>
   )
