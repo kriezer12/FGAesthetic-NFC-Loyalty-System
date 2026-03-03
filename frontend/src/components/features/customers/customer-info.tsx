@@ -73,38 +73,45 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
   const displayName = customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center pb-2">
-        <CustomerInfoHeader customer={customer} displayName={displayName} />
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <CustomerAllergiesAlert allergies={customer.allergies} />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full p-4">
+      {/* Left Column — Customer Profile & Details */}
+      <Card className="flex flex-col h-full">
+        <CardHeader className="text-center pb-2">
+          <CustomerInfoHeader customer={customer} displayName={displayName} />
+        </CardHeader>
+        <CardContent className="flex-1 space-y-4 overflow-y-auto">
+          <CustomerAllergiesAlert allergies={customer.allergies} />
+
+          <Separator />
+
+          <CustomerContactDetails customer={customer} formatDate={formatDate} />
+
+          <Separator />
+
+          <CustomerPointsActions
+            isUpdating={isUpdating}
+            currentPoints={customer.points || 0}
+            showHistory={showHistory}
+            onRedeem={() => addPoints(-10)}
+            onAdd={() => addPoints(10)}
+            onToggleHistory={() => setShowHistory(!showHistory)}
+          />
+
+          {showHistory && (
+            <CheckinHistory customerId={customer.id} refreshKey={historyRefreshKey} />
+          )}
+        </CardContent>
+        <CardFooter>
+          <Button variant="ghost" className="w-full" onClick={onClose}>
+            Scan Another Card
+          </Button>
+        </CardFooter>
+      </Card>
+
+      {/* Right Column — Enlarged Stats */}
+      <div className="flex flex-col h-full">
         <CustomerStatsGrid customer={customer} />
-
-        <Separator />
-
-        <CustomerContactDetails customer={customer} formatDate={formatDate} />
-
-        <Separator />
-
-        <CustomerPointsActions
-          isUpdating={isUpdating}
-          currentPoints={customer.points || 0}
-          showHistory={showHistory}
-          onRedeem={() => addPoints(-10)}
-          onAdd={() => addPoints(10)}
-          onToggleHistory={() => setShowHistory(!showHistory)}
-        />
-
-        {showHistory && (
-          <CheckinHistory customerId={customer.id} refreshKey={historyRefreshKey} />
-        )}
-      </CardContent>
-      <CardFooter>
-        <Button variant="ghost" className="w-full" onClick={onClose}>
-          Scan Another Card
-        </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   )
 }

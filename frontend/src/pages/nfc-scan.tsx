@@ -42,7 +42,7 @@ export default function NFCScanPage() {
   }, [])
 
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
+    <div className={viewState === "customer" ? "h-[calc(100vh-5rem)]" : "flex min-h-[calc(100vh-10rem)] items-center justify-center"}>
             {viewState === "scanning" && (
               <NFCScanner onCustomerFound={handleCustomerFound} onNewCard={handleNewCard} />
             )}
