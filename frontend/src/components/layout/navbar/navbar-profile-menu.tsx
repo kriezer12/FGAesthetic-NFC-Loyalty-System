@@ -1,4 +1,5 @@
-import { LogOut, User } from "lucide-react"
+import { useState } from "react"
+import { LogOut, Settings, User } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { AccountSettingsModal } from "./account-settings-modal"
 
 type NavbarProfileMenuProps = {
   userEmail: string
@@ -16,8 +18,10 @@ type NavbarProfileMenuProps = {
 
 export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProps) {
   const userInitial = userEmail.charAt(0).toUpperCase()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
@@ -41,11 +45,19 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="cursor-pointer">
+          <Settings className="mr-2 h-4 w-4" />
+          Account Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onLogout} className="text-destructive focus:text-destructive cursor-pointer">
           <LogOut className="mr-2 h-4 w-4" />
           Logout
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+
+    <AccountSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+    </>
   )
 }

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useRef, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, CreditCard, TrendingUp, Activity } from "lucide-react"
+import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -11,10 +11,30 @@ import {
 } from "recharts"
 
 // ---------------------------------------------------------------------------
+// Drag-and-drop types & helpers
+// ---------------------------------------------------------------------------
+type SectionId = "stats" | "charts" | "quick-actions"
+const DEFAULT_ORDER: SectionId[] = ["stats", "charts", "quick-actions"]
+const STORAGE_KEY = "dashboard-section-order"
+
+function loadOrder(): SectionId[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return DEFAULT_ORDER
+    const parsed: unknown = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.every((x) => DEFAULT_ORDER.includes(x as SectionId))) {
+      return parsed as SectionId[]
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_ORDER
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-interface DailyActivity { day: string; customers: number }
-interface MonthlyGrowth { month: string; registered: number }
+type TimeFilter = "daily" | "weekly" | "yearly"
+interface ChartPoint { label: string; count: number }
+interface RawRow { visits: number; last_visit: string | null; created_at: string | null; nfc_uid: string | null }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -27,6 +47,105 @@ function greeting() {
 }
 
 const GOLD = "var(--color-primary)"
+
+// ---------------------------------------------------------------------------
+// Chart data computation
+// ---------------------------------------------------------------------------
+function buildDailyPoints(rows: RawRow[], dateKey: "last_visit" | "created_at"): ChartPoint[] {
+  const counts: Record<string, number> = {}
+  const labels: string[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i)
+    counts[d.toISOString().slice(0, 10)] = 0
+    labels.push(d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }))
+  }
+  const isoKeys = Object.keys(counts)
+  rows.forEach((row) => {
+    const val = row[dateKey]; if (!val) return
+    const iso = val.slice(0, 10)
+    if (iso in counts) counts[iso]++
+  })
+  return isoKeys.map((iso, i) => ({ label: labels[i], count: counts[iso] }))
+}
+
+function buildWeeklyPoints(rows: RawRow[], dateKey: "last_visit" | "created_at"): ChartPoint[] {
+  const weeks: { label: string; start: Date; end: Date; count: number }[] = []
+  for (let i = 7; i >= 0; i--) {
+    const end = new Date(); end.setDate(end.getDate() - i * 7)
+    const start = new Date(end); start.setDate(start.getDate() - 6)
+    start.setHours(0, 0, 0, 0); end.setHours(23, 59, 59, 999)
+    weeks.push({ label: start.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), start, end, count: 0 })
+  }
+  rows.forEach((row) => {
+    const val = row[dateKey]; if (!val) return
+    const d = new Date(val)
+    for (const w of weeks) { if (d >= w.start && d <= w.end) { w.count++; break } }
+  })
+  return weeks.map(({ label, count }) => ({ label, count }))
+}
+
+function buildYearlyPoints(rows: RawRow[], dateKey: "last_visit" | "created_at"): ChartPoint[] {
+  const counts: Record<string, number> = {}
+  const labels: string[] = []
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(); d.setMonth(d.getMonth() - i)
+    const key = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
+    counts[key] = 0; labels.push(key)
+  }
+  rows.forEach((row) => {
+    const val = row[dateKey]; if (!val) return
+    const key = new Date(val).toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
+    if (key in counts) counts[key]++
+  })
+  return labels.map((label) => ({ label, count: counts[label] }))
+}
+
+function computeChart(rows: RawRow[], filter: TimeFilter, dateKey: "last_visit" | "created_at"): ChartPoint[] {
+  if (filter === "daily") return buildDailyPoints(rows, dateKey)
+  if (filter === "weekly") return buildWeeklyPoints(rows, dateKey)
+  return buildYearlyPoints(rows, dateKey)
+}
+
+const FILTER_SUBTITLES: Record<"activity" | "registrations", Record<TimeFilter, string>> = {
+  activity: {
+    daily: "Check-ins over the last 7 days",
+    weekly: "Check-ins over the last 8 weeks",
+    yearly: "Check-ins over the last 12 months",
+  },
+  registrations: {
+    daily: "New customers in the last 7 days",
+    weekly: "New customers over the last 8 weeks",
+    yearly: "New customers over the last 12 months",
+  },
+}
+
+// ---------------------------------------------------------------------------
+// FilterToggle component
+// ---------------------------------------------------------------------------
+const FILTERS: { label: string; value: TimeFilter }[] = [
+  { label: "Daily", value: "daily" },
+  { label: "Weekly", value: "weekly" },
+  { label: "Yearly", value: "yearly" },
+]
+function FilterToggle({ value, onChange }: { value: TimeFilter; onChange: (v: TimeFilter) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5">
+      {FILTERS.map((f) => (
+        <button
+          key={f.value}
+          onClick={() => onChange(f.value)}
+          className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
+            value === f.value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Custom tooltip shared by all charts
@@ -44,15 +163,85 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 // ---------------------------------------------------------------------------
+// DraggableSection wrapper
+// ---------------------------------------------------------------------------
+interface DraggableSectionProps {
+  id: SectionId
+  editMode: boolean
+  dragOver: boolean
+  onDragStart: (id: SectionId) => void
+  onDragOver: (e: React.DragEvent, id: SectionId) => void
+  onDragEnd: () => void
+  onDrop: (id: SectionId) => void
+  children: React.ReactNode
+}
+
+function DraggableSection({ id, editMode, dragOver, onDragStart, onDragOver, onDragEnd, onDrop, children }: DraggableSectionProps) {
+  return (
+    <div
+      draggable={editMode}
+      onDragStart={() => onDragStart(id)}
+      onDragOver={(e) => onDragOver(e, id)}
+      onDragEnd={onDragEnd}
+      onDrop={() => onDrop(id)}
+      className={[
+        "relative transition-all duration-200",
+        editMode ? "cursor-grab active:cursor-grabbing" : "",
+        dragOver && editMode ? "scale-[1.01] ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl" : "",
+      ].join(" ")}
+    >
+      {editMode && (
+        <div className="absolute -left-1 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-8 w-6 rounded-md bg-background border border-border shadow-sm text-muted-foreground select-none">
+          <GripVertical className="h-4 w-4" />
+        </div>
+      )}
+      <div className={editMode ? "pl-6" : ""}>{children}</div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function Dashboard() {
   const { user } = useAuth()
 
   const [stats, setStats] = useState({ totalCustomers: 0, activeCards: 0, totalVisits: 0, recentActivity: 0 })
-  const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([])
-  const [monthlyGrowth, setMonthlyGrowth] = useState<MonthlyGrowth[]>([])
+  const [rawRows, setRawRows] = useState<RawRow[]>([])
+  const [activityFilter, setActivityFilter] = useState<TimeFilter>("daily")
+  const [registrationsFilter, setRegistrationsFilter] = useState<TimeFilter>("weekly")
   const [loading, setLoading] = useState(true)
+
+  // ── Edit / drag state ───────────────────────────────────────────────────
+  const [editMode, setEditMode] = useState(false)
+  const [sections, setSections] = useState<SectionId[]>(loadOrder)
+  const dragItem = useRef<SectionId | null>(null)
+  const [dragOverId, setDragOverId] = useState<SectionId | null>(null)
+
+  const handleDragStart = useCallback((id: SectionId) => { dragItem.current = id }, [])
+  const handleDragOver = useCallback((e: React.DragEvent, id: SectionId) => {
+    e.preventDefault()
+    setDragOverId(id)
+  }, [])
+  const handleDragEnd = useCallback(() => { dragItem.current = null; setDragOverId(null) }, [])
+  const handleDrop = useCallback((targetId: SectionId) => {
+    const from = dragItem.current
+    if (!from || from === targetId) { dragItem.current = null; setDragOverId(null); return }
+    setSections((prev) => {
+      const next = [...prev]
+      const fromIdx = next.indexOf(from)
+      const toIdx = next.indexOf(targetId)
+      next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, from)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
+    dragItem.current = null
+    setDragOverId(null)
+  }, [])
+
+  const dailyActivity = useMemo(() => computeChart(rawRows, activityFilter, "last_visit"), [rawRows, activityFilter])
+  const monthlyGrowth = useMemo(() => computeChart(rawRows, registrationsFilter, "created_at"), [rawRows, registrationsFilter])
 
   const totalCustomersCount = useCounter(stats.totalCustomers, 1200)
   const activeCardsCount = useCounter(stats.activeCards, 1200)
@@ -72,7 +261,7 @@ export default function Dashboard() {
 
       if (error) throw error
 
-      const rows = customers ?? []
+      const rows: RawRow[] = customers ?? []
       const totalCustomers = rows.length
       const activeCards = rows.filter((row) => row.nfc_uid !== null).length
       const totalVisits = rows.reduce((sum, row) => sum + (row.visits || 0), 0)
@@ -81,44 +270,8 @@ export default function Dashboard() {
       const sevenDaysAgoIso = sevenDaysAgo.toISOString()
       const recentActivity = rows.filter((row) => row.last_visit && row.last_visit >= sevenDaysAgoIso).length
 
-      setStats({
-        totalCustomers,
-        activeCards,
-        totalVisits,
-        recentActivity,
-      })
-
-      // ── Daily activity bar (last 7 days) ──────────────────────────────────
-      const dayCounts: Record<string, number> = {}
-      const days: string[] = []
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i)
-        const key = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })
-        dayCounts[d.toISOString().slice(0, 10)] = 0
-        days.push(key)
-      }
-      const isoKeys = Object.keys(dayCounts)
-      rows.forEach((row) => {
-        if (!row.last_visit) return
-        const iso = row.last_visit.slice(0, 10)
-        if (iso in dayCounts) dayCounts[iso]++
-      })
-      setDailyActivity(isoKeys.map((iso, i) => ({ day: days[i], customers: dayCounts[iso] })))
-
-      // ── Monthly registrations line (last 6 months) ────────────────────────
-      const monthCounts: Record<string, number> = {}
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(); d.setMonth(d.getMonth() - i)
-        const key = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
-        monthCounts[key] = 0
-      }
-      rows.forEach((row) => {
-        if (!row.created_at) return
-        const d = new Date(row.created_at)
-        const key = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
-        if (key in monthCounts) monthCounts[key]++
-      })
-      setMonthlyGrowth(Object.entries(monthCounts).map(([month, registered]) => ({ month, registered })))
+      setStats({ totalCustomers, activeCards, totalVisits, recentActivity })
+      setRawRows(rows)
 
     } catch (err) {
       console.error("Dashboard load error:", err)
@@ -135,24 +288,10 @@ export default function Dashboard() {
     { title: "Recent Activity", value: loading ? "—" : recentActivityCount.toLocaleString(), sub: "Last 7 days", icon: Activity },
   ]
 
-  return (
-    <div className="space-y-6 pb-6">
-
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">{greeting()}</p>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"}
-          </h1>
-        </div>
-        <div className="text-right hidden sm:block">
-          <p className="text-xs text-muted-foreground">FG Aesthetic Centre</p>
-          <p className="text-xs font-medium text-primary">NFC Loyalty Dashboard</p>
-        </div>
-      </div>
-
-      {/* ── Stat Cards ─────────────────────────────────────────────────────── */}
+  // ── Section renderers ────────────────────────────────────────────────────
+  const sectionMap: Record<SectionId, React.ReactNode> = {
+    stats: (
+      /* ── Stat Cards ─────────────────────────────────────────────────── */
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {statCards.map(({ title, value, sub, icon: Icon }) => (
           <Card key={title} className="border border-border shadow-sm">
@@ -171,45 +310,54 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+    ),
 
-      {/* ── Charts Row 1: Daily Activity + Monthly Growth ──────────────────── */}
+    charts: (
+      /* ── Charts Row: Daily Activity + New Registrations ─────────────── */
       <div className="grid gap-4 lg:grid-cols-5">
-
-        {/* Daily Activity Bar Chart */}
         <Card className="border border-border shadow-sm lg:col-span-3">
           <CardHeader className="pb-2 pt-4 px-5">
-            <CardTitle className="text-sm font-semibold">Daily Activity</CardTitle>
-            <p className="text-xs text-muted-foreground">Customer check-ins over the last 7 days</p>
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <div>
+                <CardTitle className="text-sm font-semibold">Daily Activity</CardTitle>
+                <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.activity[activityFilter]}</p>
+              </div>
+              <FilterToggle value={activityFilter} onChange={setActivityFilter} />
+            </div>
           </CardHeader>
           <CardContent className="px-2 pb-4">
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={dailyActivity} barCategoryGap="30%">
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                <Bar dataKey="customers" name="Customers" fill={GOLD} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" name="Customers" fill={GOLD} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Monthly Growth Line Chart */}
         <Card className="border border-border shadow-sm lg:col-span-2">
           <CardHeader className="pb-2 pt-4 px-5">
-            <CardTitle className="text-sm font-semibold">New Registrations</CardTitle>
-            <p className="text-xs text-muted-foreground">Customers joined per month</p>
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <div>
+                <CardTitle className="text-sm font-semibold">New Registrations</CardTitle>
+                <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
+              </div>
+              <FilterToggle value={registrationsFilter} onChange={setRegistrationsFilter} />
+            </div>
           </CardHeader>
           <CardContent className="px-2 pb-4">
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={monthlyGrowth}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                 <Tooltip content={<ChartTooltip />} />
                 <Line
                   type="monotone"
-                  dataKey="registered"
+                  dataKey="count"
                   name="Registered"
                   stroke={GOLD}
                   strokeWidth={2}
@@ -220,43 +368,100 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
+      </div>
+    ),
 
+    "quick-actions": (
+      /* ── Quick Actions ───────────────────────────────────────────────── */
+      <Card className="border border-border shadow-sm">
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+          <p className="text-xs text-muted-foreground">Jump to common tasks</p>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-2 pb-4 px-5">
+          {[
+            { href: "/dashboard/scan", icon: CreditCard, label: "Scan NFC Card", desc: "Register or look up a customer" },
+            { href: "/dashboard/customers", icon: Users, label: "Customer Directory", desc: "Browse and manage profiles" },
+            { href: "/dashboard/checkin-logs", icon: Activity, label: "Check-in Logs", desc: "View full visit history" },
+            { href: "/dashboard/scan", icon: TrendingUp, label: "Register New Card", desc: "Link a card to a customer" },
+          ].map(({ href, icon: Icon, label, desc }) => (
+            <Link
+              key={label}
+              to={href}
+              className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
+            >
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-tight">{label}</p>
+                <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
+              </div>
+            </Link>
+          ))}
+        </CardContent>
+      </Card>
+    ),
+  }
+
+  return (
+    <div className="space-y-6 pb-6">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">{greeting()}</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"}
+          </h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-xs text-muted-foreground">FG Aesthetic Centre</p>
+            <p className="text-xs font-medium text-primary">NFC Loyalty Dashboard</p>
+          </div>
+          <button
+            onClick={() => setEditMode((v) => !v)}
+            className={[
+              "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+              editMode
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30",
+            ].join(" ")}
+          >
+            {editMode ? (
+              <><Check className="h-3.5 w-3.5" />Done</>
+            ) : (
+              <><LayoutDashboard className="h-3.5 w-3.5" />Edit Dashboard</>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* ── Quick Actions ─────────────────────────────────────────────────── */}
-      <div className="grid gap-4">
+      {/* ── Edit mode hint ───────────────────────────────────────────────── */}
+      {editMode && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-xs text-primary">
+          <GripVertical className="h-3.5 w-3.5 shrink-0" />
+          Drag the sections to rearrange your dashboard. Your layout is saved automatically.
+        </div>
+      )}
 
-        {/* Quick Actions */}
-        <Card className="border border-border shadow-sm">
-          <CardHeader className="pb-2 pt-4 px-5">
-            <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
-            <p className="text-xs text-muted-foreground">Jump to common tasks</p>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2 pb-4 px-5">
-            {[
-              { href: "/dashboard/scan", icon: CreditCard, label: "Scan NFC Card", desc: "Register or look up a customer" },
-              { href: "/dashboard/customers", icon: Users, label: "Customer Directory", desc: "Browse and manage profiles" },
-              { href: "/dashboard/checkin-logs", icon: Activity, label: "Check-in Logs", desc: "View full visit history" },
-              { href: "/dashboard/scan", icon: TrendingUp, label: "Register New Card", desc: "Link a card to a customer" },
-            ].map(({ href, icon: Icon, label, desc }) => (
-              <Link
-                key={label}
-                to={href}
-                className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
-              >
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-tight">{label}</p>
-                  <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
-                </div>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+      {/* ── Draggable sections ───────────────────────────────────────────── */}
+      {sections.map((id) => (
+        <DraggableSection
+          key={id}
+          id={id}
+          editMode={editMode}
+          dragOver={dragOverId === id}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDrop={handleDrop}
+        >
+          {sectionMap[id]}
+        </DraggableSection>
+      ))}
 
-      </div>
     </div>
   )
 }

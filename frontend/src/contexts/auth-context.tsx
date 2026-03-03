@@ -19,6 +19,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signOut: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -67,11 +68,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await supabase.auth.signOut()
   }
 
+  const refreshUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    setUser(user)
+  }
+
   const value: AuthContextType = {
     user,
     session,
     loading,
     signOut,
+    refreshUser,
   }
 
   return (
