@@ -21,6 +21,7 @@ import "./index.css"
 import { AuthProvider } from "./contexts/auth-context.tsx"
 import { ProtectedRoute, PublicRoute } from "./components/auth"
 import { DashboardLayout } from "./components/layout"
+import { GlobalNFCListener } from "./components/features/nfc/global-nfc-listener"
 
 import CheckinLogsPage from "./pages/checkin-logs.tsx"
 import CustomersPage from "./pages/customers.tsx"
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <GlobalNFCListener />
         <Routes>
           {/* Root redirects to dashboard (will redirect to login if not authenticated) */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
