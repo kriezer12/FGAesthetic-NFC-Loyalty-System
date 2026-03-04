@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import {
   MAX_AVG_KEYSTROKE_INTERVAL,
@@ -9,6 +10,7 @@ import {
 import { NFCScannerHeader } from "./nfc-scanner-parts/nfc-scanner-header"
 import { NFCScannerInput } from "./nfc-scanner-parts/nfc-scanner-input"
 import { getAverageKeystrokeInterval } from "./nfc-scanner-parts/nfc-scanner-timing"
+import { handleMockNFCScan } from "./nfc-scanner-parts/mock-nfc-scanner"
 
 import type { Customer } from "@/types/customer"
 
@@ -87,14 +89,22 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
       return
     }
 
-    // Ignore modifier keys
-    if (e.key.length > 1 && e.key !== "Backspace" && e.key !== "Delete") {
+    // Only allow digits (0-9)
+    if (!/^\d$/.test(e.key)) {
+      // Allow Backspace and Delete for clearing
+      if (e.key === "Backspace" || e.key === "Delete") {
+        resetInputTracking()
+        return
+      }
+      // Block all other keys
+      e.preventDefault()
       return
     }
 
-    // Handle backspace/delete - likely manual typing, reset
-    if (e.key === "Backspace" || e.key === "Delete") {
-      resetInputTracking()
+    // Prevent input if already 10 digits
+    const currentValue = (e.currentTarget as HTMLInputElement).value
+    if (currentValue.length >= 10) {
+      e.preventDefault()
       return
     }
 
@@ -116,8 +126,18 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
           inputRef.current.value = ""
         }
         resetInputTracking()
+        return
       }
     }
+
+    // Auto-submit when 10 digits are entered
+    // Use setTimeout to ensure the input value is updated first
+    setTimeout(() => {
+      const input = inputRef.current
+      if (input && input.value.length === 10) {
+        handleScan({ currentTarget: input } as any)
+      }
+    }, 0)
   }
 
   const handleScan = async (e: KeyboardEvent<HTMLInputElement>) => {
@@ -186,6 +206,11 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     }
   }
 
+  // Temporary mock function for testing without physical scanner
+  const handleMockScan = async () => {
+    await handleMockNFCScan(onCustomerFound, onNewCard, setIsLoading, setLastScanned)
+  }
+
   return (
     <Card className="w-full max-w-md mx-auto">
       <NFCScannerHeader isLoading={isLoading} />
@@ -196,6 +221,15 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
           showWarning={showWarning}
           onKeyDown={handleKeyDown}
         />
+        {/* Temporary mock scanner button for testing */}
+        <Button
+          onClick={handleMockScan}
+          disabled={isLoading}
+          className="w-full mt-4"
+          variant="outline"
+        >
+          {isLoading ? "Scanning..." : "Mock Scan (Test)"}
+        </Button>
       </CardContent>
     </Card>
   )

@@ -270,7 +270,20 @@ export default function CustomersPage() {
                             </div>
                             <div>
                               <div className="font-medium">
-                                {customer.name || `${customer.first_name} ${customer.last_name}`}
+                                {(() => {
+                                  let displayName = customer.name || 'Unknown'
+                                  if (customer.first_name || customer.last_name) {
+                                    displayName = customer.first_name || ''
+                                    if (customer.middle_name) {
+                                      displayName += ` ${customer.middle_name.charAt(0)}.`
+                                    }
+                                    if (customer.last_name) {
+                                      displayName += ` ${customer.last_name}`
+                                    }
+                                    displayName = displayName.trim()
+                                  }
+                                  return displayName
+                                })()}
                               </div>
                               <div className="text-xs capitalize text-muted-foreground">
                                 {customer.skin_type && `${customer.skin_type} skin`}
@@ -349,7 +362,7 @@ export default function CustomersPage() {
             <Card className="max-h-[85vh] w-full max-w-lg overflow-y-auto">
               <CardHeader className="flex flex-row items-start justify-between">
                 <div>
-                  <CardTitle>{selectedCustomer.name}</CardTitle>
+                  <CardTitle>{selectedCustomer.name || `${selectedCustomer.first_name || ''} ${selectedCustomer.middle_name || ''} ${selectedCustomer.last_name || ''}`.trim()}</CardTitle>
                   <p className="mt-1 text-sm text-muted-foreground">Client since {formatDate(selectedCustomer.created_at)}</p>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedCustomer(null)}>

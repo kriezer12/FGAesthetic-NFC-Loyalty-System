@@ -16,7 +16,7 @@ export function NFCScannerInput({ inputRef, isValidInput, showWarning, onKeyDown
         ref={inputRef}
         type="text"
         placeholder="Waiting for NFC card..."
-        className={`text-center text-lg tracking-widest border-2 border-dashed focus:border-primary ${
+        className={`text-center text-lg tracking-widest border-2 border-dashed focus:border-primary caret-transparent [&:-webkit-autofill]:[background-color:transparent!important] [&:-webkit-autofill]:[box-shadow:0_0_0_30px_transparent_inset!important] [&:-webkit-autofill]:[-webkit-text-fill-color:transparent!important] [-webkit-text-security:disc] ${
           isValidInput ? "border-primary/30" : "border-destructive/50"
         }`}
         onKeyDown={onKeyDown}
