@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { LogOut, Settings, User } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +18,9 @@ type NavbarProfileMenuProps = {
 }
 
 export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProps) {
-  const userInitial = userEmail.charAt(0).toUpperCase()
+  const { userProfile } = useAuth()
+  const displayName = userProfile?.full_name || userEmail.split("@")[0]
+  const userInitial = (userProfile?.full_name || userEmail).charAt(0).toUpperCase()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
@@ -38,7 +41,7 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">Account</p>
+            <p className="text-sm font-medium leading-none">{displayName}</p>
             <p className="text-xs leading-none text-muted-foreground truncate">
               {userEmail}
             </p>

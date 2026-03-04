@@ -1,0 +1,161 @@
+/**
+ * Create Account Form Component
+ * =============================
+ *
+ * Form for creating new user accounts.
+ * Only superadmin and branch_admin can access this.
+ */
+
+import { useState, type FormEvent } from "react"
+import { Button } from "@/components/ui/button"
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { apiCall } from "@/lib/api"
+import type { UserRole } from "@/types/user"
+
+interface CreateAccountFormProps {
+  onSuccess?: () => void
+}
+
+export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [name, setName] = useState("")
+  const [role, setRole] = useState<UserRole>("staff")
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    setLoading(true)
+
+    try {
+      // Call backend endpoint to create account
+      const response = await apiCall("/api/accounts/create", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+          full_name: name,
+          role,
+        }),
+      })
+
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        let errorMessage = "Failed to create account"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {}
+        setError(errorMessage)
+        setLoading(false)
+        return
+      }
+
+      const data = await response.json()
+
+      setSuccess(`Account created successfully for ${email}`)
+      // Reset form
+      setEmail("")
+      setPassword("")
+      setName("")
+      setRole("staff")
+      
+      // Call success callback after a short delay to show the message
+      if (onSuccess) {
+        setTimeout(onSuccess, 1500)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form className="space-y-4" onSubmit={handleSubmit}>
+      {error && (
+        <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="text-sm text-green-600 bg-green-50 dark:bg-green-950/50 p-3 rounded-md">
+          {success}
+        </div>
+      )}
+
+      <FieldGroup>
+          {/* Name field */}
+          <Field>
+            <FieldLabel htmlFor="name">Full Name</FieldLabel>
+            <Input
+              id="name"
+              type="text"
+              placeholder="John Doe"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+
+          {/* Email field */}
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              placeholder="john@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </Field>
+
+          {/* Password field */}
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              placeholder="Enter a secure password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </Field>
+
+          {/* Role field */}
+          <Field>
+            <FieldLabel htmlFor="role">Role</FieldLabel>
+            <select
+              id="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="staff">Staff</option>
+              <option value="branch_admin">Branch Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </Field>
+
+
+        </FieldGroup>
+
+        {/* Submit button */}
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? "Creating Account..." : "Create Account"}
+        </Button>
+    </form>
+  )
+}

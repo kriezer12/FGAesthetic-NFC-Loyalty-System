@@ -22,9 +22,18 @@ const NAME_CHANGE_LIMIT = 5
 const currentMonth = () => new Date().toISOString().slice(0, 7) // "YYYY-MM"
 
 export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModalProps) {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, userProfile } = useAuth()
 
   const [fullName, setFullName] = useState("")
+
+  // Format role for display (e.g., "super_admin" -> "Super Admin")
+  const formatRole = (role?: string): string => {
+    if (!role) return "—"
+    return role
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
 
   const storedMonth: string = user?.user_metadata?.name_change_month ?? ""
   const nameChangeCount: number =
@@ -214,6 +223,16 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
                   className="bg-muted text-muted-foreground cursor-not-allowed select-none"
                 />
                 <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="acc-role">Role</Label>
+                <Input
+                  id="acc-role"
+                  value={formatRole(userProfile?.role)}
+                  readOnly
+                  className="bg-muted text-muted-foreground cursor-not-allowed select-none"
+                />
               </div>
             </div>
 
