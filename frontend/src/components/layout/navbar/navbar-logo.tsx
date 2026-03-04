@@ -27,7 +27,11 @@ export function NavbarLogo() {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <img src="/logo/logo-orig.svg" alt="FG Aesthetic Centre" className="h-10 w-auto" />
+        <img
+          src="/logo/logo-orig.svg"
+          alt="FG Aesthetic Centre"
+          className="h-10 w-auto transition duration-300 dark:invert"
+        />
         
         {isHovered && (
           <span

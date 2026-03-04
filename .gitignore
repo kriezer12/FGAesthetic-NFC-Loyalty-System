@@ -53,3 +53,6 @@ desktop.ini
 *~
 *.swp
 *.sw?
+
+# Python bytecode caches
+__pycache__/
