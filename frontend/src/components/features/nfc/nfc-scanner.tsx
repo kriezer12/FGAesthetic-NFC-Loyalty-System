@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import {
   MAX_AVG_KEYSTROKE_INTERVAL,
