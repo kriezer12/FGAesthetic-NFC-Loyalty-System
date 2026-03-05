@@ -23,6 +23,7 @@ interface UserProfile {
   full_name?: string
   branch?: string
   created_at?: string
+  first_login?: boolean
 }
 
 interface AuthContextType {

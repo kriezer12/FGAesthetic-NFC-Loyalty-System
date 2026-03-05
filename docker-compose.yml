@@ -52,11 +52,12 @@ services:
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
       - VITE_JWT_SECRET=${VITE_JWT_SECRET}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:5173 > /dev/null 2>&1 || exit 1"]
+      # use IPv4 and allow more startup time for Vite dev server
+      test: ["CMD-SHELL", "wget -4 -q -O - http://127.0.0.1:5173 > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 60s
     depends_on:
       - backend
     restart: unless-stopped
