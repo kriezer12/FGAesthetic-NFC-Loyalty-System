@@ -53,3 +53,5 @@ desktop.ini
 *~
 *.swp
 *.sw?
+
+__pycache__/
