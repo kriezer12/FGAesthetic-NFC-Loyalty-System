@@ -39,6 +39,8 @@ import {
   TIME_GUTTER_WIDTH,
 } from "./calendar-config"
 import { AppointmentCard } from "./appointment-card"
+import { AppointmentDetailPopover } from "./appointment-detail-popover"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -74,9 +76,13 @@ interface CalendarGridProps {
   staff: StaffMember[]
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
+  /** When true, columns stretch to fill the available width instead of fixed 200px */
+  snapColumnsToFit?: boolean
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
   onSlotClick: (staffId: string, startMinutes: number) => void
   onAppointmentClick: (appointment: Appointment) => void
+  onEditAppointment: (appointment: Appointment) => void
+  onDeleteAppointment: (id: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -90,16 +96,28 @@ export function CalendarGrid({
   staff,
   appointments,
   blockedTimes,
+  snapColumnsToFit = true,
   onAppointmentUpdate,
   onSlotClick,
   onAppointmentClick,
+  onEditAppointment,
+  onDeleteAppointment,
 }: CalendarGridProps) {
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragInfo | null>(null)
   const lastPreviewRef = useRef<DragPreview | null>(null)
+  const lastPointerEvent = useRef<{ clientX: number; clientY: number } | null>(null)
 
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  // ---- detail popover state ----
+  const [detailAppointment, setDetailAppointment] = useState<Appointment | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailAnchor, setDetailAnchor] = useState<{ top: number; left: number } | null>(null)
+
+  // Column width: fit-to-screen or fixed 200px
+  const MIN_COL_WIDTH = 200
 
   // derived
   const timeSlots = useMemo(
@@ -194,9 +212,8 @@ export function CalendarGrid({
         }
       } else {
         // ---- resize ----
-        const deltaY = e.clientY - (drag.startY - gridRef.current.scrollTop + gridRect.top)
-        // we stored startY in page coords for resize — recalc
-        const rawHeight = drag.origHeight + (e.clientY - drag.startX) // startX stores initial clientY for resize
+        // we stored startX as initial clientY for resize calculation
+        const rawHeight = drag.origHeight + (e.clientY - drag.startX)
         const rawDuration = rawHeight / MINUTE_HEIGHT
         const snappedDuration = Math.max(
           MIN_APPOINTMENT_DURATION,
@@ -220,14 +237,21 @@ export function CalendarGrid({
       }
     }
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e: PointerEvent) => {
+      lastPointerEvent.current = { clientX: e.clientX, clientY: e.clientY }
       const drag = dragRef.current
       if (!drag) return
 
-      // ---- click (not a drag) → open appointment detail ----
+      // ---- click (not a drag) → show detail popover ----
       if (!drag.activated) {
         const appt = appointments.find((a) => a.id === drag.appointmentId)
-        if (appt) onAppointmentClick(appt)
+        if (appt) {
+          // Get click position from the last pointer event
+          // We need the event — store it on pointerup
+          setDetailAppointment(appt)
+          setDetailAnchor({ top: (lastPointerEvent.current?.clientY ?? 0), left: (lastPointerEvent.current?.clientX ?? 0) })
+          setDetailOpen(true)
+        }
         dragRef.current = null
         return
       }
@@ -256,7 +280,7 @@ export function CalendarGrid({
       }
 
       // validate overlaps
-      if (hasOverlap(drag.appointmentId, newStaffId, newStartMin, newEndMin, appointments)) {
+      if (hasOverlap(drag.appointmentId, newStaffId, newStartMin, newEndMin, selectedDate, appointments)) {
         setValidationError("Time slot conflicts with another appointment.")
         dragRef.current = null
         lastPreviewRef.current = null
@@ -265,7 +289,7 @@ export function CalendarGrid({
       }
 
       // validate blocked times
-      if (hasBlockedTimeConflict(newStaffId, newStartMin, newEndMin, blockedTimes)) {
+      if (hasBlockedTimeConflict(newStaffId, newStartMin, newEndMin, selectedDate, blockedTimes)) {
         setValidationError("Cannot schedule during a blocked time.")
         dragRef.current = null
         lastPreviewRef.current = null
@@ -366,9 +390,29 @@ export function CalendarGrid({
     (staffIndex: number, slotMinutes: number) => {
       // skip if we just finished a drag
       if (dragRef.current) return
-      onSlotClick(staff[staffIndex].id, slotMinutes)
+      
+      const staffId = staff[staffIndex].id
+      const slotEndMinutes = slotMinutes + interval
+      
+      // Check if this slot overlaps with any blocked time for this staff
+      const isBlocked = blockedTimes.some((b) => {
+        if (b.staff_id !== staffId) return false
+        // Must be on the same day
+        if (!isSameDay(new Date(b.start_time), selectedDate)) return false
+        const bStart = minutesSinceMidnight(b.start_time)
+        const bEnd = minutesSinceMidnight(b.end_time)
+        return slotMinutes < bEnd && slotEndMinutes > bStart
+      })
+      
+      // Don't open appointment dialog if the slot is blocked
+      if (isBlocked) {
+        setValidationError("Cannot create appointments during blocked time.")
+        return
+      }
+      
+      onSlotClick(staffId, slotMinutes)
     },
-    [staff, onSlotClick],
+    [staff, interval, blockedTimes, selectedDate, onSlotClick],
   )
 
   // ---- filter appointments for the selected day ----
@@ -396,15 +440,9 @@ export function CalendarGrid({
   // ========================================================================
 
   return (
-    <div
-      ref={gridRef}
-      className={cn(
-        "flex-1 overflow-auto relative",
-        dragPreview && "select-none cursor-grabbing",
-      )}
-    >
-      {/* -------- sticky staff column headers -------- */}
-      <div className="sticky top-0 z-20 flex border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
+      {/* Sticky headers - outside scroll area */}
+      <div className="flex border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-20">
         <div
           className="shrink-0 border-r bg-background/95"
           style={{ width: TIME_GUTTER_WIDTH }}
@@ -412,19 +450,42 @@ export function CalendarGrid({
         {staff.map((s) => (
           <div
             key={s.id}
-            className="flex flex-1 items-center gap-2 border-r px-3 py-2"
+            className="flex items-center gap-1.5 border-r px-3 py-2"
+            style={
+              snapColumnsToFit
+                ? { flex: `1 1 0%`, minWidth: `${MIN_COL_WIDTH}px` }
+                : { width: `${MIN_COL_WIDTH}px`, minWidth: `${MIN_COL_WIDTH}px` }
+            }
           >
             <div
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              className="h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: s.color }}
             />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{s.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{s.role}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium leading-tight">{s.name}</p>
+              <p className="truncate text-[10px] text-muted-foreground leading-tight">
+                {s.role}
+              </p>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Scrollable grid body */}
+      <ScrollArea className="flex-1 overflow-hidden">
+        <div
+          ref={gridRef}
+          className={cn(
+            "relative",
+            dragPreview && "select-none cursor-grabbing",
+          )}
+          style={{
+            minWidth: snapColumnsToFit
+              ? undefined
+              : `${TIME_GUTTER_WIDTH + staff.length * MIN_COL_WIDTH}px`,
+            paddingTop: "0.5rem",
+          }}
+        >
 
       {/* -------- grid body -------- */}
       <div className="flex relative" style={{ height: totalHeight }}>
@@ -441,6 +502,15 @@ export function CalendarGrid({
               </span>
             </div>
           ))}
+          {/* Closing hour label — always show the end-of-day time */}
+          <div
+            className="flex -translate-y-2.5 items-start justify-end pr-3"
+            style={{ height: 0 }}
+          >
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {formatTime(clinicHours.close * 60)}
+            </span>
+          </div>
         </div>
 
         {/* staff columns */}
@@ -451,7 +521,15 @@ export function CalendarGrid({
           const colBlocked = dayBlocked.filter((b) => b.staff_id === s.id)
 
           return (
-            <div key={s.id} className="relative flex-1 border-r">
+            <div
+              key={s.id}
+              className="relative border-r"
+              style={
+                snapColumnsToFit
+                  ? { flex: `1 1 0%`, minWidth: `${MIN_COL_WIDTH}px` }
+                  : { width: `${MIN_COL_WIDTH}px`, minWidth: `${MIN_COL_WIDTH}px` }
+              }
+            >
               {/* slot backgrounds */}
               {timeSlots.map((minutes) => (
                 <div
@@ -503,8 +581,8 @@ export function CalendarGrid({
                     }
                     onResizePointerDown={(e) =>
                       handleResizePointerDown(e, appt, staffIndex)
-                    }
-                  />
+                    }                    onEdit={() => onEditAppointment(appt)}
+                    onDelete={() => onDeleteAppointment(appt.id)}                  />
                 )
               })}
 
@@ -535,14 +613,28 @@ export function CalendarGrid({
         )}
       </div>
 
-      {/* -------- validation error toast -------- */}
-      {validationError && (
-        <div className="pointer-events-none sticky bottom-4 z-50 mx-auto w-fit animate-in fade-in slide-in-from-bottom-2">
-          <div className="pointer-events-auto rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-white shadow-lg">
-            {validationError}
+        {/* -------- validation error toast -------- */}
+        {validationError && (
+          <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-fit animate-in fade-in slide-in-from-bottom-2">
+            <div className="pointer-events-auto rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-white shadow-lg">
+              {validationError}
+            </div>
           </div>
+        )}
         </div>
-      )}
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
+
+      {/* Appointment detail popover (shown on left-click) */}
+      <AppointmentDetailPopover
+        appointment={detailAppointment}
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) setDetailAppointment(null)
+        }}
+        anchorPosition={detailAnchor}
+      />
     </div>
   )
 }
