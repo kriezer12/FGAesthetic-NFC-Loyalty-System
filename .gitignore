@@ -79,3 +79,5 @@ wheels/
 *~
 *.swp
 *.sw?
+
+__pycache__/

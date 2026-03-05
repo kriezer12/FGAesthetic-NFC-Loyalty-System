@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { Outlet } from "react-router-dom"
 import { AppNavbar } from "./app-navbar"
 

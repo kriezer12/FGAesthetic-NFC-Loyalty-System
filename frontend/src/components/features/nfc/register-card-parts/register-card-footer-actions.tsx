@@ -1,7 +1,6 @@
 import { Loader2, UserPlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { CardFooter } from "@/components/ui/card"
 
 type RegisterCardFooterActionsProps = {
   isLoading: boolean
@@ -10,8 +9,8 @@ type RegisterCardFooterActionsProps = {
 
 export function RegisterCardFooterActions({ isLoading, onCancel }: RegisterCardFooterActionsProps) {
   return (
-    <CardFooter className="flex gap-2 sticky bottom-0 bg-background pt-4">
-      <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
+    <div className="flex gap-3 px-6 py-4 border-t bg-muted/30">
+      <Button type="button" variant="outline" className="flex-1" onClick={onCancel} disabled={isLoading}>
         Cancel
       </Button>
       <Button type="submit" className="flex-1" disabled={isLoading}>
@@ -27,6 +26,6 @@ export function RegisterCardFooterActions({ isLoading, onCancel }: RegisterCardF
           </>
         )}
       </Button>
-    </CardFooter>
+    </div>
   )
 }
