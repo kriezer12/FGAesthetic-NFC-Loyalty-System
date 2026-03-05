@@ -5,21 +5,41 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Edit,
   Eye,
   Filter,
   Mail,
+  MapPin,
   Phone,
   Search,
   Users,
   X,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
+import { useStaff } from "@/hooks/use-staff"
+import { useAppointments } from "@/hooks/use-appointments"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
 import { supabase } from "@/lib/supabase"
-
 import type { Customer } from "@/types/customer"
+import type { Appointment, IntervalMinutes } from "@/types/appointment"
+import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -30,10 +50,22 @@ export default function CustomersPage() {
 
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
+  const [sortMetric, setSortMetric] = useState<"" | "points" | "visits">("")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [showFilters, setShowFilters] = useState(false)
 
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+
+  // Appointment dialog state
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
+  const [prefillCustomer, setPrefillCustomer] = useState<Customer | null>(null)
+  const { staff = [] } = useStaff()
+  const { appointments, addAppointment } = useAppointments()
+  const [selectedDate] = useState(new Date())
+  const [interval] = useState<IntervalMinutes>(DEFAULT_INTERVAL)
+  
+  const clinicHours = { open: 9, close: 18 }
 
   const totalClients = customers.length
   const totalPointsIssued = useMemo(
@@ -97,9 +129,17 @@ export default function CustomersPage() {
       filtered = filtered.filter((c) => c.gender === genderFilter)
     }
 
+    if (sortMetric) {
+      filtered.sort((a, b) => {
+        const aValue = sortMetric === "points" ? (a.points || 0) : (a.visits || 0)
+        const bValue = sortMetric === "points" ? (b.points || 0) : (b.visits || 0)
+        return sortOrder === "asc" ? aValue - bValue : bValue - aValue
+      })
+    }
+
     setFilteredCustomers(filtered)
     setCurrentPage(1)
-  }, [customers, genderFilter, searchQuery, skinTypeFilter])
+  }, [customers, genderFilter, searchQuery, skinTypeFilter, sortMetric, sortOrder])
 
   useEffect(() => {
     filterCustomers()
@@ -109,6 +149,8 @@ export default function CustomersPage() {
     setSearchQuery("")
     setSkinTypeFilter("")
     setGenderFilter("")
+    setSortMetric("")
+    setSortOrder("desc")
   }
 
   const formatDate = (dateString?: string) => {
@@ -123,7 +165,7 @@ export default function CustomersPage() {
   const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
-  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter)
+  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || sortMetric)
 
   return (
     <div>
@@ -190,6 +232,7 @@ export default function CustomersPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Skin Type</label>
                 <select
+                  title="Skin Type"
                   className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                   value={skinTypeFilter}
                   onChange={(e) => setSkinTypeFilter(e.target.value)}
@@ -205,6 +248,7 @@ export default function CustomersPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Gender</label>
                 <select
+                  title="Gender"
                   className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                   value={genderFilter}
                   onChange={(e) => setGenderFilter(e.target.value)}
@@ -213,6 +257,32 @@ export default function CustomersPage() {
                   <option value="female">Female</option>
                   <option value="male">Male</option>
                   <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Sort Metric</label>
+                <select
+                  title="Sort Metric"
+                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  value={sortMetric}
+                  onChange={(e) => setSortMetric(e.target.value as "" | "points" | "visits")}
+                >
+                  <option value="">None</option>
+                  <option value="points">Points</option>
+                  <option value="visits">Visits</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Sort Order</label>
+                <select
+                  title="Sort Order"
+                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  value={sortOrder}
+                  disabled={!sortMetric}
+                  onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
                 </select>
               </div>
               {hasActiveFilters && (
@@ -241,88 +311,106 @@ export default function CustomersPage() {
                     <th className="p-4 text-left font-medium">Points</th>
                     <th className="p-4 text-left font-medium">Visits</th>
                     <th className="p-4 text-left font-medium">Last Visit</th>
-                    <th className="p-4 text-left font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
                         Loading clients...
                       </td>
                     </tr>
                   ) : paginatedCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
                         No clients found
                       </td>
                     </tr>
                   ) : (
                     paginatedCustomers.map((customer) => (
-                      <tr key={customer.id} className="border-b transition-colors hover:bg-muted/30">
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                              <span className="text-sm font-medium text-primary">
-                                {customer.first_name?.[0] || customer.name?.[0] || "?"}
-                                {customer.last_name?.[0] || ""}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="font-medium">
-                                {(() => {
-                                  let displayName = customer.name || 'Unknown'
-                                  if (customer.first_name || customer.last_name) {
-                                    displayName = customer.first_name || ''
-                                    if (customer.middle_name) {
-                                      displayName += ` ${customer.middle_name.charAt(0)}.`
-                                    }
-                                    if (customer.last_name) {
-                                      displayName += ` ${customer.last_name}`
-                                    }
-                                    displayName = displayName.trim()
-                                  }
-                                  return displayName
-                                })()}
+                      <ContextMenu key={customer.id}>
+                        <ContextMenuTrigger asChild>
+                          <tr
+                            onClick={() => setSelectedCustomer(customer)}
+                            className="border-b transition-colors hover:bg-muted/30 cursor-pointer"
+                          >
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                                  <span className="text-sm font-medium text-primary">
+                                    {customer.first_name?.[0] || customer.name?.[0] || "?"}
+                                    {customer.last_name?.[0] || ""}
+                                  </span>
+                                </div>
+                                <div>
+                                  <div className="font-medium">
+                                    {(() => {
+                                      let displayName = customer.name || 'Unknown'
+                                      if (customer.first_name || customer.last_name) {
+                                        displayName = customer.first_name || ''
+                                        if (customer.middle_name) {
+                                          displayName += ` ${customer.middle_name.charAt(0)}.`
+                                        }
+                                        if (customer.last_name) {
+                                          displayName += ` ${customer.last_name}`
+                                        }
+                                        displayName = displayName.trim()
+                                      }
+                                      return displayName
+                                    })()}
+                                  </div>
+                                  <div className="text-xs capitalize text-muted-foreground">
+                                    {customer.skin_type && `${customer.skin_type} skin`}
+                                    {customer.gender && customer.skin_type && " • "}
+                                    {customer.gender}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-xs capitalize text-muted-foreground">
-                                {customer.skin_type && `${customer.skin_type} skin`}
-                                {customer.gender && customer.skin_type && " • "}
-                                {customer.gender}
+                            </td>
+                            <td className="p-4">
+                              <div className="space-y-1">
+                                {customer.phone && (
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <Phone className="h-3 w-3 text-muted-foreground" />
+                                    {customer.phone}
+                                  </div>
+                                )}
+                                {customer.email && (
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Mail className="h-3 w-3" />
+                                    {customer.email}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="space-y-1">
-                            {customer.phone && (
-                              <div className="flex items-center gap-2 text-sm">
-                                <Phone className="h-3 w-3 text-muted-foreground" />
-                                {customer.phone}
-                              </div>
-                            )}
-                            {customer.email && (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Mail className="h-3 w-3" />
-                                {customer.email}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
-                        </td>
-                        <td className="p-4">
-                          <span className="font-semibold text-primary">{customer.points || 0}</span>
-                        </td>
-                        <td className="p-4">{customer.visits || 0}</td>
-                        <td className="p-4 text-sm text-muted-foreground">{formatDate(customer.last_visit)}</td>
-                        <td className="p-4">
-                          <Button variant="ghost" size="sm" onClick={() => setSelectedCustomer(customer)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
+                            </td>
+                            <td className="p-4">
+                              <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                            </td>
+                            <td className="p-4">
+                              <span className="font-semibold text-primary">{customer.points || 0}</span>
+                            </td>
+                            <td className="p-4">{customer.visits || 0}</td>
+                            <td className="p-4 text-sm text-muted-foreground">{formatDate(customer.last_visit)}</td>
+                          </tr>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuItem onClick={() => setSelectedCustomer(customer)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => {
+                            setPrefillCustomer(customer)
+                            setAppointmentDialogOpen(true)
+                          }}>
+                            <Calendar className="mr-2 h-4 w-4" />
+                            Set Appointment
+                          </ContextMenuItem>
+                          <ContextMenuItem>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     ))
                   )}
                 </tbody>
@@ -357,88 +445,195 @@ export default function CustomersPage() {
               </div>
             )}
           </div>
-      {selectedCustomer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <Card className="max-h-[85vh] w-full max-w-lg overflow-y-auto">
-              <CardHeader className="flex flex-row items-start justify-between">
-                <div>
-                  <CardTitle>{selectedCustomer.name || `${selectedCustomer.first_name || ''} ${selectedCustomer.middle_name || ''} ${selectedCustomer.last_name || ''}`.trim()}</CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">Client since {formatDate(selectedCustomer.created_at)}</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedCustomer(null)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-lg bg-primary/10 p-4 text-center">
-                    <Award className="mx-auto mb-2 h-6 w-6 text-primary" />
-                    <p className="text-xs text-muted-foreground">Points</p>
-                  </div>
-                  <div className="rounded-lg bg-muted p-4 text-center">
-                    <Calendar className="mx-auto mb-2 h-6 w-6" />
-                    <p className="text-xs text-muted-foreground">Visits</p>
-                  </div>
-                </div>
+      <Dialog open={!!selectedCustomer} onOpenChange={(open) => !open && setSelectedCustomer(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-2 border-b">
+            <DialogTitle className="text-2xl">
+              {selectedCustomer?.name || `${selectedCustomer?.first_name || ''} ${selectedCustomer?.middle_name || ''} ${selectedCustomer?.last_name || ''}`.trim()}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">Client since {formatDate(selectedCustomer?.created_at)}</p>
+          </DialogHeader>
 
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold">Contact Information</h4>
-                  {selectedCustomer.phone && (
-                    <div className="flex items-center gap-3 text-sm">
+          <div className="flex h-[calc(90vh-5.25rem)]">
+            <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/20 p-4">
+              <h4 className="text-sm font-semibold text-muted-foreground">Quick Actions</h4>
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => {
+                  setPrefillCustomer(selectedCustomer)
+                  setAppointmentDialogOpen(true)
+                  setSelectedCustomer(null)
+                }}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                Book Appointment
+              </Button>
+              <Button variant="outline" className="justify-start">
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Profile
+              </Button>
+            </div>
+
+            <ScrollArea className="flex-1 px-6">
+              <div className="space-y-6 py-4">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Total Points</p>
+                        <p className="text-3xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                      </div>
+                      <Award className="h-10 w-10 text-primary" />
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-muted-foreground">Total Visits</p>
+                        <p className="text-3xl font-bold">{selectedCustomer?.visits || 0}</p>
+                      </div>
+                      <Calendar className="h-10 w-10 text-muted-foreground" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Separator />
+
+              {/* Contact Information */}
+              <div className="space-y-4">
+                <h4 className="text-base font-semibold flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  Contact Information
+                </h4>
+                <div className="space-y-3 pl-6">
+                  {selectedCustomer?.phone && (
+                    <div className="flex items-center gap-3">
                       <Phone className="h-4 w-4 text-muted-foreground" />
-                      {selectedCustomer.phone}
+                      <span className="text-sm">{selectedCustomer.phone}</span>
                     </div>
                   )}
-                  {selectedCustomer.email && (
-                    <div className="flex items-center gap-3 text-sm">
+                  {selectedCustomer?.email && (
+                    <div className="flex items-center gap-3">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      {selectedCustomer.email}
+                      <span className="text-sm">{selectedCustomer.email}</span>
                     </div>
                   )}
-                  {selectedCustomer.address && <div className="text-sm text-muted-foreground">{selectedCustomer.address}</div>}
+                  {selectedCustomer?.address && (
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <span className="text-sm text-muted-foreground">{selectedCustomer.address}</span>
+                    </div>
+                  )}
                 </div>
+              </div>
 
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold">Profile Details</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="text-muted-foreground">NFC Card:</div>
-                    <div className="font-mono">{selectedCustomer.nfc_uid}</div>
+              <Separator />
 
-                    {selectedCustomer.date_of_birth && (
-                      <>
-                        <div className="text-muted-foreground">Birthday:</div>
-                        <div>{formatDate(selectedCustomer.date_of_birth)}</div>
-                      </>
-                    )}
-
-                    {selectedCustomer.gender && (
-                      <>
-                        <div className="text-muted-foreground">Gender:</div>
-                        <div className="capitalize">{selectedCustomer.gender}</div>
-                      </>
-                    )}
-
-                    {selectedCustomer.skin_type && (
-                      <>
-                        <div className="text-muted-foreground">Skin Type:</div>
-                        <div className="capitalize">{selectedCustomer.skin_type}</div>
-                      </>
-                    )}
+              {/* Profile Details */}
+              <div className="space-y-4">
+                <h4 className="text-base font-semibold flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Profile Details
+                </h4>
+                <div className="grid grid-cols-2 gap-4 pl-6">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">NFC Card</p>
+                    <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer?.nfc_uid}</code>
                   </div>
+
+                  {selectedCustomer?.date_of_birth && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Birthday</p>
+                      <p className="text-sm">{formatDate(selectedCustomer.date_of_birth)}</p>
+                    </div>
+                  )}
+
+                  {selectedCustomer?.gender && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Gender</p>
+                      <p className="text-sm capitalize">{selectedCustomer.gender}</p>
+                    </div>
+                  )}
+
+                  {selectedCustomer?.skin_type && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Skin Type</p>
+                      <p className="text-sm capitalize">{selectedCustomer.skin_type}</p>
+                    </div>
+                  )}
                 </div>
+              </div>
 
-                {selectedCustomer.allergies && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">Allergies</h4>
-                    <p className="rounded bg-red-50 p-2 text-sm text-red-600">{selectedCustomer.allergies}</p>
+              {/* Allergies */}
+              {selectedCustomer?.allergies && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
+                    <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
+                      <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
+                    </div>
                   </div>
-                )}
+                </>
+              )}
 
-                <div className="text-xs text-muted-foreground">Last visit: {formatDate(selectedCustomer.last_visit)}</div>
-              </CardContent>
-            </Card>
+              {/* Last Visit */}
+              <div className="text-xs text-muted-foreground pt-2">
+                Last visit: {formatDate(selectedCustomer?.last_visit)}
+              </div>
+
+              <div className="space-y-3 pb-2 md:hidden">
+                <Separator />
+                <h4 className="text-base font-semibold">Quick Actions</h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPrefillCustomer(selectedCustomer)
+                      setAppointmentDialogOpen(true)
+                      setSelectedCustomer(null)
+                    }}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Book Appointment
+                  </Button>
+                  <Button variant="outline">
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Profile
+                  </Button>
+                </div>
+              </div>
+            </div>
+            </ScrollArea>
           </div>
-        )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Appointment Dialog */}
+      <AppointmentDialog
+        open={appointmentDialogOpen}
+        onOpenChange={setAppointmentDialogOpen}
+        staff={staff}
+        selectedDate={selectedDate}
+        interval={interval}
+        clinicHours={clinicHours}
+        appointments={appointments}
+        blockedTimes={[]}
+        onSave={(appointment) => {
+          addAppointment(appointment)
+          setAppointmentDialogOpen(false)
+          setPrefillCustomer(null)
+        }}
+        prefillCustomerId={prefillCustomer?.id}
+        prefillCustomerName={prefillCustomer?.name || `${prefillCustomer?.first_name || ''} ${prefillCustomer?.last_name || ''}`.trim()}
+      />
     </div>
   )
 }
