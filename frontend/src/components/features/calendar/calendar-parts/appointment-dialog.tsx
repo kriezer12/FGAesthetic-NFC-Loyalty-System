@@ -6,7 +6,7 @@
  * Validates working hours, overlaps and blocked-time conflicts before saving.
  */
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { DatePicker } from "@/components/ui/date-picker"
+import { TimePicker } from "@/components/ui/time-picker"
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox"
+import { useCustomers } from "@/hooks/use-customers"
 import type {
   Appointment,
   AppointmentStatus,
@@ -95,31 +100,92 @@ export function AppointmentDialog({
 }: AppointmentDialogProps) {
   const isEdit = Boolean(appointment)
 
+  // ---- hooks ----
+  const { customers, loading: customersLoading, search: searchCustomers } = useCustomers()
+
   // ---- form state ----
-  const [title, setTitle]             = useState("")
+  const [title, setTitle]               = useState("")
+  const [customerId, setCustomerId]     = useState("")
   const [customerName, setCustomerName] = useState("")
-  const [staffId, setStaffId]         = useState("")
-  const [startTime, setStartTime]     = useState("")
-  const [endTime, setEndTime]         = useState("")
-  const [status, setStatus]           = useState<AppointmentStatus>("scheduled")
-  const [notes, setNotes]             = useState("")
-  const [error, setError]             = useState("")
+  const [staffId, setStaffId]           = useState("")
+  const [appointmentDate, setAppointmentDate] = useState<Date>(selectedDate)
+  const [startTime, setStartTime]       = useState("")
+  const [endTime, setEndTime]           = useState("")
+  const [status, setStatus]             = useState<AppointmentStatus>("scheduled")
+  const [notes, setNotes]               = useState("")
+  const [error, setError]               = useState("")
+
+  // ---- memoized options ----
+  const staffOptions: ComboboxOption[] = useMemo(
+    () =>
+      staff.map((s) => ({
+        value: s.id,
+        label: s.name,
+        description: s.role,
+      })),
+    [staff]
+  )
+
+  const customerOptions: ComboboxOption[] = useMemo(
+    () =>
+      customers.map((c) => ({
+        value: c.id,
+        label: c.name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Unknown",
+        description: c.email || c.phone || undefined,
+      })),
+    [customers]
+  )
+
+  const statusOptions: ComboboxOption[] = useMemo(
+    () =>
+      STATUS_OPTIONS.map((s) => ({
+        value: s.value,
+        label: s.label,
+      })),
+    []
+  )
+
+  // ---- debounced customer search ----
+  const handleCustomerSearch = useCallback(
+    (query: string) => {
+      searchCustomers(query)
+    },
+    [searchCustomers]
+  )
+
+  // ---- handle customer selection ----
+  const handleCustomerChange = useCallback(
+    (value: string) => {
+      setCustomerId(value)
+      const customer = customers.find((c) => c.id === value)
+      if (customer) {
+        setCustomerName(
+          customer.name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
+        )
+      }
+    },
+    [customers]
+  )
 
   // ---- reset / populate on open ----
   useEffect(() => {
     if (!open) return
     if (appointment) {
       setTitle(appointment.title)
+      setCustomerId(appointment.customer_id ?? "")
       setCustomerName(appointment.customer_name ?? "")
       setStaffId(appointment.staff_id)
+      setAppointmentDate(new Date(appointment.start_time))
       setStartTime(isoToTimeInput(appointment.start_time))
       setEndTime(isoToTimeInput(appointment.end_time))
       setStatus(appointment.status)
       setNotes(appointment.notes ?? "")
     } else {
       setTitle("")
+      setCustomerId("")
       setCustomerName("")
       setStaffId(prefillStaffId ?? staff[0]?.id ?? "")
+      setAppointmentDate(selectedDate)
       setStartTime(
         prefillStartMinutes != null ? minutesToTimeInput(prefillStartMinutes) : "",
       )
@@ -132,7 +198,7 @@ export function AppointmentDialog({
       setNotes("")
     }
     setError("")
-  }, [open, appointment, prefillStaffId, prefillStartMinutes, staff, interval])
+  }, [open, appointment, prefillStaffId, prefillStartMinutes, staff, interval, selectedDate])
 
   // ---- save handler ----
   const handleSave = () => {
@@ -156,24 +222,24 @@ export function AppointmentDialog({
 
     /* overlap */
     const excludeId = appointment?.id ?? ""
-    if (hasOverlap(excludeId, staffId, startMin, endMin, appointments)) {
+    if (hasOverlap(excludeId, staffId, startMin, endMin, appointmentDate, appointments)) {
       setError("This time conflicts with another appointment for the selected staff.")
       return
     }
 
     /* blocked time */
-    if (hasBlockedTimeConflict(staffId, startMin, endMin, blockedTimes)) {
+    if (hasBlockedTimeConflict(staffId, startMin, endMin, appointmentDate, blockedTimes)) {
       setError("This time is blocked for the selected staff member.")
       return
     }
 
-    const startDate = setTimeOnDate(selectedDate, startMin)
-    const endDate   = setTimeOnDate(selectedDate, endMin)
+    const startDate = setTimeOnDate(appointmentDate, startMin)
+    const endDate   = setTimeOnDate(appointmentDate, endMin)
     const staffMember = staff.find((s) => s.id === staffId)!
 
     const appt: Appointment = {
       id:            appointment?.id ?? generateId(),
-      customer_id:   appointment?.customer_id,
+      customer_id:   customerId || appointment?.customer_id,
       customer_name: customerName || undefined,
       staff_id:      staffId,
       staff_name:    staffMember.name,
@@ -187,11 +253,6 @@ export function AppointmentDialog({
     }
     onSave(appt)
   }
-
-  // ---- styling helper for native selects ----
-  const selectCls =
-    "h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs " +
-    "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -219,88 +280,87 @@ export function AppointmentDialog({
             />
           </div>
 
-          {/* Customer name */}
+          {/* Customer */}
           <div className="grid gap-1.5">
-            <Label htmlFor="appt-customer">Customer Name</Label>
-            <Input
-              id="appt-customer"
-              placeholder="Optional"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
+            <Label>Customer</Label>
+            <Combobox
+              options={customerOptions}
+              value={customerId}
+              onValueChange={handleCustomerChange}
+              placeholder="Search for a customer..."
+              searchPlaceholder="Type to search customers..."
+              emptyMessage={customersLoading ? "Loading..." : "No customers found."}
             />
           </div>
 
           {/* Staff */}
           <div className="grid gap-1.5">
-            <Label htmlFor="appt-staff">
+            <Label>
               Staff <span className="text-destructive">*</span>
             </Label>
-            <select
-              id="appt-staff"
-              className={selectCls}
+            <Combobox
+              options={staffOptions}
               value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
-            >
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} — {s.role}
-                </option>
-              ))}
-            </select>
+              onValueChange={setStaffId}
+              placeholder="Select staff member..."
+              searchPlaceholder="Search staff..."
+              emptyMessage="No staff found."
+            />
+          </div>
+
+          {/* Appointment Date */}
+          <div className="grid gap-1.5">
+            <Label>Appointment Date</Label>
+            <DatePicker
+              value={appointmentDate}
+              onChange={(date) => date && setAppointmentDate(date)}
+              placeholder="Select appointment date"
+            />
           </div>
 
           {/* Start / End times */}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="appt-start">
+              <Label>
                 Start Time <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="appt-start"
-                type="time"
-                step={interval * 60}
+              <TimePicker
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={setStartTime}
+                minuteStep={interval as 15 | 30 | 60}
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="appt-end">
+              <Label>
                 End Time <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="appt-end"
-                type="time"
-                step={interval * 60}
+              <TimePicker
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={setEndTime}
+                minuteStep={interval as 15 | 30 | 60}
               />
             </div>
           </div>
 
           {/* Status */}
           <div className="grid gap-1.5">
-            <Label htmlFor="appt-status">Status</Label>
-            <select
-              id="appt-status"
-              className={selectCls}
+            <Label>Status</Label>
+            <Combobox
+              options={statusOptions}
               value={status}
-              onChange={(e) => setStatus(e.target.value as AppointmentStatus)}
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(val) => setStatus(val as AppointmentStatus)}
+              placeholder="Select status..."
+              searchPlaceholder="Search status..."
+              emptyMessage="No status found."
+            />
           </div>
 
           {/* Notes */}
           <div className="grid gap-1.5">
             <Label htmlFor="appt-notes">Notes</Label>
-            <textarea
+            <Textarea
               id="appt-notes"
-              rows={2}
-              className={selectCls + " resize-none py-2"}
+              rows={3}
               placeholder="Optional notes…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

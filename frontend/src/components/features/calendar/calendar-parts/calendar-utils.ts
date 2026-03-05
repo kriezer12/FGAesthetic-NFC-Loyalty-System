@@ -110,32 +110,38 @@ export function isWithinWorkingHours(
   return startMinutes >= clinicHours.open * 60 && endMinutes <= clinicHours.close * 60
 }
 
-/** True when the proposed range overlaps any existing appointment for that staff. */
+/** True when the proposed range overlaps any existing appointment for that staff on the given date. */
 export function hasOverlap(
   excludeId: string,
   staffId: string,
   startMinutes: number,
   endMinutes: number,
+  appointmentDate: Date,
   appointments: Appointment[],
 ): boolean {
   return appointments.some((a) => {
     if (a.id === excludeId || a.staff_id !== staffId) return false
     if (a.status === "cancelled") return false
+    // Must be on the same day
+    if (!isSameDay(new Date(a.start_time), appointmentDate)) return false
     const aStart = minutesSinceMidnight(a.start_time)
     const aEnd = minutesSinceMidnight(a.end_time)
     return startMinutes < aEnd && endMinutes > aStart
   })
 }
 
-/** True when the proposed range overlaps any blocked time for that staff. */
+/** True when the proposed range overlaps any blocked time for that staff on the given date. */
 export function hasBlockedTimeConflict(
   staffId: string,
   startMinutes: number,
   endMinutes: number,
+  blockDate: Date,
   blockedTimes: BlockedTime[],
 ): boolean {
   return blockedTimes.some((b) => {
     if (b.staff_id !== staffId) return false
+    // Must be on the same day
+    if (!isSameDay(new Date(b.start_time), blockDate)) return false
     const bStart = minutesSinceMidnight(b.start_time)
     const bEnd = minutesSinceMidnight(b.end_time)
     return startMinutes < bEnd && endMinutes > bStart
