@@ -9,6 +9,7 @@ import {
 import { NFCScannerHeader } from "./nfc-scanner-parts/nfc-scanner-header"
 import { NFCScannerInput } from "./nfc-scanner-parts/nfc-scanner-input"
 import { getAverageKeystrokeInterval } from "./nfc-scanner-parts/nfc-scanner-timing"
+// import { handleMockNFCScan } from "../../../../../../utils/mock-nfc-scanner"
 
 import type { Customer } from "@/types/customer"
 
@@ -41,9 +42,7 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     return () => clearInterval(interval)
   }, [])
 
-  // Show warning message for 5 seconds
   const showWarningMessage = () => {
-    // Clear any existing timeout
     if (warningTimeoutRef.current) {
       clearTimeout(warningTimeoutRef.current)
     }
@@ -53,7 +52,6 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     }, WARNING_DISPLAY_DURATION)
   }
 
-  // Clear warning immediately (e.g., when NFC scan succeeds)
   const clearWarning = () => {
     if (warningTimeoutRef.current) {
       clearTimeout(warningTimeoutRef.current)
@@ -61,7 +59,6 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     setShowWarning(false)
   }
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (warningTimeoutRef.current) {
@@ -70,45 +67,43 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     }
   }, [])
 
-  // Reset input tracking when field is cleared or after inactivity
   const resetInputTracking = () => {
     keystrokeTimestamps.current = []
     inputStartTime.current = null
     setIsValidInput(true)
   }
 
-  // Track keystroke timing to detect USB reader vs manual typing
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     const now = Date.now()
 
-    // Handle Enter key - process the scan
     if (e.key === "Enter") {
       handleScan(e)
       return
     }
 
-    // Ignore modifier keys
-    if (e.key.length > 1 && e.key !== "Backspace" && e.key !== "Delete") {
+    if (!/^\d$/.test(e.key)) {
+      if (e.key === "Backspace" || e.key === "Delete") {
+        resetInputTracking()
+        return
+      }
+      e.preventDefault()
       return
     }
 
-    // Handle backspace/delete - likely manual typing, reset
-    if (e.key === "Backspace" || e.key === "Delete") {
-      resetInputTracking()
+    const currentValue = (e.currentTarget as HTMLInputElement).value
+    if (currentValue.length >= 10) {
+      e.preventDefault()
       return
     }
 
-    // Record timestamp for this keystroke
     if (inputStartTime.current === null) {
       inputStartTime.current = now
     }
     keystrokeTimestamps.current.push(now)
 
-    // Check if typing speed indicates manual input
     if (keystrokeTimestamps.current.length >= 3) {
       const avgInterval = getAverageKeystrokeInterval(keystrokeTimestamps.current)
       
-      // If average interval is too slow, it's manual typing - clear immediately
       if (avgInterval > MAX_AVG_KEYSTROKE_INTERVAL) {
         setIsValidInput(false)
         showWarningMessage()
@@ -116,8 +111,16 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
           inputRef.current.value = ""
         }
         resetInputTracking()
+        return
       }
     }
+
+    setTimeout(() => {
+      const input = inputRef.current
+      if (input && input.value.length === 10) {
+        handleScan({ currentTarget: input } as any)
+      }
+    }, 0)
   }
 
   const handleScan = async (e: KeyboardEvent<HTMLInputElement>) => {
@@ -131,13 +134,11 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
       return
     }
 
-    // Check if input was from USB reader (fast enough typing speed)
     const timestamps = keystrokeTimestamps.current
     if (timestamps.length >= 2) {
       const avgInterval = getAverageKeystrokeInterval(timestamps)
       
       if (avgInterval > MAX_AVG_KEYSTROKE_INTERVAL) {
-        // Too slow - manual typing detected, reject
         console.log(`Manual typing detected (avg ${avgInterval.toFixed(0)}ms between keystrokes)`)
         setIsValidInput(false)
         showWarningMessage()
@@ -147,11 +148,9 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
       }
     }
 
-    // Reset validation state and clear any warning
     resetInputTracking()
     clearWarning()
 
-    // Prevent duplicate scans
     if (uid === lastScanned) {
       target.value = ""
       return
@@ -161,7 +160,6 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     setLastScanned(uid)
     
     try {
-      // Check if NFC card exists in database
       const { data: customer, error } = await supabase
         .from("customers")
         .select("*")
@@ -169,10 +167,8 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
         .single()
 
       if (error || !customer) {
-        // Card not found - trigger registration
         onNewCard(uid)
       } else {
-        // Card found - show customer info
         onCustomerFound(customer)
       }
     } catch (err) {
@@ -186,6 +182,10 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     }
   }
 
+  // const handleMockScan = async () => {
+  //   await handleMockNFCScan(onCustomerFound, onNewCard, setIsLoading, setLastScanned)
+  // }
+
   return (
     <Card className="w-full max-w-md mx-auto">
       <NFCScannerHeader isLoading={isLoading} />
@@ -196,6 +196,14 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
           showWarning={showWarning}
           onKeyDown={handleKeyDown}
         />
+        {/* <Button
+          onClick={handleMockScan}
+          disabled={isLoading}
+          className="w-full mt-4"
+          variant="outline"
+        >
+          {isLoading ? "Scanning..." : "Mock Scan (Test)"}
+        </Button> */}
       </CardContent>
     </Card>
   )
