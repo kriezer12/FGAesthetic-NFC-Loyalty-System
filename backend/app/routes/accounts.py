@@ -43,7 +43,7 @@ def create_account():
             }), 400
         
         # Validate required fields
-        required_fields = ['email', 'password', 'full_name', 'role']
+        required_fields = ['email', 'full_name', 'role']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'error': 'Missing required fields',
@@ -57,12 +57,14 @@ def create_account():
                 'error': f'Supabase connection failed: {str(e)}'
             }), 500
         
-        # Create auth user using admin API
+        # Create auth user using admin API with default password
         try:
+            # Use default password "password" for new accounts
+            default_password = "password"
             user_response = supabase.auth.admin.create_user(
                 AdminUserAttributes(
                     email=data['email'],
-                    password=data['password'],
+                    password=default_password,
                     email_confirm=True,
                     user_metadata={'full_name': data['full_name']},
                 )
@@ -87,6 +89,7 @@ def create_account():
                 'full_name': data['full_name'],
                 'role': data['role'],
                 'is_active': True,
+                'first_login': True,  # Flag to indicate this is the first login
             }).execute()
             
             if not profile_response.data:
