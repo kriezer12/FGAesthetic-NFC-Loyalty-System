@@ -6,7 +6,7 @@
  * and a "New Appointment" action button.
  */
 
-import { ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { IntervalMinutes } from "@/types/appointment"
@@ -17,6 +17,7 @@ interface CalendarHeaderProps {
   onDateChange: (date: Date) => void
   onIntervalChange: (interval: IntervalMinutes) => void
   onNewAppointment: () => void
+  onOpenSettings: () => void
 }
 
 const INTERVALS: IntervalMinutes[] = [15, 30, 60]
@@ -27,6 +28,7 @@ export function CalendarHeader({
   onDateChange,
   onIntervalChange,
   onNewAppointment,
+  onOpenSettings,
 }: CalendarHeaderProps) {
   const prevDay = () => {
     const d = new Date(selectedDate)
@@ -65,8 +67,8 @@ export function CalendarHeader({
         <h2 className="ml-2 text-base font-semibold sm:text-lg">{dateLabel}</h2>
       </div>
 
-      {/* ---- right: interval toggle + new button ---- */}
-      <div className="flex items-center gap-3">
+      {/* ---- right: interval toggle + settings + new button ---- */}
+      <div className="flex items-center gap-2.5">
         {/* interval selector */}
         <div className="flex items-center rounded-lg border p-1">
           {INTERVALS.map((int) => (
@@ -84,6 +86,17 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
+
+        {/* settings button */}
+        <Button
+          variant="outline"
+          size="icon-sm"
+          onClick={onOpenSettings}
+          title="Calendar settings"
+          aria-label="Open calendar settings"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
 
         <Button size="sm" onClick={onNewAppointment}>
           <CalendarPlus className="mr-1.5 h-4 w-4" />

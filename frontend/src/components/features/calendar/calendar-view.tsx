@@ -7,30 +7,150 @@
  * header, grid and dialog sub-components together.
  */
 
-import { useCallback, useState } from "react"
+import { useCallback, useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
-import type { Appointment, IntervalMinutes } from "@/types/appointment"
+import type { Appointment, IntervalMinutes, StaffMember } from "@/types/appointment"
 import {
-  DEFAULT_CLINIC_HOURS,
   DEFAULT_INTERVAL,
-  MOCK_APPOINTMENTS,
   MOCK_BLOCKED_TIMES,
-  MOCK_STAFF,
 } from "./calendar-parts/calendar-config"
+import { useStaff } from "@/hooks/use-staff"
+import { useAppointments } from "@/hooks/use-appointments"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { AppointmentDialog } from "./calendar-parts/appointment-dialog"
+import { CalendarSettingsDialog, type CalendarSettings } from "./calendar-parts/calendar-settings-dialog"
+
+// ---- localStorage key ----
+const SETTINGS_STORAGE_KEY = "calendar-settings"
+
+// ---- default settings ----
+const DEFAULT_SETTINGS: CalendarSettings = {
+  workHoursStart: "09:00",
+  workHoursEnd: "18:00",
+  lunchBreakStart: "12:00",
+  lunchBreakEnd: "13:00",
+  selectedStaff: [],
+  snapColumnsToFit: true,
+}
+
+/** Parse "HH:MM" → hour number (0-23) */
+function parseHour(timeStr: string | undefined, fallback: number): number {
+  if (!timeStr) return fallback
+  const h = parseInt(timeStr.split(":")[0], 10)
+  return isNaN(h) ? fallback : h
+}
+
+/** Load settings from localStorage or return defaults */
+function loadSettings(): CalendarSettings {
+  try {
+    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!stored) return DEFAULT_SETTINGS
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+  } catch (err) {
+    console.error("Failed to load calendar settings:", err)
+    return DEFAULT_SETTINGS
+  }
+}
+
+/** Save settings to localStorage */
+function saveSettings(settings: CalendarSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  } catch (err) {
+    console.error("Failed to save calendar settings:", err)
+  }
+}
+
+/** Get day-of-week string from Date (MON, TUE, etc.) */
+function getDayOfWeek(date: Date): string {
+  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+  return days[date.getDay()]
+}
 
 export function CalendarView() {
   // ---- core state ----
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [interval, setInterval]         = useState<IntervalMinutes>(DEFAULT_INTERVAL)
-  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS)
+  
+  // Fetch appointments from Supabase
+  const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  
+  // Load settings from localStorage (or defaults)
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(() => loadSettings())
 
-  // data that will eventually come from Supabase
-  const staff        = MOCK_STAFF
-  const blockedTimes = MOCK_BLOCKED_TIMES
-  const clinicHours  = DEFAULT_CLINIC_HOURS
+  // Fetch real staff from database
+  const { staff: allStaff = [] } = useStaff()
+  
+  // Initialize selectedStaff with all staff on first load
+  useEffect(() => {
+    if (
+      allStaff.length > 0 &&
+      (!calendarSettings.selectedStaff || calendarSettings.selectedStaff.length === 0)
+    ) {
+      setCalendarSettings((prev) => ({
+        ...prev,
+        selectedStaff: allStaff.map((s) => s.id),
+      }))
+    }
+  }, [allStaff])
+  
+  // Filter staff based on selected staff in settings AND working days
+  const dayOfWeek = getDayOfWeek(selectedDate)
+  const staff = allStaff.filter((s: StaffMember) => {
+    // Must be in the selected staff list
+    if (!calendarSettings.selectedStaff?.includes(s.id)) return false
+    // Must be working on the selected day (if schedules configured)
+    if (calendarSettings.staffSchedules?.[s.id]) {
+      return calendarSettings.staffSchedules[s.id].includes(dayOfWeek as any)
+    }
+    // If no schedule configured, show by default
+    return true
+  })
+  
+  let blockedTimes   = MOCK_BLOCKED_TIMES
+
+  // Derive clinic hours from settings (work hours)
+  const clinicHours = useMemo(() => ({
+    open: parseHour(calendarSettings.workHoursStart, 9),
+    close: parseHour(calendarSettings.workHoursEnd, 18),
+  }), [calendarSettings.workHoursStart, calendarSettings.workHoursEnd])
+
+  // ---- settings state ----
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+
+  // Add lunch break to blocked times if configured
+  if (calendarSettings.lunchBreakStart && calendarSettings.lunchBreakEnd) {
+    const [lunchHour, lunchMin] = calendarSettings.lunchBreakStart.split(":").map(Number)
+    const [endHour, endMin] = calendarSettings.lunchBreakEnd.split(":").map(Number)
+    const lunchStart = new Date(selectedDate)
+    lunchStart.setHours(lunchHour, lunchMin, 0, 0)
+    const lunchEnd = new Date(selectedDate)
+    lunchEnd.setHours(endHour, endMin, 0, 0)
+
+    // Add lunch break for all staff
+    staff.forEach((s: StaffMember) => {
+      if (
+        !blockedTimes.some(
+          (b) =>
+            b.staff_id === s.id &&
+            b.reason === "Lunch Break" &&
+            new Date(b.start_time).toDateString() === selectedDate.toDateString()
+        )
+      ) {
+        blockedTimes = [
+          ...blockedTimes,
+          {
+            id: `lunch-${s.id}-${selectedDate.toISOString().split("T")[0]}`,
+            staff_id: s.id,
+            start_time: lunchStart.toISOString(),
+            end_time: lunchEnd.toISOString(),
+            reason: "Lunch Break",
+          },
+        ]
+      }
+    })
+  }
 
   // ---- dialog state ----
   const [dialogOpen, setDialogOpen]             = useState(false)
@@ -43,34 +163,44 @@ export function CalendarView() {
   /** Inline update (drag / resize). */
   const handleAppointmentUpdate = useCallback(
     (id: string, updates: Partial<Appointment>) => {
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, ...updates, updated_at: new Date().toISOString() } : a)),
-      )
+      updateAppointment(id, {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }).catch((err) => {
+        console.error("Failed to update appointment:", err)
+      })
     },
-    [],
+    [updateAppointment],
   )
 
   /** Save from dialog (create or edit). */
-  const handleSave = useCallback((appt: Appointment) => {
-    setAppointments((prev) => {
-      const idx = prev.findIndex((a) => a.id === appt.id)
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = appt
-        return next
+  const handleSave = useCallback(async (appt: Appointment) => {
+    try {
+      const isNew = !appointments.find((a) => a.id === appt.id)
+      
+      if (isNew) {
+        await addAppointment(appt)
+      } else {
+        await updateAppointment(appt.id, appt)
       }
-      return [...prev, appt]
-    })
-    setDialogOpen(false)
-    setEditingAppointment(null)
-  }, [])
+      
+      setDialogOpen(false)
+      setEditingAppointment(null)
+    } catch (err) {
+      console.error("Failed to save appointment:", err)
+    }
+  }, [appointments, addAppointment, updateAppointment])
 
   /** Delete from dialog. */
-  const handleDelete = useCallback((id: string) => {
-    setAppointments((prev) => prev.filter((a) => a.id !== id))
-    setDialogOpen(false)
-    setEditingAppointment(null)
-  }, [])
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      await deleteAppointment(id)
+      setDialogOpen(false)
+      setEditingAppointment(null)
+    } catch (err) {
+      console.error("Failed to delete appointment:", err)
+    }
+  }, [deleteAppointment])
 
   // ---- dialog openers ----
 
@@ -95,6 +225,11 @@ export function CalendarView() {
     setDialogOpen(true)
   }, [])
 
+  const handleSettingsSave = useCallback((settings: CalendarSettings) => {
+    setCalendarSettings(settings)
+    saveSettings(settings)
+  }, [])
+
   // ========================================================================
 
   return (
@@ -105,6 +240,7 @@ export function CalendarView() {
         onDateChange={setSelectedDate}
         onIntervalChange={setInterval}
         onNewAppointment={openNewDialog}
+        onOpenSettings={() => setSettingsDialogOpen(true)}
       />
 
       <CalendarGrid
@@ -114,9 +250,12 @@ export function CalendarView() {
         staff={staff}
         appointments={appointments}
         blockedTimes={blockedTimes}
+        snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}
         onAppointmentUpdate={handleAppointmentUpdate}
         onSlotClick={openSlotDialog}
         onAppointmentClick={openEditDialog}
+        onEditAppointment={openEditDialog}
+        onDeleteAppointment={handleDelete}
       />
 
       <AppointmentDialog
@@ -133,6 +272,14 @@ export function CalendarView() {
         blockedTimes={blockedTimes}
         onSave={handleSave}
         onDelete={handleDelete}
+      />
+
+      <CalendarSettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+        staff={allStaff}
+        settings={calendarSettings}
+        onSave={handleSettingsSave}
       />
     </Card>
   )
