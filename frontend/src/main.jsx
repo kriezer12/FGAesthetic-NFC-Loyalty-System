@@ -28,9 +28,10 @@ import CustomersPage from "./pages/customers.tsx"
 import Dashboard from "./pages/dashboard.tsx"
 import NFCScanPage from "./pages/nfc-scan.tsx"
 import LoginPage from "./pages/login.tsx"
-import SignupPage from "./pages/signup.tsx"
 import AppointmentsPage from "./pages/appointments.tsx"
 import UploadPage from "./pages/upload.tsx"
+import AccountsPage from "./pages/accounts.tsx"
+import ResetPasswordPage from "./pages/reset-password.tsx"
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -47,11 +48,10 @@ createRoot(document.getElementById('root')).render(
               <LoginPage />
             </PublicRoute>
           } />
-          <Route path="/signup" element={
-            <PublicRoute>
-              <SignupPage />
-            </PublicRoute>
-          } />
+
+          {/* Password reset — must be outside PublicRoute so the recovery session isn't
+              treated as "already authenticated" and redirected to dashboard */}
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           
           {/* Protected routes - shared navbar layout */}
           <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
@@ -61,6 +61,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="/dashboard/checkin-logs" element={<CheckinLogsPage />} />
             <Route path="/dashboard/appointments" element={<AppointmentsPage />} />
             <Route path="/dashboard/upload" element={<UploadPage />} />
+            <Route path="/dashboard/accounts" element={<AccountsPage />} />
           </Route>
         </Routes>
       </AuthProvider>

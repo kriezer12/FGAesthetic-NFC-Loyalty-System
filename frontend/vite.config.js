@@ -28,6 +28,16 @@ export default defineConfig({
       interval: Number(process.env.CHOKIDAR_INTERVAL ?? 500),
     },
     hmr: true,
+    // Proxy API requests to backend during development.
+    // Uses BACKEND_URL (no VITE_ prefix) so it stays server-side only
+    // and is never baked into the browser bundle.
+    proxy: {
+      "/api": {
+        target: process.env.BACKEND_URL || "http://localhost:5000",
+        changeOrigin: true,
+        rewrite: (path) => path,
+      },
+    },
   },
   // Pre-bundle the heaviest deps explicitly so the first page load
   // doesn't stall while Vite discovers them.
