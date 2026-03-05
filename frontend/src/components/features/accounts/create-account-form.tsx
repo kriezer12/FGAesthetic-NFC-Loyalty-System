@@ -23,7 +23,6 @@ interface CreateAccountFormProps {
 
 export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
   const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
   const [name, setName] = useState("")
   const [role, setRole] = useState<UserRole>("staff")
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +41,6 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
         method: "POST",
         body: JSON.stringify({
           email,
-          password,
           full_name: name,
           role,
         }),
@@ -65,7 +63,6 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
       setSuccess(`Account created successfully for ${email}`)
       // Reset form
       setEmail("")
-      setPassword("")
       setName("")
       setRole("staff")
       
@@ -94,6 +91,10 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
         </div>
       )}
 
+      <div className="text-sm text-blue-600 bg-blue-50 dark:bg-blue-950/50 p-3 rounded-md">
+        New accounts are created with a default password: <strong>password</strong>. Users will be required to change it on their first login.
+      </div>
+
       <FieldGroup>
           {/* Name field */}
           <Field>
@@ -117,19 +118,6 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
               placeholder="john@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </Field>
-
-          {/* Password field */}
-          <Field>
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Enter a secure password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               required
             />
           </Field>
