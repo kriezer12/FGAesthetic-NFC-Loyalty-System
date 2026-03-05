@@ -56,6 +56,10 @@ interface AppointmentDialogProps {
   prefillStaffId?: string
   /** Pre-filled start time (minutes since midnight) from slot click. */
   prefillStartMinutes?: number
+  /** Pre-filled customer id (e.g., from customer page). */
+  prefillCustomerId?: string
+  /** Pre-filled customer name (e.g., from customer page). */
+  prefillCustomerName?: string
   staff: StaffMember[]
   selectedDate: Date
   interval: IntervalMinutes
@@ -89,6 +93,8 @@ export function AppointmentDialog({
   appointment,
   prefillStaffId,
   prefillStartMinutes,
+  prefillCustomerId,
+  prefillCustomerName,
   staff,
   selectedDate,
   interval,
@@ -182,8 +188,8 @@ export function AppointmentDialog({
       setNotes(appointment.notes ?? "")
     } else {
       setTitle("")
-      setCustomerId("")
-      setCustomerName("")
+      setCustomerId(prefillCustomerId ?? "")
+      setCustomerName(prefillCustomerName ?? "")
       setStaffId(prefillStaffId ?? staff[0]?.id ?? "")
       setAppointmentDate(selectedDate)
       setStartTime(
@@ -198,7 +204,7 @@ export function AppointmentDialog({
       setNotes("")
     }
     setError("")
-  }, [open, appointment, prefillStaffId, prefillStartMinutes, staff, interval, selectedDate])
+  }, [open, appointment, prefillStaffId, prefillStartMinutes, prefillCustomerId, prefillCustomerName, staff, interval, selectedDate])
 
   // ---- save handler ----
   const handleSave = () => {
