@@ -125,7 +125,7 @@ export function FirstLoginModal({
 
   return (
     <Dialog open={isOpen}>
-      <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent overlayBlur="glass" className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Welcome! Complete Your Profile</DialogTitle>
           <DialogDescription>

@@ -156,7 +156,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-full" variant="top-right-centered">
+      <DialogContent overlayBlur="subtle" className="max-w-md w-full" variant="top-right-centered">
         <DialogHeader>
           <DialogTitle>Account Settings</DialogTitle>
           <DialogDescription>
