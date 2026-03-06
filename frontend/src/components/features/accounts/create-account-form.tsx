@@ -14,6 +14,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Combobox } from "@/components/ui/combobox"
 import { apiCall } from "@/lib/api"
 import type { UserRole } from "@/types/user"
 
@@ -22,6 +23,12 @@ interface CreateAccountFormProps {
 }
 
 export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
+  const roleOptions = [
+    { value: "staff", label: "Staff" },
+    { value: "branch_admin", label: "Branch Admin" },
+    { value: "super_admin", label: "Super Admin" },
+  ]
+
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<UserRole>("staff")
   const [error, setError] = useState<string | null>(null)
@@ -110,16 +117,14 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
           {/* Role field */}
           <Field>
             <FieldLabel htmlFor="role">Role</FieldLabel>
-            <select
-              id="role"
+            <Combobox
               value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="staff">Staff</option>
-              <option value="branch_admin">Branch Admin</option>
-              <option value="super_admin">Super Admin</option>
-            </select>
+              onValueChange={(value) => setRole(value as UserRole)}
+              options={roleOptions}
+              placeholder="Select role"
+              searchPlaceholder="Search role..."
+              emptyMessage="No role found."
+            />
           </Field>
 
 

@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { TimePicker } from "@/components/ui/time-picker"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { StaffMember } from "@/types/appointment"
 
 // ---------------------------------------------------------------------------
@@ -162,7 +163,7 @@ export function CalendarSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Calendar Settings</DialogTitle>
           <DialogDescription>
@@ -170,9 +171,10 @@ export function CalendarSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* -------- Work Hours Settings -------- */}
-          <div className="space-y-3 border-b pb-6">
+        <ScrollArea className="h-[60vh] -mx-6 px-6">
+          <div className="space-y-6 py-4 pr-4">
+            {/* -------- Work Hours Settings -------- */}
+            <div className="space-y-3 border-b pb-6">
             <h3 className="text-sm font-semibold">Work Hours</h3>
             <p className="text-xs text-muted-foreground">
               Set the start and end hours for the calendar view. The calendar grid will display time slots within these hours.
@@ -198,8 +200,8 @@ export function CalendarSettingsDialog({
             </div>
           </div>
 
-          {/* -------- Lunch Break Settings -------- */}
-          <div className="space-y-3 border-b pb-6">
+            {/* -------- Lunch Break Settings -------- */}
+            <div className="space-y-3 border-b pb-6">
             <h3 className="text-sm font-semibold">Lunch Break</h3>
             <p className="text-xs text-muted-foreground">
               Set the lunch break time. This will block time for all staff on all days.
@@ -225,8 +227,8 @@ export function CalendarSettingsDialog({
             </div>
           </div>
 
-          {/* -------- Column Sizing (Snap Toggle) -------- */}
-          <div className="space-y-3 border-b pb-6">
+            {/* -------- Column Sizing (Snap Toggle) -------- */}
+            <div className="space-y-3 border-b pb-6">
             <h3 className="text-sm font-semibold">Column Display</h3>
             <p className="text-xs text-muted-foreground">
               Control how staff columns are sized on the calendar grid.
@@ -246,8 +248,8 @@ export function CalendarSettingsDialog({
             </label>
           </div>
 
-          {/* -------- Staff Display & Schedules (Combined) -------- */}
-          <div className="space-y-3">
+            {/* -------- Staff Display & Schedules (Combined) -------- */}
+            <div className="space-y-3">
             <h3 className="text-sm font-semibold">Staff Members & Schedules</h3>
             <p className="text-xs text-muted-foreground">
               Select staff to display on the calendar and configure which days they work. Only staff working on the selected day will appear.
@@ -263,8 +265,9 @@ export function CalendarSettingsDialog({
               />
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {filteredStaff.length > 0 ? (
+            <ScrollArea className="h-[250px]">
+              <div className="space-y-3 pr-4">
+                {filteredStaff.length > 0 ? (
                 filteredStaff.map((member) => (
                   <div
                     key={member.id}
@@ -277,6 +280,7 @@ export function CalendarSettingsDialog({
                         onCheckedChange={() => handleStaffToggle(member.id)}
                         className="shrink-0"
                       />
+                      {/* Staff color indicator - inline style necessary for dynamic colors */}
                       <div
                         className="h-2.5 w-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: member.color }}
@@ -324,9 +328,11 @@ export function CalendarSettingsDialog({
                   No staff members found.
                 </p>
               )}
+              </div>
+            </ScrollArea>
             </div>
           </div>
-        </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
