@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 interface SettingsModalProps {
@@ -141,7 +142,7 @@ export function SettingsModal({ open, onOpenChange, initialSection = "general" }
         </DialogHeader>
 
         {/* Two-column layout: sidebar + content */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden max-h-[calc(100vh-16rem)]">
           {/* Sidebar */}
           <nav className="w-44 shrink-0 border-r flex flex-col gap-0.5 p-3">
             {NAV_ITEMS.map((item) => {
@@ -166,9 +167,11 @@ export function SettingsModal({ open, onOpenChange, initialSection = "general" }
           </nav>
 
           {/* Content area */}
-          <div className="flex-1">
-            <SectionPlaceholder item={activeItem} />
-          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-4">
+              <SectionPlaceholder item={activeItem} />
+            </div>
+          </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>
