@@ -55,4 +55,47 @@ export default defineConfig({
       "@radix-ui/react-tooltip",
     ],
   },
+  // Build optimizations for better performance
+  build: {
+    // Use terser for better minification
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+      format: {
+        comments: false,
+      },
+    },
+    // Code splitting strategy for better caching and parallel loading
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate vendor chunks for better caching
+          'react-vendor': ['react', 'react-dom'],
+          'router': ['react-router-dom'],
+          'supabase': ['@supabase/supabase-js'],
+          'charts': ['recharts'],
+          'radix-ui': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-label',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-slot',
+          ],
+          'icons': ['lucide-react'],
+          'dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+        },
+      },
+    },
+    // Increase chunk size warning limit since we have larger vendor chunks
+    chunkSizeWarningLimit: 600,
+    // Source maps for production debugging (optional, remove to reduce bundle size)
+    sourcemap: false,
+    // Ensure assets are gzip compressed
+    reportCompressedSize: true,
+  },
 })
