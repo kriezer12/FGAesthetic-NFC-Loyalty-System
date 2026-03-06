@@ -21,16 +21,15 @@ def create_account():
     Request body:
     {
         "email": "user@example.com",
-        "password": "secure_password",
-        "full_name": "John Doe",
-        "role": "staff" | "branch_admin" | "super_admin"
+        "role": "staff" | "branch_admin" | "super_admin",
+        // full_name is optional; it can be supplied later via first-login onboarding
     }
     
     Returns:
     {
         "id": "user_id",
         "email": "user@example.com",
-        "full_name": "John Doe",
+        "full_name": "",          # may be empty if not provided
         "role": "staff",
         "is_active": true
     }
@@ -42,8 +41,8 @@ def create_account():
                 'error': 'Request body must be valid JSON'
             }), 400
         
-        # Validate required fields
-        required_fields = ['email', 'full_name', 'role']
+        # Validate required fields (full_name is optional)
+        required_fields = ['email', 'role']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'error': 'Missing required fields',
@@ -66,7 +65,7 @@ def create_account():
                     email=data['email'],
                     password=default_password,
                     email_confirm=True,
-                    user_metadata={'full_name': data['full_name']},
+                    user_metadata={'full_name': data.get('full_name', '')},
                 )
             )
             
@@ -86,7 +85,7 @@ def create_account():
             profile_response = supabase.table('user_profiles').upsert({
                 'id': user_id,
                 'email': data['email'],
-                'full_name': data['full_name'],
+                'full_name': data.get('full_name', ''),
                 'role': data['role'],
                 'is_active': True,
                 'first_login': True,  # Flag to indicate this is the first login
@@ -106,7 +105,7 @@ def create_account():
             'user': {
                 'id': user_id,
                 'email': data['email'],
-                'full_name': data['full_name'],
+                'full_name': data.get('full_name', ''),
                 'role': data['role'],
                 'is_active': True
             }

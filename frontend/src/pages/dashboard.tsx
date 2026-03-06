@@ -204,7 +204,7 @@ function DraggableSection({ id, editMode, dragOver, onDragStart, onDragOver, onD
 // Component
 // ---------------------------------------------------------------------------
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
 
   const [stats, setStats] = useState({ totalCustomers: 0, activeCards: 0, totalVisits: 0, recentActivity: 0 })
   const [rawRows, setRawRows] = useState<RawRow[]>([])
@@ -412,7 +412,7 @@ export default function Dashboard() {
         <div>
           <p className="text-sm text-muted-foreground">{greeting()}</p>
           <h1 className="text-2xl font-bold tracking-tight">
-            {user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"}
+            {userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"}
           </h1>
         </div>
         <div className="flex items-center gap-3">

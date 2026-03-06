@@ -88,6 +88,17 @@ export function FirstLoginModal({
         return
       }
 
+      // Update Supabase auth metadata so the name is available immediately
+      const { error: authMetaError } = await supabase.auth.updateUser({
+        data: { full_name: fullName.trim() },
+      })
+
+      if (authMetaError) {
+        setError(authMetaError.message)
+        setLoading(false)
+        return
+      }
+
       // Update user profile with full name and set first_login to false
       const { error: profileError } = await supabase
         .from("user_profiles")

@@ -51,16 +51,22 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
 
   useEffect(() => {
     if (open) {
-      setFullName(user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "")
+      setFullName(
+        userProfile?.full_name ?? user?.user_metadata?.full_name ??
+          user?.email?.split("@")[0] ??
+          ""
+      )
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
       setProfileMsg(null)
       setPasswordMsg(null)
     }
-  }, [open, user])
+  }, [open, user, userProfile])
 
-  const userInitial = (user?.user_metadata?.full_name ?? user?.email ?? "?")
+  const userInitial = (
+    userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email ?? "?"
+  )
     .charAt(0)
     .toUpperCase()
 
