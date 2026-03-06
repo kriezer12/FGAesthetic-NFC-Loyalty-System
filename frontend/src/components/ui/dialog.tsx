@@ -24,13 +24,17 @@ function DialogClose({ ...props }: React.ComponentProps<typeof DialogPrimitive.C
 
 function DialogOverlay({
   className,
+  blurLevel = "subtle",
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+}: React.ComponentProps<typeof DialogPrimitive.Overlay> & { blurLevel?: "subtle" | "glass" }) {
+  const blurClass = blurLevel === "glass" ? "backdrop-blur-md" : "backdrop-blur-sm"
+  
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50 backdrop-blur-md",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        blurClass,
         className
       )}
       {...props}
@@ -41,11 +45,12 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  overlayBlur = "subtle",
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { overlayBlur?: "subtle" | "glass" }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay blurLevel={overlayBlur} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

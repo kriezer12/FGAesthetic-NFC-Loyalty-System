@@ -23,7 +23,7 @@ interface AddAccountModalProps {
 export function AddAccountModal({ open, onOpenChange }: AddAccountModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent overlayBlur="subtle" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Account</DialogTitle>
           <DialogDescription>

@@ -132,7 +132,7 @@ export function SettingsModal({ open, onOpenChange, initialSection = "general" }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-full" variant="top-right-centered">
+      <DialogContent overlayBlur="subtle" className="max-w-3xl w-full" variant="top-right-centered">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
