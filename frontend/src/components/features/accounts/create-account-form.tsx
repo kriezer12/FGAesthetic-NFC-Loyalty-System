@@ -23,7 +23,6 @@ interface CreateAccountFormProps {
 
 export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
   const [email, setEmail] = useState("")
-  const [name, setName] = useState("")
   const [role, setRole] = useState<UserRole>("staff")
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -41,7 +40,6 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
         method: "POST",
         body: JSON.stringify({
           email,
-          full_name: name,
           role,
         }),
       })
@@ -63,7 +61,6 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
       setSuccess(`Account created successfully for ${email}`)
       // Reset form
       setEmail("")
-      setName("")
       setRole("staff")
       
       // Call success callback after a short delay to show the message
@@ -96,19 +93,7 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
       </div>
 
       <FieldGroup>
-          {/* Name field */}
-          <Field>
-            <FieldLabel htmlFor="name">Full Name</FieldLabel>
-            <Input
-              id="name"
-              type="text"
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </Field>
-
+    
           {/* Email field */}
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
