@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -164,7 +165,8 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-8">
+        <ScrollArea className="h-[calc(100vh-12rem)]">
+          <div className="flex flex-col gap-8 pr-4">
 
           {/* ── Profile ─────────────────────────────────────────── */}
           <section className="flex flex-col gap-5">
@@ -323,7 +325,8 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             </div>
           </section>
 
-        </div>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   )
