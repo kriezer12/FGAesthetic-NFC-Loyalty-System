@@ -281,15 +281,15 @@ export default function Dashboard() {
   }
 
   // ── Stat cards config ────────────────────────────────────────────────────
-  const statCards = [
+  const statCards = useMemo(() => [
     { title: "Total Customers", value: loading ? "—" : totalCustomersCount.toLocaleString(), sub: "Registered", icon: Users },
     { title: "Active NFC Cards", value: loading ? "—" : activeCardsCount.toLocaleString(), sub: "Linked cards", icon: CreditCard },
     { title: "Total Visits", value: loading ? "—" : totalVisitsCount.toLocaleString(), sub: "All-time", icon: TrendingUp },
     { title: "Recent Activity", value: loading ? "—" : recentActivityCount.toLocaleString(), sub: "Last 7 days", icon: Activity },
-  ]
+  ], [loading, totalCustomersCount, activeCardsCount, totalVisitsCount, recentActivityCount])
 
   // ── Section renderers ────────────────────────────────────────────────────
-  const sectionMap: Record<SectionId, React.ReactNode> = {
+  const sectionMap: Record<SectionId, React.ReactNode> = useMemo(() => ({
     stats: (
       /* ── Stat Cards ─────────────────────────────────────────────────── */
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
@@ -402,7 +402,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
     ),
-  }
+  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth])
 
   return (
     <div className="space-y-6 pb-6">

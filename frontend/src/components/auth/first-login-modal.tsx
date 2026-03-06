@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Field,
   FieldGroup,
@@ -125,7 +126,7 @@ export function FirstLoginModal({
 
   return (
     <Dialog open={isOpen}>
-      <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent overlayBlur="glass" className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Welcome! Complete Your Profile</DialogTitle>
           <DialogDescription>
@@ -133,7 +134,8 @@ export function FirstLoginModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <ScrollArea className="h-[calc(100vh-12rem)]">
+        <form onSubmit={handleSubmit} className="space-y-4 pr-4">
           {error && (
             <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md">
               {error}
@@ -194,6 +196,7 @@ export function FirstLoginModal({
             {loading ? "Completing Setup..." : "Complete Setup"}
           </Button>
         </form>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   )

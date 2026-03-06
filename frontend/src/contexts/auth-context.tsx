@@ -80,7 +80,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(session?.user ?? null)
         
         if (session?.user?.id) {
-          await fetchUserProfile(session.user.id)
+          fetchUserProfile(session.user.id)
         }
       } catch (error) {
         console.error("Error getting session:", error)
@@ -98,6 +98,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(session?.user ?? null)
         
         if (session?.user?.id) {
+          // Don't await - fetch in background
           fetchUserProfile(session.user.id)
         } else {
           setUserProfile(null)
