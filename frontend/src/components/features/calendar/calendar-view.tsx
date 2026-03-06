@@ -12,7 +12,6 @@ import { Card } from "@/components/ui/card"
 import type { Appointment, IntervalMinutes, StaffMember } from "@/types/appointment"
 import {
   DEFAULT_INTERVAL,
-  MOCK_BLOCKED_TIMES,
 } from "./calendar-parts/calendar-config"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
@@ -108,7 +107,7 @@ export function CalendarView() {
     return true
   })
   
-  let blockedTimes   = MOCK_BLOCKED_TIMES
+  let blockedTimes: any[] = []
 
   // Derive clinic hours from settings (work hours)
   const clinicHours = useMemo(() => ({
