@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
   Calendar,
@@ -42,6 +43,11 @@ import type { Appointment, IntervalMinutes } from "@/types/appointment"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
 
 export default function CustomersPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  const [cameFromNfc, setCameFromNfc] = useState(false)
+
   const [customers, setCustomers] = useState<Customer[]>([])
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -152,6 +158,30 @@ export default function CustomersPage() {
     setSortMetric("")
     setSortOrder("desc")
   }
+
+  // if navigation brought a customer object, open the modal
+  useEffect(() => {
+    const { customer, fromNfc } = (location.state as any) || {}
+    if (customer) {
+      setSelectedCustomer(customer)
+    }
+    if (fromNfc) {
+      setCameFromNfc(true)
+    }
+    // clear the state so it doesn't reopen later
+    if (customer || fromNfc) {
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [location.state])
+
+  // if we opened from the NFC scanner, clear the flag when the modal closes
+  // and make sure we stay on the same dashboard/customers route (clears state)
+  useEffect(() => {
+    if (selectedCustomer === null && cameFromNfc) {
+      navigate("/dashboard/customers", { replace: true })
+      setCameFromNfc(false)
+    }
+  }, [selectedCustomer, cameFromNfc, navigate])
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A"
