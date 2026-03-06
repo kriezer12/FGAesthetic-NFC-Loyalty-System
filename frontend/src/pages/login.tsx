@@ -6,7 +6,6 @@
  */
 
 import { useEffect } from "react"
-import { GalleryVerticalEnd } from "lucide-react"
 import { LoginForm } from "@/components/auth"
 
 export default function LoginPage() {
@@ -17,14 +16,14 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col gap-4 p-6 md:p-10">
-        <div className="flex justify-center gap-2 md:justify-start">
-          <a href="#" className="flex items-center gap-2 font-medium">
-            <img src="/logo/logo-black.png" alt="FG Aesthetic Centre Logo" className="h-6" />
-            FG Aesthetic Centre
+        <div className="flex justify-center gap-3 md:justify-start">
+          <a href="#" className="flex items-center gap-3">
+            <img src="/logo/logo-orig.svg" alt="FG Aesthetic Centre Logo" className="h-10 w-auto" />
+            <span className="font-manrope font-medium text-lg tracking-wide">FG AESTHETIC CENTRE</span>
           </a>
         </div>
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-xs">
+        <div className="flex flex-1 items-start justify-center pt-45">
+          <div className="w-full max-w-sm">
             <LoginForm />
           </div>
         </div>

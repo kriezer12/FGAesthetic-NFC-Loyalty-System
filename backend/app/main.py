@@ -37,9 +37,16 @@ def create_app() -> Flask:
             "http://localhost:5173",
             "http://localhost:5174",
             "http://localhost:5175",
+            "http://fgaesthetic-frontend:5173",  # Docker container hostname
         ],
-        supports_credentials=True
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     )
+
+    # Register blueprints
+    from app.routes.accounts import accounts_bp
+    app.register_blueprint(accounts_bp)
 
     # ==================== Routes ====================
 

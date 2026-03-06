@@ -70,7 +70,7 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
     }
   }
 
-  const displayName = customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()
+  const displayName = customer.name || `${customer.first_name || ''} ${customer.middle_name || ''} ${customer.last_name || ''}`.trim()
 
   return (
     <Card className="w-full max-w-md mx-auto">

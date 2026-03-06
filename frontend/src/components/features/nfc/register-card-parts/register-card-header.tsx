@@ -1,25 +1,23 @@
 import { CreditCard, UserPlus } from "lucide-react"
 
-import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-
 type RegisterCardHeaderProps = {
   nfcUid: string
 }
 
 export function RegisterCardHeader({ nfcUid }: RegisterCardHeaderProps) {
   return (
-    <CardHeader className="text-center sticky top-0 bg-background z-10 pb-4">
-      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-        <UserPlus className="h-8 w-8 text-blue-600" />
+    <div className="px-6 pt-6 pb-4 border-b flex flex-col items-center gap-3 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+        <UserPlus className="h-7 w-7 text-primary" />
       </div>
-      <CardTitle>New Client Registration</CardTitle>
-      <CardDescription>
-        Register this NFC card with client information
-      </CardDescription>
-      <div className="flex items-center justify-center gap-2 p-2 bg-muted rounded-lg mt-2">
-        <CreditCard className="h-4 w-4 text-muted-foreground" />
-        <span className="font-mono text-sm">{nfcUid}</span>
+      <div>
+        <h2 className="text-lg font-semibold leading-tight">New Client Registration</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Register this NFC card with client information</p>
       </div>
-    </CardHeader>
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg text-muted-foreground">
+        <CreditCard className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-mono text-xs tracking-widest">{nfcUid}</span>
+      </div>
+    </div>
   )
 }

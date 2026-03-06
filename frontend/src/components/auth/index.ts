@@ -5,6 +5,7 @@
  * Export all auth-related components from a single entry point.
  */
 
+export { LoadingScreen } from "./loading-screen"
 export { ProtectedRoute } from "./protected-route"
 export { PublicRoute } from "./public-route"
 export { LoginForm } from "./login-form"
