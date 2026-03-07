@@ -115,3 +115,131 @@ def create_account():
         return jsonify({
             'error': str(e)
         }), 500
+
+
+@accounts_bp.route('/list', methods=['GET'])
+def list_accounts():
+    """
+    Get all user accounts.
+    
+    Returns:
+    {
+        "accounts": [
+            {
+                "id": "user_id",
+                "email": "user@example.com",
+                "full_name": "User Name",
+                "role": "staff",
+                "is_active": true,
+                "created_at": "2024-01-01T00:00:00Z"
+            },
+            ...
+        ]
+    }
+    """
+    try:
+        supabase = get_supabase_admin()
+        
+        # Fetch all user profiles
+        response = supabase.table('user_profiles').select('*').execute()
+        
+        if not response.data:
+            return jsonify({
+                'accounts': []
+            }), 200
+        
+        return jsonify({
+            'success': True,
+            'accounts': response.data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch accounts: {str(e)}'
+        }), 500
+
+
+@accounts_bp.route('/<user_id>', methods=['PUT'])
+def update_account(user_id):
+    """
+    Update a user account.
+    
+    Request body:
+    {
+        "full_name": "New Name",
+        "role": "staff" | "branch_admin" | "super_admin",
+        "is_active": true | false
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "user": { updated user data }
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'error': 'Request body must be valid JSON'
+            }), 400
+        
+        supabase = get_supabase_admin()
+        
+        # Prepare update data
+        update_data = {}
+        if 'full_name' in data:
+            update_data['full_name'] = data['full_name']
+        if 'role' in data:
+            update_data['role'] = data['role']
+        if 'is_active' in data:
+            update_data['is_active'] = data['is_active']
+        
+        # Update user profile
+        response = supabase.table('user_profiles').update(update_data).eq('id', user_id).execute()
+        
+        if not response.data:
+            return jsonify({
+                'error': 'Failed to update user'
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'user': response.data[0]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Update failed: {str(e)}'
+        }), 500
+
+
+@accounts_bp.route('/<user_id>', methods=['DELETE'])
+def delete_account(user_id):
+    """
+    Delete a user account.
+    
+    Returns:
+    {
+        "success": true,
+        "message": "Account deleted successfully"
+    }
+    """
+    try:
+        supabase = get_supabase_admin()
+        
+        # Delete user auth record using admin API
+        supabase.auth.admin.delete_user(user_id)
+        
+        # Delete user profile
+        supabase.table('user_profiles').delete().eq('id', user_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Account deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Delete failed: {str(e)}'
+        }), 500
