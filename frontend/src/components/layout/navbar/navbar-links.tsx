@@ -6,6 +6,7 @@ const navLinks = [
   { title: "Customers", url: "/dashboard/customers" },
   { title: "Check-in Logs", url: "/dashboard/checkin-logs" },
   { title: "Appointments", url: "/dashboard/appointments" },
+  { title: "Treatments", url: "/dashboard/treatments" },
   { title: "Upload", url: "/dashboard/upload" },
 ]
 
