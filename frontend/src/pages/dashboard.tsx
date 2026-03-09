@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
@@ -211,6 +212,7 @@ export default function Dashboard() {
   const [activityFilter, setActivityFilter] = useState<TimeFilter>("daily")
   const [registrationsFilter, setRegistrationsFilter] = useState<TimeFilter>("weekly")
   const [loading, setLoading] = useState(true)
+  const [openModal, setOpenModal] = useState<"customers" | "cards" | "visits" | "activity" | null>(null)
 
   // ── Edit / drag state ───────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false)
@@ -282,10 +284,10 @@ export default function Dashboard() {
 
   // ── Stat cards config ────────────────────────────────────────────────────
   const statCards = useMemo(() => [
-    { title: "Total Customers", value: loading ? "—" : totalCustomersCount.toLocaleString(), sub: "Registered", icon: Users },
-    { title: "Active NFC Cards", value: loading ? "—" : activeCardsCount.toLocaleString(), sub: "Linked cards", icon: CreditCard },
-    { title: "Total Visits", value: loading ? "—" : totalVisitsCount.toLocaleString(), sub: "All-time", icon: TrendingUp },
-    { title: "Recent Activity", value: loading ? "—" : recentActivityCount.toLocaleString(), sub: "Last 7 days", icon: Activity },
+    { title: "Total Customers", value: loading ? "—" : totalCustomersCount.toLocaleString(), sub: "Registered", icon: Users, id: "customers" as const },
+    { title: "Active NFC Cards", value: loading ? "—" : activeCardsCount.toLocaleString(), sub: "Linked cards", icon: CreditCard, id: "cards" as const },
+    { title: "Total Visits", value: loading ? "—" : totalVisitsCount.toLocaleString(), sub: "All-time", icon: TrendingUp, id: "visits" as const },
+    { title: "Recent Activity", value: loading ? "—" : recentActivityCount.toLocaleString(), sub: "Last 7 days", icon: Activity, id: "activity" as const },
   ], [loading, totalCustomersCount, activeCardsCount, totalVisitsCount, recentActivityCount])
 
   // ── Section renderers ────────────────────────────────────────────────────
@@ -293,8 +295,12 @@ export default function Dashboard() {
     stats: (
       /* ── Stat Cards ─────────────────────────────────────────────────── */
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        {statCards.map(({ title, value, sub, icon: Icon }) => (
-          <Card key={title} className="border border-border shadow-sm">
+        {statCards.map(({ title, value, sub, icon: Icon, id }) => (
+          <Card 
+            key={title} 
+            className="border border-border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-primary/50 active:scale-95"
+            onClick={() => setOpenModal(id)}
+          >
             <CardContent className="pt-4 pb-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -418,7 +424,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <p className="text-xs text-muted-foreground">FG Aesthetic Centre</p>
-            <p className="text-xs font-medium text-primary">NFC Loyalty Dashboard</p>
+            <p className="text-xs font-medium text-primary">{userProfile?.branch_name || "NFC Loyalty Dashboard"}</p>
           </div>
           <button
             onClick={() => setEditMode((v) => !v)}
@@ -461,6 +467,144 @@ export default function Dashboard() {
           {sectionMap[id]}
         </DraggableSection>
       ))}
+
+      {/* ── Modal: Customers Chart ─────────────────────────────────────── */}
+      <Dialog open={openModal === "customers"} onOpenChange={(open) => !open && setOpenModal(null)}>
+        <DialogContent className="bg-background/95 backdrop-blur-sm border border-border shadow-lg p-6 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Total Customers</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="flex items-baseline justify-between">
+              <p className="text-sm text-muted-foreground">New Registrations Over Time</p>
+              <FilterToggle value={registrationsFilter} onChange={setRegistrationsFilter} />
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyGrowth}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                <Tooltip content={<ChartTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  name="Registered"
+                  stroke={GOLD}
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: GOLD, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal: Active NFC Cards ────────────────────────────────────── */}
+      <Dialog open={openModal === "cards"} onOpenChange={(open) => !open && setOpenModal(null)}>
+        <DialogContent className="bg-background/95 backdrop-blur-sm border border-border shadow-lg p-6 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Active NFC Cards</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="text-xs text-muted-foreground mb-1">Active Cards</p>
+                <p className="text-3xl font-bold">{stats.activeCards}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="text-xs text-muted-foreground mb-1">Total Customers</p>
+                <p className="text-3xl font-bold">{stats.totalCustomers}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="text-xs text-muted-foreground mb-1">Linked Rate</p>
+                <p className="text-3xl font-bold">{stats.totalCustomers > 0 ? Math.round((stats.activeCards / stats.totalCustomers) * 100) : 0}%</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground mb-3">Cards Added Over Time</p>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={monthlyGrowth} barCategoryGap="30%">
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
+                  <Bar dataKey="count" name="Cards" fill={GOLD} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal: Total Visits ────────────────────────────────────────── */}
+      <Dialog open={openModal === "visits"} onOpenChange={(open) => !open && setOpenModal(null)}>
+        <DialogContent className="bg-background/95 backdrop-blur-sm border border-border shadow-lg p-6 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Total Visits</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="text-xs text-muted-foreground mb-1">Total Visits</p>
+                <p className="text-3xl font-bold">{stats.totalVisits}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="text-xs text-muted-foreground mb-1">Avg Visits per Customer</p>
+                <p className="text-3xl font-bold">{stats.totalCustomers > 0 ? (stats.totalVisits / stats.totalCustomers).toFixed(1) : 0}</p>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-muted-foreground">Daily Activity</p>
+                <FilterToggle value={activityFilter} onChange={setActivityFilter} />
+              </div>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={dailyActivity} barCategoryGap="30%">
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
+                  <Bar dataKey="count" name="Visits" fill={GOLD} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.activity[activityFilter]}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal: Recent Activity ──────────────────────────────────────── */}
+      <Dialog open={openModal === "activity"} onOpenChange={(open) => !open && setOpenModal(null)}>
+        <DialogContent className="bg-background/95 backdrop-blur-sm border border-border shadow-lg p-6 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Recent Activity</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-xs text-muted-foreground mb-1">Last 7 Days</p>
+              <p className="text-3xl font-bold">{stats.recentActivity}</p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-muted-foreground">Check-ins This Week</p>
+                <FilterToggle value={activityFilter} onChange={setActivityFilter} />
+              </div>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={dailyActivity} barCategoryGap="30%">
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
+                  <Bar dataKey="count" name="Check-ins" fill={GOLD} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.activity[activityFilter]}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

@@ -49,7 +49,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user profile with role information
+  // Fetch user profile with role information and branch details
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase

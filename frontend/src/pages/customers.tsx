@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
   Calendar,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   CreditCard,
   Edit,
   Eye,
@@ -15,6 +17,8 @@ import {
   Search,
   Users,
   X,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useStaff } from "@/hooks/use-staff"
@@ -38,6 +42,13 @@ import {
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
 import { supabase } from "@/lib/supabase"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import type { Customer } from "@/types/customer"
 import type { Appointment, IntervalMinutes } from "@/types/appointment"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
@@ -56,9 +67,76 @@ export default function CustomersPage() {
 
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
+  // status can be '', 'active', 'inactive', 'archived'
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "archived">("")
   const [sortMetric, setSortMetric] = useState<"" | "points" | "visits">("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [showFilters, setShowFilters] = useState(false)
+
+  // number of days without a visit before a client is considered inactive
+  const INACTIVE_THRESHOLD_DAYS = 60
+
+  const isInactiveClient = (c: Customer) => {
+    if (c.archived_at) return false
+    // prefer explicit last_inactive flag
+    if (c.last_inactive) return true
+    if (!c.last_visit) return true
+    const diffMs = Date.now() - new Date(c.last_visit).getTime()
+    const diffDays = diffMs / (1000 * 60 * 60 * 24)
+    return diffDays > INACTIVE_THRESHOLD_DAYS
+  }
+
+  const inactiveDate = (c?: Customer) => {
+    if (!c) return null
+    if (c.last_inactive) return c.last_inactive
+    if (!c.last_visit) return null
+    const d = new Date(c.last_visit)
+    d.setDate(d.getDate() + INACTIVE_THRESHOLD_DAYS)
+    return d.toISOString()
+  }
+
+  const isArchivedClient = (c: Customer) => Boolean(c.archived_at)
+
+  const isActiveClient = (c: Customer) => !isArchivedClient(c) && !isInactiveClient(c)
+
+  const statusRank = (c: Customer) => {
+    if (isArchivedClient(c)) return 2
+    if (isInactiveClient(c)) return 1
+    return 0
+  }
+
+  // generic dropdown builder for radio options
+  function renderFilter<T extends string>(
+    label: string,
+    value: T,
+    onChange: (val: T) => void,
+    options: Array<{ label: string; value: T }>,
+    disabled?: boolean,
+  ) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            className="flex items-center justify-between h-9 text-sm"
+            disabled={disabled}
+          >
+            {label}: {options.find((o) => o.value === value)?.label || options[0].label}
+            <ChevronDown className="ml-2 h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as T)}>
+            {options.map((opt) => (
+              <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
 
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -73,16 +151,18 @@ export default function CustomersPage() {
   
   const clinicHours = { open: 9, close: 18 }
 
-  const totalClients = customers.length
+  // metrics should only consider non‑archived clients
+  const activeCustomers = useMemo(() => customers.filter((c) => !isArchivedClient(c)), [customers])
+  const totalClients = activeCustomers.length
   const totalPointsIssued = useMemo(
-    () => customers.reduce((sum, c) => sum + (c.points || 0), 0),
-    [customers],
+    () => activeCustomers.reduce((sum, c) => sum + (c.points || 0), 0),
+    [activeCustomers],
   )
   const totalVisits = useMemo(
-    () => customers.reduce((sum, c) => sum + (c.visits || 0), 0),
-    [customers],
+    () => activeCustomers.reduce((sum, c) => sum + (c.visits || 0), 0),
+    [activeCustomers],
   )
-  const registeredCards = customers.length
+  const registeredCards = activeCustomers.length
 
   const totalClientsCount = useCounter(totalClients, 1500)
   const totalPointsCount = useCounter(totalPointsIssued, 1500)
@@ -103,7 +183,33 @@ export default function CustomersPage() {
         .order("created_at", { ascending: false })
 
       if (error) throw error
-      setCustomers(data || [])
+      const list: Customer[] = data || []
+      setCustomers(list)
+
+      // persist inactive timestamp for newly-inactive clients
+      const toUpdate: Array<{ id: string; last_inactive: string }> = []
+      list.forEach((c) => {
+        if (!c.archived_at && !c.last_inactive && isInactiveClient(c)) {
+          const dt = inactiveDate(c)
+          if (dt) {
+            toUpdate.push({ id: c.id, last_inactive: dt })
+          }
+        }
+      })
+      if (toUpdate.length) {
+        try {
+          await supabase.from("customers").upsert(toUpdate)
+          // refresh local copy after writing
+          setCustomers((prev) =>
+            prev.map((c) => {
+              const u = toUpdate.find((x) => x.id === c.id)
+              return u ? { ...c, last_inactive: u.last_inactive } : c
+            }),
+          )
+        } catch (e) {
+          console.error("Failed to set last_inactive:", e)
+        }
+      }
     } catch (err) {
       console.error("Error fetching customers:", err)
     } finally {
@@ -111,9 +217,26 @@ export default function CustomersPage() {
     }
   }
 
+  const toggleArchive = async (customer: Customer) => {
+    // flips the archived_at value
+    try {
+      const newArchived = customer.archived_at ? null : new Date().toISOString()
+      const { error } = await supabase
+        .from("customers")
+        .update({ archived_at: newArchived })
+        .eq("id", customer.id)
+      if (error) throw error
+      // refetch so filters recompute
+      fetchCustomers()
+    } catch (err) {
+      console.error("Error updating archive status:", err)
+    }
+  }
+
   const filterCustomers = useCallback(() => {
     let filtered = [...customers]
 
+    // text search
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -127,14 +250,32 @@ export default function CustomersPage() {
       )
     }
 
+    // skin/gender filters
     if (skinTypeFilter) {
       filtered = filtered.filter((c) => c.skin_type === skinTypeFilter)
     }
-
     if (genderFilter) {
       filtered = filtered.filter((c) => c.gender === genderFilter)
     }
 
+    // status filter (active / inactive / archived)
+    if (statusFilter) {
+      if (statusFilter === "active") {
+        filtered = filtered.filter(isActiveClient)
+      } else if (statusFilter === "inactive") {
+        filtered = filtered.filter(isInactiveClient)
+      } else if (statusFilter === "archived") {
+        filtered = filtered.filter(isArchivedClient)
+      }
+    } else {
+      // default: hide archived clients unless user explicitly requests them
+      filtered = filtered.filter((c) => !isArchivedClient(c))
+    }
+
+    // sort by status so that active come first, inactive next, archived last
+    filtered.sort((a, b) => statusRank(a) - statusRank(b))
+
+    // then apply metric sorting if requested
     if (sortMetric) {
       filtered.sort((a, b) => {
         const aValue = sortMetric === "points" ? (a.points || 0) : (a.visits || 0)
@@ -145,7 +286,15 @@ export default function CustomersPage() {
 
     setFilteredCustomers(filtered)
     setCurrentPage(1)
-  }, [customers, genderFilter, searchQuery, skinTypeFilter, sortMetric, sortOrder])
+  }, [
+    customers,
+    genderFilter,
+    searchQuery,
+    skinTypeFilter,
+    sortMetric,
+    sortOrder,
+    statusFilter,
+  ])
 
   useEffect(() => {
     filterCustomers()
@@ -155,9 +304,12 @@ export default function CustomersPage() {
     setSearchQuery("")
     setSkinTypeFilter("")
     setGenderFilter("")
+    setStatusFilter("")
     setSortMetric("")
     setSortOrder("desc")
   }
+
+  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric)
 
   // if navigation brought a customer object, open the modal
   useEffect(() => {
@@ -195,7 +347,6 @@ export default function CustomersPage() {
   const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
-  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || sortMetric)
 
   return (
     <div>
@@ -259,61 +410,70 @@ export default function CustomersPage() {
 
           {showFilters && (
             <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-muted/50 p-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Skin Type</label>
-                <select
-                  title="Skin Type"
-                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  value={skinTypeFilter}
-                  onChange={(e) => setSkinTypeFilter(e.target.value)}
-                >
-                  <option value="">All Types</option>
-                  <option value="normal">Normal</option>
-                  <option value="dry">Dry</option>
-                  <option value="oily">Oily</option>
-                  <option value="combination">Combination</option>
-                  <option value="sensitive">Sensitive</option>
-                </select>
+              <div>
+                {renderFilter(
+                  "Skin Type",
+                  skinTypeFilter,
+                  setSkinTypeFilter,
+                  [
+                    { label: "All Types", value: "" },
+                    { label: "Normal", value: "normal" },
+                    { label: "Dry", value: "dry" },
+                    { label: "Oily", value: "oily" },
+                    { label: "Combination", value: "combination" },
+                    { label: "Sensitive", value: "sensitive" },
+                  ],
+                )}
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Gender</label>
-                <select
-                  title="Gender"
-                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  value={genderFilter}
-                  onChange={(e) => setGenderFilter(e.target.value)}
-                >
-                  <option value="">All Genders</option>
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
-                  <option value="other">Other</option>
-                </select>
+              <div>
+                {renderFilter(
+                  "Gender",
+                  genderFilter,
+                  setGenderFilter,
+                  [
+                    { label: "All Genders", value: "" },
+                    { label: "Female", value: "female" },
+                    { label: "Male", value: "male" },
+                    { label: "Other", value: "other" },
+                  ],
+                )}
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Sort Metric</label>
-                <select
-                  title="Sort Metric"
-                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  value={sortMetric}
-                  onChange={(e) => setSortMetric(e.target.value as "" | "points" | "visits")}
-                >
-                  <option value="">None</option>
-                  <option value="points">Points</option>
-                  <option value="visits">Visits</option>
-                </select>
+              <div>
+                {renderFilter(
+                  "Status",
+                  statusFilter,
+                  setStatusFilter as any,
+                  [
+                    { label: "All Statuses", value: "" },
+                    { label: "Active", value: "active" },
+                    { label: "Inactive", value: "inactive" },
+                    { label: "Archived", value: "archived" },
+                  ],
+                )}
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Sort Order</label>
-                <select
-                  title="Sort Order"
-                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  value={sortOrder}
-                  disabled={!sortMetric}
-                  onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-                >
-                  <option value="asc">Ascending</option>
-                  <option value="desc">Descending</option>
-                </select>
+              <div>
+                {renderFilter(
+                  "Sort Metric",
+                  sortMetric,
+                  setSortMetric as any,
+                  [
+                    { label: "None", value: "" },
+                    { label: "Points", value: "points" },
+                    { label: "Visits", value: "visits" },
+                  ],
+                )}
+              </div>
+              <div>
+                {renderFilter(
+                  "Sort Order",
+                  sortOrder,
+                  setSortOrder as any,
+                  [
+                    { label: "Ascending", value: "asc" },
+                    { label: "Descending", value: "desc" },
+                  ],
+                  !sortMetric, // disable until metric chosen
+                )}
               </div>
               {hasActiveFilters && (
                 <div className="flex items-end">
@@ -362,7 +522,11 @@ export default function CustomersPage() {
                         <ContextMenuTrigger asChild>
                           <tr
                             onClick={() => setSelectedCustomer(customer)}
-                            className="border-b transition-colors hover:bg-muted/30 cursor-pointer"
+                            className={
+                              "border-b transition-colors hover:bg-muted/30 cursor-pointer" +
+                              ((isArchivedClient(customer) || isInactiveClient(customer)) ? " opacity-50" : "") +
+                              (isArchivedClient(customer) ? " italic" : "")
+                            }
                           >
                             <td className="p-4">
                               <div className="flex items-center gap-3">
@@ -420,7 +584,21 @@ export default function CustomersPage() {
                               <span className="font-semibold text-primary">{customer.points || 0}</span>
                             </td>
                             <td className="p-4">{customer.visits || 0}</td>
-                            <td className="p-4 text-sm text-muted-foreground">{formatDate(customer.last_visit)}</td>
+                            <td className="p-4 text-sm text-muted-foreground relative">
+                              {formatDate(customer.last_visit)}
+                              {(isArchivedClient(customer) || isInactiveClient(customer)) && (
+                                <div className="absolute top-1 right-2 flex items-center space-x-1 text-xs">
+                                  {isArchivedClient(customer) ? (
+                                    <Archive className="h-4 w-4 text-red-600" />
+                                  ) : (
+                                    <Clock className="h-4 w-4 text-gray-500" />
+                                  )}
+                                  <span className={isArchivedClient(customer) ? "text-red-600" : "text-gray-500"}>
+                                    {isArchivedClient(customer) ? "Archived" : "Inactive"}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
                           </tr>
                         </ContextMenuTrigger>
                         <ContextMenuContent>
@@ -438,8 +616,14 @@ export default function CustomersPage() {
                           <ContextMenuItem>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
-                          </ContextMenuItem>
-                        </ContextMenuContent>
+                          </ContextMenuItem>                          <ContextMenuItem onClick={() => toggleArchive(customer)}>
+                            {isArchivedClient(customer) ? (
+                              <ArchiveRestore className="mr-2 h-4 w-4" />
+                            ) : (
+                              <Archive className="mr-2 h-4 w-4" />
+                            )}
+                            {isArchivedClient(customer) ? "Unarchive" : "Archive"}
+                          </ContextMenuItem>                        </ContextMenuContent>
                       </ContextMenu>
                     ))
                   )}
@@ -614,9 +798,17 @@ export default function CustomersPage() {
                 </>
               )}
 
-              {/* Last Visit */}
-              <div className="text-xs text-muted-foreground pt-2">
-                Last visit: {formatDate(selectedCustomer?.last_visit)}
+              {/* timestamps */}
+              <div className="text-xs text-muted-foreground pt-2 flex flex-wrap items-center gap-4">
+                <div>Last visit: {formatDate(selectedCustomer?.last_visit)}</div>
+                {selectedCustomer && isInactiveClient(selectedCustomer) && (
+                  <>
+                    <div>Inactive since: {formatDate(inactiveDate(selectedCustomer) || undefined)}</div>
+                  </>
+                )}
+                {selectedCustomer?.archived_at && (
+                  <div>Archived on: {formatDate(selectedCustomer.archived_at)}</div>
+                )}
               </div>
 
               <div className="space-y-3 pb-2 md:hidden">
