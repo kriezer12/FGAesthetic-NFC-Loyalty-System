@@ -25,7 +25,7 @@ interface CreateAccountFormProps {
 }
 
 export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
-  const { userProfile } = useAuth()
+  const { userProfile, session } = useAuth()
   const isSuper = userProfile?.role === "super_admin"
 
   const allRoleOptions = [
@@ -62,6 +62,7 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
       const response = await apiCall("/api/accounts/create", {
         method: "POST",
         body: JSON.stringify(body),
+        authToken: session?.access_token,
       })
 
       // Check if response is ok before parsing JSON
