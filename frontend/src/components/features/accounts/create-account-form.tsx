@@ -7,6 +7,8 @@
  */
 
 import { useState, type FormEvent } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { useBranches } from "@/hooks/use-branches"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -23,14 +25,22 @@ interface CreateAccountFormProps {
 }
 
 export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
-  const roleOptions = [
+  const { userProfile, session } = useAuth()
+  const isSuper = userProfile?.role === "super_admin"
+
+  const allRoleOptions = [
     { value: "staff", label: "Staff" },
     { value: "branch_admin", label: "Branch Admin" },
     { value: "super_admin", label: "Super Admin" },
   ]
+  const roleOptions = isSuper ? allRoleOptions : allRoleOptions.filter(r => r.value === "staff")
+
+  const { branches } = useBranches()
 
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<UserRole>("staff")
+  // default branch for branch_admin
+  const [branch, setBranch] = useState(isSuper ? "" : userProfile?.branch_id || "") // holds branch_id
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -43,12 +53,16 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
 
     try {
       // Call backend endpoint to create account
+      const body: any = { email, role }
+      if (isSuper && branch) {
+        body.branch_id = branch
+      } else if (!isSuper && userProfile?.branch_id) {
+        body.branch_id = userProfile.branch_id
+      }
       const response = await apiCall("/api/accounts/create", {
         method: "POST",
-        body: JSON.stringify({
-          email,
-          role,
-        }),
+        body: JSON.stringify(body),
+        authToken: session?.access_token,
       })
 
       // Check if response is ok before parsing JSON
@@ -69,6 +83,7 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
       // Reset form
       setEmail("")
       setRole("staff")
+      setBranch("")
       
       // Call success callback after a short delay to show the message
       if (onSuccess) {
@@ -126,6 +141,18 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
               emptyMessage="No role found."
             />
           </Field>
+
+          {isSuper && (
+            <Field>
+              <FieldLabel htmlFor="branch">Branch</FieldLabel>
+              <Combobox
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                value={branch}
+                onValueChange={(val) => setBranch(val)}
+                placeholder="Select branch"
+              />
+            </Field>
+          )}
 
 
         </FieldGroup>
