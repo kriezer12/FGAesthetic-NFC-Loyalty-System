@@ -142,34 +142,17 @@ This system works with any USB NFC reader that operates in **keyboard HID mode**
 
 ---
 
-## Customer Database Schema
-
-The `customers` table in Supabase requires these columns:
-
-```sql
-CREATE TABLE customers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nfc_uid VARCHAR(50) UNIQUE NOT NULL,
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  name VARCHAR(200),
-  email VARCHAR(255),
-  phone VARCHAR(50) NOT NULL,
-  date_of_birth DATE,
-  gender VARCHAR(20),
-  address TEXT,
-  emergency_contact VARCHAR(200),
-  skin_type VARCHAR(50),
-  allergies TEXT,
-  notes TEXT,
-  points INTEGER DEFAULT 0,
-  visits INTEGER DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  last_visit TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
 ---
+
+
+**Status flags**
+
+A few concepts are used in the UI for filtering clients:
+
+* **Active** – not archived and not flagged as inactive (see below).
+* **Inactive** – last visit is more than ~60 days old (or never visited) and not archived.
+* **Archived** – `archived_at` is non‑null (soft deleted). Archived clients are hidden unless the
+ filter is explicitly set.
 
 ## API Endpoints
 

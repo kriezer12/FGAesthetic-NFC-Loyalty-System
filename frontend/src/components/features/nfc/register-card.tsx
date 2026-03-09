@@ -94,6 +94,8 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           points: 0,
           visits: 1,
           last_visit: new Date().toISOString(),
+          archived_at: null, // default active
+          last_inactive: null,
         })
         .select()
         .single()

@@ -13,7 +13,12 @@ export function CustomerInfoHeader({ customer, displayName }: CustomerInfoHeader
       <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
         <User className="h-10 w-10 text-green-600" />
       </div>
-      <h2 className="text-2xl font-semibold tracking-tight">{displayName}</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">
+        {displayName}
+        {customer.archived_at && (
+          <span className="ml-2 text-sm font-medium text-red-600">(archived)</span>
+        )}
+      </h2>
       <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
         <CreditCard className="h-4 w-4" />
         {customer.nfc_uid}
