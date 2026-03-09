@@ -8,7 +8,7 @@ Only accessible to super_admin and branch_admin users.
 
 from flask import Blueprint, request, jsonify
 from gotrue.types import AdminUserAttributes
-from app.services.supabase_client import get_supabase_admin
+from app.services.supabase_client import get_supabase, get_supabase_admin
 import jwt
 from app.config import config
 import sys
@@ -93,23 +93,19 @@ def create_account():
         # authorization: branch_admin cannot create super_admin or branch_admin
         try:
             auth_client = get_supabase()
-            current_user = auth_client.auth.get_user()
-            caller_id = current_user.user.id if current_user.user else None
-            if caller_id:
-                profile_resp = auth_client.table('user_profiles').select('role').eq('id', caller_id).single().execute()
-                caller_role = profile_resp.data.get('role') if profile_resp.data else None
-                if caller_role == 'branch_admin' and data.get('role') != 'staff':
-                    return jsonify({'error': 'Branch admin may only create staff accounts'}), 403
+            caller_profile = get_supabase_admin().table('user_profiles').select('role').eq('id', admin_user_id).single().execute()
+            caller_role = caller_profile.data.get('role') if caller_profile.data else None
+            if caller_role == 'branch_admin' and data.get('role') != 'staff':
+                return jsonify({'error': 'Branch admin may only create staff accounts'}), 403
         except Exception:
-            # if auth lookup fails, fall back to default (no extra restriction)
             pass
-        
+
         try:
             supabase_admin = get_supabase_admin()
         except Exception as e:
             return jsonify({'error': f'Supabase connection failed: {str(e)}'}), 500
-        
-        # Create auth user - profile will be created automatically by trigger
+
+        # Create auth user
         try:
             default_password = "password"
             print(f"[DEBUG] Creating user with email: {data['email']}", file=sys.stderr)
@@ -125,48 +121,39 @@ def create_account():
                     },
                 )
             )
-            
+
             if not user_response.user:
                 return jsonify({'error': 'Failed to create auth user'}), 500
-            
+
             user_id = user_response.user.id
             print(f"[DEBUG] User created successfully: {user_id}", file=sys.stderr)
-            
-            # Wait a moment for trigger to fire, then fetch the created profile
+
+            # Wait a moment for trigger to fire
             import time
             time.sleep(0.5)
-            
-            admin_profile_response = supabase_admin.table('user_profiles').select('branch_id').eq('id', admin_user_id).execute()
-            admin_branch_id = None
-            if admin_profile_response.data and len(admin_profile_response.data) > 0:
-                admin_branch_id = admin_profile_response.data[0].get('branch_id')
-            
-            return jsonify({
-                'error': f'Auth user creation failed: {str(e)}'
-            }), 500
-        
-        # Create user profile
+
+        except Exception as e:
+            return jsonify({'error': f'Auth user creation failed: {str(e)}'}), 500
+
+        # Upsert user profile with role, branch_id, first_login flag
         try:
-            # include branch_id if supplied (could be None)
             profile_payload = {
                 'id': user_id,
                 'email': data['email'],
                 'full_name': data.get('full_name', ''),
                 'role': data['role'],
                 'is_active': True,
-                'first_login': True,  # Flag to indicate this is the first login
+                'first_login': True,
             }
             if 'branch_id' in data:
                 profile_payload['branch_id'] = data.get('branch_id')
 
-            profile_response = supabase.table('user_profiles').upsert(profile_payload).execute()
-            
+            supabase_admin.table('user_profiles').upsert(profile_payload).execute()
+
         except Exception as e:
-            return jsonify({
-                'error': f'User profile creation failed: {str(e)}'
-            }), 500
-        
-        # build user response section; include branch if provided
+            return jsonify({'error': f'User profile creation failed: {str(e)}'}), 500
+
+        # Build response
         user_resp = {
             'id': user_id,
             'email': data['email'],
@@ -176,23 +163,17 @@ def create_account():
         }
         if 'branch_id' in data:
             user_resp['branch_id'] = data.get('branch_id')
-            # fetch branch name for convenience
             try:
-                br = supabase.table('branches').select('name').eq('id', data.get('branch_id')).single().execute()
+                br = supabase_admin.table('branches').select('name').eq('id', data.get('branch_id')).single().execute()
                 if br.data:
                     user_resp['branch_name'] = br.data.get('name')
             except Exception:
                 pass
 
-        return jsonify({
-            'success': True,
-            'user': user_resp
-        }), 201
-        
+        return jsonify({'success': True, 'user': user_resp}), 201
+
     except Exception as e:
-        return jsonify({
-            'error': str(e)
-        }), 500
+        return jsonify({'error': str(e)}), 500
 
 
 @accounts_bp.route('/list', methods=['GET'])
@@ -280,18 +261,16 @@ def update_account(user_id):
         
         # authorization check before modifying
         try:
-            auth_client = get_supabase()
-            current_user = auth_client.auth.get_user()
-            caller_id = current_user.user.id if current_user.user else None
-            if caller_id:
-                caller_prof = auth_client.table('user_profiles').select('role').eq('id', caller_id).single().execute()
-                caller_role = caller_prof.data.get('role') if caller_prof.data else None
-                if caller_role == 'branch_admin':
-                    # fetch target's role
-                    target_prof = auth_client.table('user_profiles').select('role').eq('id', user_id).single().execute()
-                    target_role = target_prof.data.get('role') if target_prof.data else None
-                    if target_role != 'staff':
-                        return jsonify({'error': 'Branch admin may only edit staff accounts'}), 403
+            caller_id = get_user_from_token()
+            caller_prof = get_supabase_admin().table('user_profiles').select('role').eq('id', caller_id).single().execute()
+            caller_role = caller_prof.data.get('role') if caller_prof.data else None
+            if caller_role == 'branch_admin':
+                target_prof = get_supabase_admin().table('user_profiles').select('role').eq('id', user_id).single().execute()
+                target_role = target_prof.data.get('role') if target_prof.data else None
+                if target_role != 'staff':
+                    return jsonify({'error': 'Branch admin may only edit staff accounts'}), 403
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
         except Exception:
             pass
         
