@@ -98,4 +98,12 @@ export default defineConfig({
     // Ensure assets are gzip compressed
     reportCompressedSize: true,
   },
+  // vitest configuration used when running `npm test` in this package
+  test: {
+    environment: 'node',
+    globals: true,
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
 })
