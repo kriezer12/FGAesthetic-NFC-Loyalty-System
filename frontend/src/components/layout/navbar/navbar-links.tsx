@@ -2,20 +2,14 @@ import { NavLink } from "react-router-dom"
 import { LayoutDashboard, Smartphone, Users, LogIn, Calendar, Upload } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
-interface NavLink {
-  title: string
-  url: string
-  icon: React.ComponentType<{ className?: string }>
-  roles: string[] | null
-}
-
-const navLinks: NavLink[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: null },
-  { title: "NFC Scanner", url: "/dashboard/scan", icon: Smartphone, roles: null },
-  { title: "Customers", url: "/dashboard/customers", icon: Users, roles: null },
-  { title: "Check-in Logs", url: "/dashboard/checkin-logs", icon: LogIn, roles: null },
-  { title: "Appointments", url: "/dashboard/appointments", icon: Calendar, roles: null },
-  { title: "Upload", url: "/dashboard/upload", icon: Upload, roles: null },
+const navLinks = [
+  { title: "Dashboard", url: "/dashboard" },
+  { title: "NFC Scanner", url: "/dashboard/scan" },
+  { title: "Customers", url: "/dashboard/customers" },
+  { title: "Check-in Logs", url: "/dashboard/checkin-logs" },
+  { title: "Appointments", url: "/dashboard/appointments" },
+  { title: "Treatments", url: "/dashboard/treatments" },
+  { title: "Upload", url: "/dashboard/upload" },
 ]
 
 export function NavbarLinks() {

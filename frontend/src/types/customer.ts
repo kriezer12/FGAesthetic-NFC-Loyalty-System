@@ -28,6 +28,11 @@ export interface Customer {
   archived_at?: string
   // optional timestamp when client was first marked inactive (threshold pass)
   last_inactive?: string
+
+  // treatment progress array. stored as JSON in the customers row for
+  // simplicity. see roadmap/client_treatments for a more normalized
+  // eventual design.
+  treatments?: Treatment[]
 }
 
 export interface CheckinLog {
@@ -35,4 +40,26 @@ export interface CheckinLog {
   customer_id: string
   checked_in_at: string
   points_added: number
+}
+
+// ---- treatment-related types ------------------------------------------------
+
+export interface Treatment {
+  id: string
+  name: string
+  total_sessions: number
+  used_sessions: number
+  remaining_sessions: number
+}
+
+// Logged payload for any time a customer treatment record is modified.
+// Several operations may trigger this:
+//  * remaining_sessions changed
+//  * new package added or removed
+//  * status reason updated (e.g. completed)
+export interface TreatmentLog {
+  id: string
+  customer_id: string
+  changes: Record<string, any>
+  created_at: string
 }
