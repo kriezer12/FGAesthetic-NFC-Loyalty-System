@@ -418,7 +418,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
             <p className="text-xs text-muted-foreground">FG Aesthetic Centre</p>
-            <p className="text-xs font-medium text-primary">NFC Loyalty Dashboard</p>
+            <p className="text-xs font-medium text-primary">{userProfile?.branch_name || "NFC Loyalty Dashboard"}</p>
           </div>
           <button
             onClick={() => setEditMode((v) => !v)}

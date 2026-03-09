@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Combobox } from "@/components/ui/combobox"
 import { apiCall } from "@/lib/api"
+import { useAuth } from "@/contexts/auth-context"
 import type { UserRole } from "@/types/user"
 
 interface CreateAccountFormProps {
@@ -23,6 +24,8 @@ interface CreateAccountFormProps {
 }
 
 export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
+  const { session } = useAuth()
+  
   const roleOptions = [
     { value: "staff", label: "Staff" },
     { value: "branch_admin", label: "Branch Admin" },
@@ -42,13 +45,20 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
     setLoading(true)
 
     try {
-      // Call backend endpoint to create account
+      if (!session?.access_token) {
+        setError("Authentication token not found. Please log in again.")
+        setLoading(false)
+        return
+      }
+
+      // Call backend endpoint to create account with auth token
       const response = await apiCall("/api/accounts/create", {
         method: "POST",
         body: JSON.stringify({
           email,
           role,
         }),
+        authToken: session.access_token,
       })
 
       // Check if response is ok before parsing JSON

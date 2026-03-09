@@ -49,6 +49,7 @@ export function AppNavbar() {
                 <span className="hidden sm:inline text-sm">Add Account</span>
               </Button>
             )}
+
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary">
               <Clock className="h-3.5 w-3.5 shrink-0" />
               <div className="flex flex-col leading-none">

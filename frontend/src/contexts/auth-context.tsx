@@ -21,7 +21,8 @@ interface UserProfile {
   role: UserRole
   email: string
   full_name?: string
-  branch?: string
+  branch_id?: string
+  branch_name?: string
   created_at?: string
   first_login?: boolean
 }
@@ -48,12 +49,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user profile with role information
+  // Fetch user profile with role information and branch details
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("id, role, email, full_name, branch_id, created_at, first_login, branches(id, name)")
         .eq("id", userId)
         .single()
 
@@ -63,7 +64,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUserProfile(null)
       } else {
         console.log("User profile fetched:", data)
-        setUserProfile(data as UserProfile)
+        const profile = data as any
+        const branch_name = profile.branches?.name || undefined
+        setUserProfile({
+          ...profile,
+          branch_name,
+        } as UserProfile)
       }
     } catch (error) {
       console.error("Error fetching user profile:", error)
