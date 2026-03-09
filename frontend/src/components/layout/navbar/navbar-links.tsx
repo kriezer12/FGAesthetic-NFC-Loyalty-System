@@ -1,19 +1,33 @@
 import { NavLink } from "react-router-dom"
 import { LayoutDashboard, Smartphone, Users, LogIn, Calendar, Upload } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
 
-const navLinks = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "NFC Scanner", url: "/dashboard/scan", icon: Smartphone },
-  { title: "Customers", url: "/dashboard/customers", icon: Users },
-  { title: "Check-in Logs", url: "/dashboard/checkin-logs", icon: LogIn },
-  { title: "Appointments", url: "/dashboard/appointments", icon: Calendar },
-  { title: "Upload", url: "/dashboard/upload", icon: Upload },
+interface NavLink {
+  title: string
+  url: string
+  icon: React.ComponentType<{ className?: string }>
+  roles: string[] | null
+}
+
+const navLinks: NavLink[] = [
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: null },
+  { title: "NFC Scanner", url: "/dashboard/scan", icon: Smartphone, roles: null },
+  { title: "Customers", url: "/dashboard/customers", icon: Users, roles: null },
+  { title: "Check-in Logs", url: "/dashboard/checkin-logs", icon: LogIn, roles: null },
+  { title: "Appointments", url: "/dashboard/appointments", icon: Calendar, roles: null },
+  { title: "Upload", url: "/dashboard/upload", icon: Upload, roles: null },
 ]
 
 export function NavbarLinks() {
+  const { userProfile } = useAuth()
+
+  const visibleLinks = navLinks.filter((link) =>
+    !link.roles || (userProfile && link.roles.includes(userProfile.role))
+  )
+
   return (
     <nav className="flex items-center gap-2 flex-1">
-      {navLinks.map((link) => {
+      {visibleLinks.map((link) => {
         const Icon = link.icon
         return (
           <NavLink

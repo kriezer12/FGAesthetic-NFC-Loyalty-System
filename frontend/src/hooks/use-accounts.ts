@@ -13,19 +13,21 @@ export interface Account {
 }
 
 export function useAccounts() {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchAccounts = async () => {
-    if (!user) return
+    if (!user || !session) return
 
     setLoading(true)
     setError(null)
 
     try {
-      const response = await fetch("/api/accounts/list")
+      const response = await fetch("/api/accounts/list", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
       if (!response.ok) {
         throw new Error("Failed to fetch accounts")
       }
@@ -47,7 +49,10 @@ export function useAccounts() {
     try {
       const response = await fetch(`/api/accounts/${userId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify(updates),
       })
 
@@ -71,6 +76,9 @@ export function useAccounts() {
     try {
       const response = await fetch(`/api/accounts/${userId}`, {
         method: "DELETE",
+        headers: {
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
       })
 
       if (!response.ok) {

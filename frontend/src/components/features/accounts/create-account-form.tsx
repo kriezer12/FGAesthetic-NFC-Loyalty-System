@@ -18,7 +18,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Combobox } from "@/components/ui/combobox"
 import { apiCall } from "@/lib/api"
-import { useAuth } from "@/contexts/auth-context"
 import type { UserRole } from "@/types/user"
 
 interface CreateAccountFormProps {
