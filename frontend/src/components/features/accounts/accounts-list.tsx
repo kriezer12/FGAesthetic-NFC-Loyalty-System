@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Trash2, Edit2, MoreHorizontal } from "lucide-react"
 import { Account, useAccounts } from "@/hooks/use-accounts"
+import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -63,9 +64,37 @@ const StatusBadge = ({ isActive }: { isActive: boolean }) => {
 
 export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
   const { updateAccount, deleteAccount } = useAccounts()
+  const { userProfile } = useAuth()
+  const isSuper = userProfile?.role === 'super_admin'
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Account | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // sorting state
+  const [sortKey, setSortKey] = useState<keyof Account | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: keyof Account) => {
+    console.log('sort clicked', key)
+    if (sortKey === key) {
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedAccounts = useMemo(() => {
+    if (!sortKey) return accounts
+    const sorted = [...accounts].sort((a, b) => {
+      const va = a[sortKey] ?? ''
+      const vb = b[sortKey] ?? ''
+      if (va < vb) return sortDirection === 'asc' ? -1 : 1
+      if (va > vb) return sortDirection === 'asc' ? 1 : -1
+      return 0
+    })
+    return sorted
+  }, [accounts, sortKey, sortDirection])
 
   const handleEdit = async (updates: Partial<Account>) => {
     if (!editingAccount) return
@@ -97,26 +126,44 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead>Full Name</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead onClick={() => handleSort('email')} className="cursor-pointer">
+                Email {sortKey === 'email' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </TableHead>
+              <TableHead onClick={() => handleSort('full_name')} className="cursor-pointer">
+                Full Name {sortKey === 'full_name' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </TableHead>
+              {isSuper && (
+                <TableHead onClick={() => handleSort('branch_name')} className="cursor-pointer">
+                  Branch {sortKey === 'branch_name' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                </TableHead>
+              )}
+              <TableHead onClick={() => handleSort('role')} className="cursor-pointer">
+                Role {sortKey === 'role' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </TableHead>
+              <TableHead onClick={() => handleSort('is_active')} className="cursor-pointer">
+                Status {sortKey === 'is_active' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </TableHead>
+              <TableHead onClick={() => handleSort('created_at')} className="cursor-pointer">
+                Created {sortKey === 'created_at' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              </TableHead>
               <TableHead className="w-10">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {accounts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={isSuper ? 7 : 6} className="text-center py-8">
                   <p className="text-muted-foreground">No accounts found</p>
                 </TableCell>
               </TableRow>
             ) : (
-              accounts.map((account) => (
+              sortedAccounts.map((account) => (
                 <TableRow key={account.id}>
                   <TableCell className="font-medium">{account.email}</TableCell>
                   <TableCell>{account.full_name || "-"}</TableCell>
+                  {isSuper && (
+                    <TableCell>{account.branch_name || "-"}</TableCell>
+                  )}
                   <TableCell>
                     <RoleBadge role={account.role} />
                   </TableCell>
@@ -129,28 +176,36 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
                       : "-"}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => setEditingAccount(account)}
-                        >
-                          <Edit2 className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeleteConfirm(account)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {/* show trigger only if super_admin or role is staff */}
+                    {(isSuper || account.role === 'staff') && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {/* branch admins may only modify staff accounts */}
+                          {(isSuper || account.role === 'staff') && (
+                            <DropdownMenuItem
+                              onClick={() => setEditingAccount(account)}
+                            >
+                              <Edit2 className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                          )}
+                          {(isSuper || account.role === 'staff') && (
+                            <DropdownMenuItem
+                              onClick={() => setDeleteConfirm(account)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

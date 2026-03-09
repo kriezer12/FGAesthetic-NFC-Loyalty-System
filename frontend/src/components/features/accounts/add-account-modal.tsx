@@ -18,9 +18,10 @@ import { CreateAccountForm } from "@/components/features/accounts"
 interface AddAccountModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export function AddAccountModal({ open, onOpenChange }: AddAccountModalProps) {
+export function AddAccountModal({ open, onOpenChange, onSuccess }: AddAccountModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent overlayBlur="subtle" className="sm:max-w-md">
@@ -30,7 +31,12 @@ export function AddAccountModal({ open, onOpenChange }: AddAccountModalProps) {
             Create a new staff account in the system
           </DialogDescription>
         </DialogHeader>
-        <CreateAccountForm onSuccess={() => onOpenChange(false)} />
+        <CreateAccountForm
+          onSuccess={() => {
+            onOpenChange(false)
+            onSuccess && onSuccess()
+          }}
+        />
       </DialogContent>
     </Dialog>
   )

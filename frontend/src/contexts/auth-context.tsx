@@ -21,7 +21,8 @@ interface UserProfile {
   role: UserRole
   email: string
   full_name?: string
-  branch?: string
+  branch_id?: string
+  branch_name?: string
   created_at?: string
   first_login?: boolean
 }
@@ -53,7 +54,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("*, branches(name)")
         .eq("id", userId)
         .single()
 
@@ -63,6 +64,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUserProfile(null)
       } else {
         console.log("User profile fetched:", data)
+        // if branch relation included, normalize to branch_name field
+        if (data && (data as any).branches) {
+          const rel = (data as any).branches
+          if (Array.isArray(rel) && rel.length > 0) {
+            ;(data as any).branch_name = rel[0].name
+          }
+          delete (data as any).branches
+        }
         setUserProfile(data as UserProfile)
       }
     } catch (error) {

@@ -8,6 +8,8 @@ export interface Account {
   role: "staff" | "branch_admin" | "super_admin"
   is_active: boolean
   created_at?: string
+  branch_id?: string | null
+  branch_name?: string | null
 }
 
 export function useAccounts() {

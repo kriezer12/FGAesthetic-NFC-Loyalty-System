@@ -1,4 +1,6 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { useBranches, Branch } from "@/hooks/use-branches"
 import {
   Dialog,
   DialogContent,
@@ -31,24 +33,41 @@ export function EditAccountModal({
   onOpenChange,
   onSave,
 }: EditAccountModalProps) {
+  const { userProfile } = useAuth()
+  const isSuper = userProfile?.role === "super_admin"
+  const { branches } = useBranches()
+
   const [fullName, setFullName] = useState(account?.full_name || "")
   const [role, setRole] = useState(account?.role || "staff")
+  const [branch, setBranch] = useState(account?.branch_id || "")
   const [isActive, setIsActive] = useState(account?.is_active ?? true)
   const [isSaving, setIsSaving] = useState(false)
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await onSave({
+      const updates: Partial<Account> = {
         full_name: fullName,
         role: role as "staff" | "branch_admin" | "super_admin",
         is_active: isActive,
-      })
+      }
+      if (isSuper) {
+        updates.branch_id = branch || null
+      }
+      await onSave(updates)
       onOpenChange(false)
     } finally {
       setIsSaving(false)
     }
   }
+
+  // reset form whenever account changes
+  useEffect(() => {
+    setFullName(account?.full_name || "")
+    setRole(account?.role || "staff")
+    setIsActive(account?.is_active ?? true)
+    setBranch(account?.branch_id || "")
+  }, [account])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,6 +104,18 @@ export function EditAccountModal({
               placeholder="Select a role"
             />
           </div>
+
+          {isSuper && (
+            <div className="space-y-2">
+              <Label htmlFor="branch">Branch</Label>
+              <Combobox
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                value={branch}
+                onValueChange={(val) => setBranch(val)}
+                placeholder="Select branch"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center gap-2">

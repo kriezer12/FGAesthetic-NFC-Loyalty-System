@@ -6,13 +6,14 @@
  * Only accessible to users with appropriate roles.
  */
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Navigate } from "react-router-dom"
 import { CreateAccountForm, AccountsList } from "@/components/features/accounts"
 import { useAccounts } from "@/hooks/use-accounts"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Plus } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { RefreshCw, Plus, Search, X } from "lucide-react"
 import { AddAccountModal } from "@/components/features/accounts"
 
 export default function AccountsPage() {
@@ -24,6 +25,19 @@ export default function AccountsPage() {
   const { accounts, loading: accountsLoading, error, fetchAccounts } = useAccounts()
   const [showAddForm, setShowAddForm] = useState(false)
   const [addAccountOpen, setAddAccountOpen] = useState(false)
+
+  // search state
+  const [searchTerm, setSearchTerm] = useState("")
+
+  const filteredAccounts = useMemo(() => {
+    if (!searchTerm) return accounts
+    const term = searchTerm.toLowerCase()
+    return accounts.filter((a) =>
+      a.email.toLowerCase().includes(term) ||
+      (a.full_name && a.full_name.toLowerCase().includes(term)) ||
+      (a.branch_name && a.branch_name.toLowerCase().includes(term))
+    )
+  }, [accounts, searchTerm])
 
   if (loading) {
     return (
@@ -67,13 +81,32 @@ export default function AccountsPage() {
         </div>
       </div>
 
+      {/* Search field */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          type="text"
+          placeholder="Search by email, name, or branch..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10 pr-10"
+        />
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm("")}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {/* Error message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
           {error}
         </div>
       )}
-
       {/* Stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-card border rounded-lg p-4">
@@ -91,10 +124,14 @@ export default function AccountsPage() {
       </div>
 
       {/* Accounts table */}
-      <AccountsList accounts={accounts} onRefresh={fetchAccounts} />
+      <AccountsList accounts={filteredAccounts} onRefresh={fetchAccounts} />
 
       {/* Add Account Modal */}
-      <AddAccountModal open={addAccountOpen} onOpenChange={setAddAccountOpen} />
+      <AddAccountModal
+        open={addAccountOpen}
+        onOpenChange={setAddAccountOpen}
+        onSuccess={fetchAccounts}
+      />
     </div>
   )
 }
