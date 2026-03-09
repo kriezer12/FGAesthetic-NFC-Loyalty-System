@@ -118,6 +118,7 @@ export function AppointmentDialog({
   const [startTime, setStartTime]       = useState("")
   const [endTime, setEndTime]           = useState("")
   const [status, setStatus]             = useState<AppointmentStatus>("scheduled")
+  const [treatmentId, setTreatmentId]   = useState<string>("")
   const [notes, setNotes]               = useState("")
   const [error, setError]               = useState("")
 
@@ -131,6 +132,14 @@ export function AppointmentDialog({
       })),
     [staff]
   )
+
+  const treatmentOptions: ComboboxOption[] = useMemo(() => {
+    const cust = customers.find((c) => c.id === customerId)
+    return (cust?.treatments || []).map((t) => ({
+      value: t.id,
+      label: t.name,
+    }))
+  }, [customers, customerId])
 
   const customerOptions: ComboboxOption[] = useMemo(
     () =>
@@ -168,6 +177,8 @@ export function AppointmentDialog({
         setCustomerName(
           customer.name || `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
         )
+        // reset treatment selection when customer changes
+        setTreatmentId("")
       }
     },
     [customers]
@@ -185,6 +196,7 @@ export function AppointmentDialog({
       setStartTime(isoToTimeInput(appointment.start_time))
       setEndTime(isoToTimeInput(appointment.end_time))
       setStatus(appointment.status)
+      setTreatmentId(appointment.treatment_id ?? "")
       setNotes(appointment.notes ?? "")
     } else {
       setTitle("")
@@ -250,6 +262,8 @@ export function AppointmentDialog({
       staff_id:      staffId,
       staff_name:    staffMember.name,
       title:         title.trim(),
+      treatment_id:  treatmentId || undefined,
+      treatment_name: treatmentOptions.find((t) => t.value === treatmentId)?.label,
       start_time:    startDate.toISOString(),
       end_time:      endDate.toISOString(),
       status,
