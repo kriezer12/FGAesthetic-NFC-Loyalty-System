@@ -20,6 +20,10 @@ export interface Appointment {
   staff_id: string
   staff_name: string
   title: string
+  /** optional reference to a treatment package chosen for this appointment */
+  treatment_id?: string
+  /** denormalized label since we don't join with customers.treatments on every query */
+  treatment_name?: string
   start_time: string // ISO datetime
   end_time: string   // ISO datetime
   status: AppointmentStatus
