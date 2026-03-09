@@ -23,6 +23,11 @@ export interface Customer {
 
   created_at?: string
   last_visit?: string
+
+  // soft-delete timestamp; null when active/non-archived
+  archived_at?: string
+  // optional timestamp when client was first marked inactive (threshold pass)
+  last_inactive?: string
 }
 
 export interface CheckinLog {

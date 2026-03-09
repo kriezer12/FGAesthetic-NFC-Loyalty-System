@@ -96,6 +96,40 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
           onToggleHistory={() => setShowHistory(!showHistory)}
         />
 
+        {/* archive/unarchive action */}
+        <div className="mt-4">
+          <Button
+            variant={customer.archived_at ? "outline" : "destructive"}
+            className="w-full"
+            disabled={isUpdating}
+            onClick={async () => {
+              if (!customer.archived_at) {
+                const ok = window.confirm("Archive this client? This is reversible.")
+                if (!ok) return
+              }
+              setIsUpdating(true)
+              try {
+                const { data, error } = await supabase
+                  .from("customers")
+                  .update({ archived_at: customer.archived_at ? null : new Date().toISOString() })
+                  .eq("id", customer.id)
+                  .select()
+                  .single()
+
+                if (!error && data) {
+                  onUpdate(data)
+                }
+              } catch (err) {
+                console.error("Error toggling archive status:", err)
+              } finally {
+                setIsUpdating(false)
+              }
+            }}
+          >
+            {customer.archived_at ? "Unarchive client" : "Archive client"}
+          </Button>
+        </div>
+
         {showHistory && (
           <CheckinHistory customerId={customer.id} refreshKey={historyRefreshKey} />
         )}
