@@ -4,13 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Separator } from "@/components/ui/separator"
 import { supabase } from "@/lib/supabase"
 import { CheckinHistory } from "./checkin-history"
+import { TreatmentStatusManager } from "./treatment-status-manager"
+import { TreatmentHistory } from "./treatment-history"
 import { CustomerAllergiesAlert } from "./customer-info-parts/customer-allergies-alert"
 import { CustomerContactDetails } from "./customer-info-parts/customer-contact-details"
 import { CustomerInfoHeader } from "./customer-info-parts/customer-info-header"
 import { CustomerPointsActions } from "./customer-info-parts/customer-points-actions"
 import { CustomerStatsGrid } from "./customer-info-parts/customer-stats-grid"
 
-import type { Customer } from "@/types/customer"
+import type { Customer, Treatment } from "@/types/customer"
+import { calculateChanges, logClientActivity } from "@/lib/activity-logger"
 
 interface CustomerInfoProps {
   customer: Customer
@@ -22,6 +25,36 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
   const [isUpdating, setIsUpdating] = React.useState(false)
   const [showHistory, setShowHistory] = React.useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0)
+
+  // treatment UI state
+  const [showTreatmentHistory, setShowTreatmentHistory] = React.useState(false)
+  const [treatmentHistoryKey, setTreatmentHistoryKey] = React.useState(0)
+
+  // helper to persist treatment changes and emit audit log
+  const updateTreatments = async (newTreatments: Treatment[]) => {
+    setIsUpdating(true)
+    try {
+      const diff = calculateChanges({ treatments: customer.treatments || [] }, { treatments: newTreatments })
+      const { data, error } = await supabase
+        .from("customers")
+        .update({ treatments: newTreatments })
+        .eq("id", customer.id)
+        .select()
+        .single()
+
+      if (!error && data) {
+        onUpdate(data)
+        if (Object.keys(diff).length > 0) {
+          await logClientActivity(customer.id, diff)
+          setTreatmentHistoryKey((k) => k + 1)
+        }
+      }
+    } catch (err) {
+      console.error("Error updating treatments:", err)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A"
@@ -95,6 +128,29 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
           onAdd={() => addPoints(10)}
           onToggleHistory={() => setShowHistory(!showHistory)}
         />
+
+        {/* treatment progress editor */}
+        <Separator />
+        <TreatmentStatusManager
+          treatments={customer.treatments || []}
+          isUpdating={isUpdating}
+          onSave={updateTreatments}
+        />
+        <div className="mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTreatmentHistory(!showTreatmentHistory)}
+          >
+            {showTreatmentHistory ? "Hide" : "Show"} treatment history
+          </Button>
+        </div>
+        {showTreatmentHistory && (
+          <TreatmentHistory
+            customerId={customer.id}
+            refreshKey={treatmentHistoryKey}
+          />
+        )}
 
         {/* archive/unarchive action */}
         <div className="mt-4">

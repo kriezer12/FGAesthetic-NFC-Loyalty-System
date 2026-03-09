@@ -50,7 +50,7 @@ import {
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
 import type { Customer } from "@/types/customer"
-import type { Appointment, IntervalMinutes } from "@/types/appointment"
+import type { IntervalMinutes } from "@/types/appointment"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
 
 export default function CustomersPage() {
@@ -64,6 +64,9 @@ export default function CustomersPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+
+  // which panel is shown inside the customer modal
+  const [modalView, setModalView] = useState<"details" | "treatments">("details")
 
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
@@ -325,6 +328,13 @@ export default function CustomersPage() {
       window.history.replaceState({}, "", window.location.pathname)
     }
   }, [location.state])
+
+  // when customer is selected open, reset modal view to details
+  useEffect(() => {
+    if (selectedCustomer) {
+      setModalView("details")
+    }
+  }, [selectedCustomer])
 
   // if we opened from the NFC scanner, clear the flag when the modal closes
   // and make sure we stay on the same dashboard/customers route (clears state)
@@ -674,6 +684,23 @@ export default function CustomersPage() {
               <Button
                 variant="outline"
                 className="justify-start"
+                onClick={() => setModalView("details")}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                Details
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => setModalView("treatments")}
+              >
+                <Award className="mr-2 h-4 w-4" />
+                Treatments
+              </Button>
+              <Separator className="my-1" />
+              <Button
+                variant="outline"
+                className="justify-start"
                 onClick={() => {
                   setPrefillCustomer(selectedCustomer)
                   setAppointmentDialogOpen(true)
@@ -691,131 +718,221 @@ export default function CustomersPage() {
 
             <ScrollArea className="flex-1 px-6">
               <div className="space-y-6 py-4">
-              {/* Stats Cards */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card className="border-primary/20 bg-primary/5">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Total Points</p>
-                        <p className="text-3xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
-                      </div>
-                      <Award className="h-10 w-10 text-primary" />
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Total Visits</p>
-                        <p className="text-3xl font-bold">{selectedCustomer?.visits || 0}</p>
-                      </div>
-                      <Calendar className="h-10 w-10 text-muted-foreground" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Separator />
-
-              {/* Contact Information */}
-              <div className="space-y-4">
-                <h4 className="text-base font-semibold flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Contact Information
-                </h4>
-                <div className="space-y-3 pl-6">
-                  {selectedCustomer?.phone && (
-                    <div className="flex items-center gap-3">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{selectedCustomer.phone}</span>
-                    </div>
-                  )}
-                  {selectedCustomer?.email && (
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{selectedCustomer.email}</span>
-                    </div>
-                  )}
-                  {selectedCustomer?.address && (
-                    <div className="flex items-start gap-3">
-                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <span className="text-sm text-muted-foreground">{selectedCustomer.address}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Profile Details */}
-              <div className="space-y-4">
-                <h4 className="text-base font-semibold flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Profile Details
-                </h4>
-                <div className="grid grid-cols-2 gap-4 pl-6">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">NFC Card</p>
-                    <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer?.nfc_uid}</code>
+              {modalView === "details" ? (
+                <> {/* details view */}
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card className="border-primary/20 bg-primary/5">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Total Points</p>
+                            <p className="text-3xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                          </div>
+                          <Award className="h-10 w-10 text-primary" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">Total Visits</p>
+                            <p className="text-3xl font-bold">{selectedCustomer?.visits || 0}</p>
+                          </div>
+                          <Calendar className="h-10 w-10 text-muted-foreground" />
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
 
-                  {selectedCustomer?.date_of_birth && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Birthday</p>
-                      <p className="text-sm">{formatDate(selectedCustomer.date_of_birth)}</p>
-                    </div>
-                  )}
-
-                  {selectedCustomer?.gender && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Gender</p>
-                      <p className="text-sm capitalize">{selectedCustomer.gender}</p>
-                    </div>
-                  )}
-
-                  {selectedCustomer?.skin_type && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Skin Type</p>
-                      <p className="text-sm capitalize">{selectedCustomer.skin_type}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Allergies */}
-              {selectedCustomer?.allergies && (
-                <>
                   <Separator />
-                  <div className="space-y-3">
-                    <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
-                    <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-                      <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
+
+                  {/* Contact Information */}
+                  <div className="space-y-4">
+                    <h4 className="text-base font-semibold flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      Contact Information
+                    </h4>
+                    <div className="space-y-3 pl-6">
+                      {selectedCustomer?.phone && (
+                        <div className="flex items-center gap-3">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{selectedCustomer.phone}</span>
+                        </div>
+                      )}
+                      {selectedCustomer?.email && (
+                        <div className="flex items-center gap-3">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{selectedCustomer.email}</span>
+                        </div>
+                      )}
+                      {selectedCustomer?.address && (
+                        <div className="flex items-start gap-3">
+                          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <span className="text-sm text-muted-foreground">{selectedCustomer.address}</span>
+                        </div>
+                      )}
                     </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Profile Details */}
+                  <div className="space-y-4">
+                    <h4 className="text-base font-semibold flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Profile Details
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 pl-6">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">NFC Card</p>
+                        <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer?.nfc_uid}</code>
+                      </div>
+
+                      {selectedCustomer?.date_of_birth && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Birthday</p>
+                          <p className="text-sm">{formatDate(selectedCustomer.date_of_birth)}</p>
+                        </div>
+                      )}
+
+                      {selectedCustomer?.gender && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Gender</p>
+                          <p className="text-sm capitalize">{selectedCustomer.gender}</p>
+                        </div>
+                      )}
+
+                      {selectedCustomer?.skin_type && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Skin Type</p>
+                          <p className="text-sm capitalize">{selectedCustomer.skin_type}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Allergies */}
+                  {selectedCustomer?.allergies && (
+                    <>
+                      <Separator />
+                      <div className="space-y-3">
+                        <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
+                        <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
+                          <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* timestamps */}
+                  <div className="text-xs text-muted-foreground pt-2 flex flex-wrap items-center gap-4">
+                    <div>Last visit: {formatDate(selectedCustomer?.last_visit)}</div>
+                    {selectedCustomer && isInactiveClient(selectedCustomer) && (
+                      <>
+                        <div>Inactive since: {formatDate(inactiveDate(selectedCustomer) || undefined)}</div>
+                      </>
+                    )}
+                    {selectedCustomer?.archived_at && (
+                      <div>Archived on: {formatDate(selectedCustomer.archived_at)}</div>
+                    )}
                   </div>
                 </>
+              ) : (
+                <> {/* treatments view */}
+                  {selectedCustomer && (
+                    <>
+                      {/* appointment log list */}
+                      <div className="space-y-3">
+                        <h4 className="text-lg font-semibold">Appointment History</h4>
+                        {appointments
+                          .filter((a) => a.customer_id === selectedCustomer?.id)
+                          .length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No appointments found.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {appointments
+                              .filter((a) => a.customer_id === selectedCustomer?.id)
+                              .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
+                              .map((a) => (
+                                <Card key={a.id} className="py-0 gap-0">
+                                  <CardContent className="p-4">
+                                    <div className="flex items-start justify-between">
+                                      <div className="space-y-1">
+                                        <p className="font-medium text-sm">{a.title}</p>
+                                        {a.treatment_name && (
+                                          <p className="text-xs text-muted-foreground">
+                                            Treatment: {a.treatment_name}
+                                          </p>
+                                        )}
+                                        {a.staff_name && (
+                                          <p className="text-xs text-muted-foreground">
+                                            Staff: {a.staff_name}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="text-right space-y-1">
+                                        <p className="text-sm font-medium">
+                                          {new Date(a.start_time).toLocaleDateString(undefined, {
+                                            year: "numeric",
+                                            month: "short",
+                                            day: "numeric",
+                                          })}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {new Date(a.start_time).toLocaleTimeString(undefined, {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })}
+                                          {a.end_time && (
+                                            <>
+                                              {" – "}
+                                              {new Date(a.end_time).toLocaleTimeString(undefined, {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                              })}
+                                            </>
+                                          )}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {a.notes && (
+                                      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+                                        {a.notes}
+                                      </p>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
               )}
-
-              {/* timestamps */}
-              <div className="text-xs text-muted-foreground pt-2 flex flex-wrap items-center gap-4">
-                <div>Last visit: {formatDate(selectedCustomer?.last_visit)}</div>
-                {selectedCustomer && isInactiveClient(selectedCustomer) && (
-                  <>
-                    <div>Inactive since: {formatDate(inactiveDate(selectedCustomer) || undefined)}</div>
-                  </>
-                )}
-                {selectedCustomer?.archived_at && (
-                  <div>Archived on: {formatDate(selectedCustomer.archived_at)}</div>
-                )}
-              </div>
 
               <div className="space-y-3 pb-2 md:hidden">
                 <Separator />
                 <h4 className="text-base font-semibold">Quick Actions</h4>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button
+                    variant="outline"
+                    onClick={() => setModalView("details")}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Details
+                  </Button>
+              <Button
+                    variant="outline"
+                    onClick={() => setModalView("treatments")}
+                  >
+                    <Award className="mr-2 h-4 w-4" />
+                    Treatments
+                  </Button>
+              <Button
                     variant="outline"
                     onClick={() => {
                       setPrefillCustomer(selectedCustomer)
