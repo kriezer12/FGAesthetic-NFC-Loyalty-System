@@ -2,74 +2,124 @@
  * Calendar Header
  * ===============
  *
- * Top toolbar with date navigation, interval toggle (15 / 30 / 60 min),
- * and a "New Appointment" action button.
+ * Top toolbar with date navigation, view mode toggle (Day / Week / Month),
+ * interval toggle (15 / 30 / 60 min), and a "New Appointment" action button.
  */
 
 import { ChevronLeft, ChevronRight, CalendarPlus, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { IntervalMinutes } from "@/types/appointment"
+import type { IntervalMinutes, ViewMode } from "@/types/appointment"
+import {
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  addWeeks,
+  subWeeks,
+  addMonths,
+  subMonths,
+  format,
+} from "date-fns"
 
 interface CalendarHeaderProps {
   selectedDate: Date
   interval: IntervalMinutes
+  viewMode: ViewMode
   onDateChange: (date: Date) => void
   onIntervalChange: (interval: IntervalMinutes) => void
+  onViewModeChange: (mode: ViewMode) => void
   onNewAppointment: () => void
   onOpenSettings: () => void
 }
 
 const INTERVALS: IntervalMinutes[] = [15, 30, 60]
+const VIEW_MODES: { value: ViewMode; label: string }[] = [
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+]
 
 export function CalendarHeader({
   selectedDate,
   interval,
+  viewMode,
   onDateChange,
   onIntervalChange,
+  onViewModeChange,
   onNewAppointment,
   onOpenSettings,
 }: CalendarHeaderProps) {
-  const prevDay = () => {
-    const d = new Date(selectedDate)
-    d.setDate(d.getDate() - 1)
-    onDateChange(d)
+  const prev = () => {
+    if (viewMode === "day") {
+      onDateChange(addDays(selectedDate, -1))
+    } else if (viewMode === "week") {
+      onDateChange(subWeeks(selectedDate, 1))
+    } else {
+      onDateChange(subMonths(selectedDate, 1))
+    }
   }
 
-  const nextDay = () => {
-    const d = new Date(selectedDate)
-    d.setDate(d.getDate() + 1)
-    onDateChange(d)
+  const next = () => {
+    if (viewMode === "day") {
+      onDateChange(addDays(selectedDate, 1))
+    } else if (viewMode === "week") {
+      onDateChange(addWeeks(selectedDate, 1))
+    } else {
+      onDateChange(addMonths(selectedDate, 1))
+    }
   }
 
   const goToday = () => onDateChange(new Date())
 
-  const dateLabel = selectedDate.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+  let dateLabel: string
+  if (viewMode === "day") {
+    dateLabel = format(selectedDate, "EEEE, MMMM d, yyyy")
+  } else if (viewMode === "week") {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+    const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 })
+    dateLabel = `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`
+  } else {
+    dateLabel = format(selectedDate, "MMMM yyyy")
+  }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
       {/* ---- left: date navigation ---- */}
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon-sm" onClick={prevDay} aria-label="Previous day">
+        <Button variant="outline" size="icon-sm" onClick={prev} aria-label="Previous">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <Button variant="outline" size="sm" onClick={goToday}>
           Today
         </Button>
-        <Button variant="outline" size="icon-sm" onClick={nextDay} aria-label="Next day">
+        <Button variant="outline" size="icon-sm" onClick={next} aria-label="Next">
           <ChevronRight className="h-4 w-4" />
         </Button>
         <h2 className="ml-2 text-base font-semibold sm:text-lg">{dateLabel}</h2>
       </div>
 
-      {/* ---- right: interval toggle + settings + new button ---- */}
+      {/* ---- right: view mode + interval toggle + settings + new button ---- */}
       <div className="flex items-center gap-2.5">
-        {/* interval selector */}
+        {/* view mode selector */}
+        <div className="flex items-center rounded-lg border p-1">
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              onClick={() => onViewModeChange(mode.value)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                viewMode === mode.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-accent",
+              )}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
+
+        {/* interval selector (only visible in day/week view) */}
+        {viewMode !== "month" && (
         <div className="flex items-center rounded-lg border p-1">
           {INTERVALS.map((int) => (
             <button
@@ -86,6 +136,7 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
+        )}
 
         {/* settings button */}
         <Button

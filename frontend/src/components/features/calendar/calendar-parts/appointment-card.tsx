@@ -18,7 +18,18 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { Pencil, Trash2, Repeat } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { useState } from "react"
+import { Pencil, Trash2, Repeat, TriangleAlert } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -62,11 +73,51 @@ export function AppointmentCard({
   const startLabel = formatTime(minutesSinceMidnight(appointment.start_time))
   const endLabel   = formatTime(minutesSinceMidnight(appointment.end_time))
 
-  // render height with a 2 px gap so cards don't touch, min 22 px
   const renderHeight = Math.max(height - 2, 22)
 
+  const [deleteAlertOpen, setDeleteAlertOpen] = useState(false)
+
   return (
-    <ContextMenu>
+    <>
+      <AlertDialog open={deleteAlertOpen} onOpenChange={setDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-4 w-4 text-destructive" />
+              Delete this appointment?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">
+                {appointment.title}
+                {appointment.customer_name ? ` — ${appointment.customer_name}` : ""}
+              </span>
+              <br />
+              This action is permanent and cannot be undone. Were you trying to make a change instead?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            Deleted appointments are removed permanently and cannot be recovered.
+          </div>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <button
+              onClick={() => { setDeleteAlertOpen(false); onEdit() }}
+              className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit instead
+            </button>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
           className={cn(
@@ -131,7 +182,15 @@ export function AppointmentCard({
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
-          onClick={onDelete}
+          onSelect={(e) => {
+            e.preventDefault()
+            if (appointment.recurrence_group_id) {
+              // Recurring — go straight to the recurrence scope dialog
+              onDelete()
+            } else {
+              setDeleteAlertOpen(true)
+            }
+          }}
           className="gap-2 text-destructive focus:text-destructive"
         >
           <Trash2 className="h-4 w-4" />
@@ -139,5 +198,6 @@ export function AppointmentCard({
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+    </>
   )
 }
