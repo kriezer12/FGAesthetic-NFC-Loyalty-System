@@ -21,6 +21,7 @@ import {
   UserRound,
   FileText,
   CircleDot,
+  Repeat,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -127,6 +128,18 @@ export function AppointmentDetailPopover({
             <div className="flex items-center gap-2 text-muted-foreground">
               <UserRound className="h-3.5 w-3.5 shrink-0" />
               <span>{appointment.customer_name}</span>
+            </div>
+          )}
+
+          {/* Recurrence */}
+          {appointment.recurrence_days && appointment.recurrence_count && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Repeat className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Repeats every {appointment.recurrence_days} day(s)
+                {appointment.recurrence_count > 1 &&
+                  ` (${appointment.recurrence_count} times)`}
+              </span>
             </div>
           )}
 

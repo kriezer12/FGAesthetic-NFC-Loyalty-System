@@ -113,6 +113,7 @@ export default function TreatmentsPage() {
                         <TableHead>Service</TableHead>
                         <TableHead>Equipment</TableHead>
                         <TableHead>Product</TableHead>
+                        <TableHead className="text-center">Package</TableHead>
                         <TableHead className="text-right">Price</TableHead>
                         <TableHead className="text-right">Points</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -126,6 +127,11 @@ export default function TreatmentsPage() {
                               <TableCell className="font-medium">{s.name}</TableCell>
                               <TableCell className="text-muted-foreground">{s.equipment || "—"}</TableCell>
                               <TableCell className="text-muted-foreground">{s.product || "—"}</TableCell>
+                              <TableCell className="text-center">
+                                {s.is_package ? (
+                                  [s.session_count ? `${s.session_count}×` : null, s.recurrence_days ? `every ${s.recurrence_days}d` : "weekly"].filter(Boolean).join(" ") || "Yes"
+                                ) : "—"}
+                              </TableCell>
                               <TableCell className="text-right">₱{s.price.toFixed(2)}</TableCell>
                               <TableCell className="text-right">{s.points_value}</TableCell>
                               <TableCell className="text-right">
@@ -204,6 +210,9 @@ export default function TreatmentsPage() {
                   product: es?.product,
                   price: es?.price || 0,
                   points_value: es?.points_value || 0,
+                  is_package: es?.is_package || false,
+                  session_count: es?.session_count || undefined,
+                  recurrence_days: es?.recurrence_days || undefined,
                 }))}
                 placeholder="e.g. Deep Cleansing Facial"
               />
@@ -281,6 +290,46 @@ export default function TreatmentsPage() {
                 onChange={(e) => setEditingService((es) => ({ ...es!, points_value: parseInt(e.target.value, 10) || 0 }))}
                 placeholder="0"
               />
+            </div>
+
+            {/* Package flag + recurrence */}
+            <div className="grid gap-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="is-package"
+                  checked={editingService?.is_package || false}
+                  onCheckedChange={(v) => setEditingService((es) => ({
+                    ...es!,
+                    is_package: !!v,
+                    ...(!v && { session_count: undefined, recurrence_days: undefined }),
+                  }))}
+                />
+                <Label htmlFor="is-package">Package / Multi-session</Label>
+              </div>
+              {editingService?.is_package && (
+                <div className="grid gap-3">
+                  <div className="grid gap-1">
+                    <Label>Number of sessions</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={editingService?.session_count ?? ""}
+                      onChange={(e) => setEditingService((es) => ({ ...es!, session_count: parseInt(e.target.value, 10) || undefined }))}
+                      placeholder="e.g. 15"
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label>Days between sessions</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={editingService?.recurrence_days ?? ""}
+                      onChange={(e) => setEditingService((es) => ({ ...es!, recurrence_days: parseInt(e.target.value, 10) || undefined }))}
+                      placeholder="7 (weekly)"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button onClick={() => {

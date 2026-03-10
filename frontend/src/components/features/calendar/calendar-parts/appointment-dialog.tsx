@@ -22,7 +22,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { DatePicker } from "@/components/ui/date-picker"
 import { TimePicker } from "@/components/ui/time-picker"
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox"
+import { ServicePicker } from "./service-picker"
+import { supabase } from "@/lib/supabase"
 import { useCustomers } from "@/hooks/use-customers"
+import type { Service } from "@/types/service"
 import type {
   Appointment,
   AppointmentStatus,
@@ -110,7 +113,8 @@ export function AppointmentDialog({
   const { customers, loading: customersLoading, search: searchCustomers } = useCustomers()
 
   // ---- form state ----
-  const [title, setTitle]               = useState("")
+  const [serviceIds, setServiceIds]     = useState<string[]>([])
+  const [allServices, setAllServices]   = useState<Service[]>([])
   const [customerId, setCustomerId]     = useState("")
   const [customerName, setCustomerName] = useState("")
   const [staffId, setStaffId]           = useState("")
@@ -119,6 +123,8 @@ export function AppointmentDialog({
   const [endTime, setEndTime]           = useState("")
   const [status, setStatus]             = useState<AppointmentStatus>("scheduled")
   const [treatmentId, setTreatmentId]   = useState<string>("")
+  const [recurrenceCount, setRecurrenceCount] = useState(1)
+  const [recurrenceInterval, setRecurrenceInterval] = useState<number | undefined>(undefined)
   const [notes, setNotes]               = useState("")
   const [error, setError]               = useState("")
 
@@ -132,6 +138,54 @@ export function AppointmentDialog({
       })),
     [staff]
   )
+
+  // ---- fetch services for title derivation ----
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("services").select("*")
+      setAllServices((data || []) as Service[])
+    }
+    load()
+  }, [])
+
+  const serviceMap = useMemo(
+    () => new Map(allServices.map((s) => [s.id, s])),
+    [allServices],
+  )
+
+  // Derive title from selected services
+  const derivedTitle = useMemo(
+    () => serviceIds.map((id) => serviceMap.get(id)?.name).filter(Boolean).join(", "),
+    [serviceIds, serviceMap],
+  )
+
+  const derivedRecurrenceDays = useMemo(() => {
+    const days = new Set<number>()
+    serviceIds.forEach((id) => {
+      const svc = serviceMap.get(id)
+      if (svc?.recurrence_days != null) {
+        days.add(svc.recurrence_days)
+      }
+    })
+    if (days.size === 1) {
+      return Array.from(days)[0]
+    }
+    return undefined
+  }, [serviceIds, serviceMap])
+
+  const hasPackageSelected = useMemo(
+    () => serviceIds.some((id) => serviceMap.get(id)?.is_package),
+    [serviceIds, serviceMap],
+  )
+
+  // Auto-populate session count from a single selected package service
+  const derivedSessionCount = useMemo(() => {
+    const pkgServices = serviceIds
+      .map((id) => serviceMap.get(id))
+      .filter((s) => s?.is_package && s.session_count != null)
+    if (pkgServices.length === 1) return pkgServices[0]!.session_count!
+    return undefined
+  }, [serviceIds, serviceMap])
 
   const treatmentOptions: ComboboxOption[] = useMemo(() => {
     const cust = customers.find((c) => c.id === customerId)
@@ -188,7 +242,7 @@ export function AppointmentDialog({
   useEffect(() => {
     if (!open) return
     if (appointment) {
-      setTitle(appointment.title)
+      setServiceIds(appointment.service_ids ?? [])
       setCustomerId(appointment.customer_id ?? "")
       setCustomerName(appointment.customer_name ?? "")
       setStaffId(appointment.staff_id)
@@ -198,8 +252,10 @@ export function AppointmentDialog({
       setStatus(appointment.status)
       setTreatmentId(appointment.treatment_id ?? "")
       setNotes(appointment.notes ?? "")
+      setRecurrenceCount(appointment.recurrence_count ?? 1)
+      setRecurrenceInterval(appointment.recurrence_days)
     } else {
-      setTitle("")
+      setServiceIds([])
       setCustomerId(prefillCustomerId ?? "")
       setCustomerName(prefillCustomerName ?? "")
       setStaffId(prefillStaffId ?? staff[0]?.id ?? "")
@@ -214,16 +270,41 @@ export function AppointmentDialog({
       )
       setStatus("scheduled")
       setNotes("")
+      setRecurrenceCount(1)
+      setRecurrenceInterval(undefined)
     }
     setError("")
   }, [open, appointment, prefillStaffId, prefillStartMinutes, prefillCustomerId, prefillCustomerName, staff, interval, selectedDate])
 
+  // sync interval when package selection changes; default to 7 (weekly) if service has no interval set
+  useEffect(() => {
+    if (!hasPackageSelected) return
+    setRecurrenceInterval(derivedRecurrenceDays ?? 7)
+  }, [derivedRecurrenceDays, hasPackageSelected])
+
+  // auto-populate session count from the selected package service
+  useEffect(() => {
+    if (derivedSessionCount !== undefined) {
+      setRecurrenceCount(derivedSessionCount)
+    }
+  }, [derivedSessionCount])
+
   // ---- save handler ----
   const handleSave = () => {
     /* required fields */
-    if (!title.trim())           { setError("Title is required.");            return }
+    if (serviceIds.length === 0) { setError("Please select at least one service."); return }
     if (!staffId)                { setError("Please select a staff member."); return }
     if (!startTime || !endTime)  { setError("Start and end times are required."); return }
+    if (hasPackageSelected) {
+      if (recurrenceCount < 1) {
+        setError("Recurrence count must be at least 1.");
+        return
+      }
+      if (recurrenceCount > 1 && (recurrenceInterval == null || recurrenceInterval < 1)) {
+        setError("Please specify recurrence interval in days.");
+        return
+      }
+    }
 
     const startMin = timeInputToMinutes(startTime)
     const endMin   = timeInputToMinutes(endTime)
@@ -256,27 +337,27 @@ export function AppointmentDialog({
     const staffMember = staff.find((s) => s.id === staffId)!
 
     const appt: Appointment = {
-      id:            appointment?.id ?? generateId(),
-      customer_id:   customerId || appointment?.customer_id,
-      customer_name: customerName || undefined,
-      staff_id:      staffId,
-      staff_name:    staffMember.name,
-      title:         title.trim(),
-      treatment_id:  treatmentId || undefined,
-      treatment_name: treatmentOptions.find((t) => t.value === treatmentId)?.label,
-      start_time:    startDate.toISOString(),
-      end_time:      endDate.toISOString(),
-      status,
-      notes:         notes || undefined,
-      created_at:    appointment?.created_at ?? new Date().toISOString(),
-      updated_at:    new Date().toISOString(),
+      id:               appointment?.id ?? generateId(),
+      customer_id:      customerId || appointment?.customer_id,
+      customer_name:    customerName || undefined,
+      staff_id:         staffId,
+      staff_name:       staffMember.name,
+      title:            derivedTitle || "Appointment",
+      service_ids:      serviceIds.length > 0 ? serviceIds : undefined,
+      start_time:       startDate.toISOString(),
+      end_time:         endDate.toISOString(),
+      status:           status,
+      notes:            notes || undefined,
+      treatment_id:     treatmentId || undefined,
+      recurrence_days:  recurrenceInterval,
+      recurrence_count: recurrenceInterval ? recurrenceCount : undefined,
     }
     onSave(appt)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Appointment" : "New Appointment"}</DialogTitle>
           <DialogDescription>
@@ -286,17 +367,15 @@ export function AppointmentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
-          {/* Title */}
+        <div className="grid gap-4 py-2 overflow-y-auto overflow-x-hidden pr-1">
+          {/* Services */}
           <div className="grid gap-1.5">
-            <Label htmlFor="appt-title">
-              Title <span className="text-destructive">*</span>
+            <Label>
+              Services <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="appt-title"
-              placeholder="e.g. Facial Treatment"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+            <ServicePicker
+              value={serviceIds}
+              onChange={setServiceIds}
             />
           </div>
 
@@ -362,6 +441,34 @@ export function AppointmentDialog({
             </div>
           </div>
 
+          {/* Recurrence */}
+          {hasPackageSelected && (
+            <div className="rounded-md border bg-muted/40 p-3 grid gap-3">
+              <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label>Days between sessions</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={recurrenceInterval ?? ""}
+                    onChange={(e) => setRecurrenceInterval(parseInt(e.target.value, 10) || undefined)}
+                    placeholder="7 (weekly)"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Total sessions</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={recurrenceCount}
+                    onChange={(e) => setRecurrenceCount(parseInt(e.target.value, 10) || 1)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Status */}
           <div className="grid gap-1.5">
             <Label>Status</Label>
@@ -395,7 +502,7 @@ export function AppointmentDialog({
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           {isEdit && onDelete && appointment && (
             <Button
               variant="destructive"
