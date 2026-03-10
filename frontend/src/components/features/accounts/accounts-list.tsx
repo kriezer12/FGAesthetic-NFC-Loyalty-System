@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Trash2, Edit2, MoreHorizontal } from "lucide-react"
 import { Account, useAccounts } from "@/hooks/use-accounts"
 import { useAuth } from "@/contexts/auth-context"
+import { getAvatarSignedUrl } from "@/lib/supabase-storage"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -59,6 +60,53 @@ const StatusBadge = ({ isActive }: { isActive: boolean }) => {
     >
       {isActive ? "Active" : "Inactive"}
     </span>
+  )
+}
+
+const AccountAvatarCell = ({ account }: { account: Account }) => {
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const initial = (account.full_name || account.email).charAt(0).toUpperCase()
+
+  useEffect(() => {
+    if (account.avatar_url && account.avatar_url.includes("user-pictures")) {
+      const fetchSignedUrl = async () => {
+        try {
+          const pathMatch = account.avatar_url?.match(/user-pictures\/(.*?)(\?|$)/)
+          if (pathMatch) {
+            const path = pathMatch[1]
+            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+            if (signedUrl) {
+              setAvatarUrl(signedUrl)
+            } else {
+              setAvatarUrl(account.avatar_url || null)
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching signed URL:", error)
+          setAvatarUrl(account.avatar_url || null)
+        }
+      }
+      fetchSignedUrl()
+    } else {
+      setAvatarUrl(account.avatar_url || null)
+    }
+  }, [account.avatar_url])
+
+  return (
+    <div className="flex items-center gap-3">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={account.full_name || account.email}
+          className="h-8 w-8 rounded-full object-cover border border-border"
+        />
+      ) : (
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+          {initial}
+        </div>
+      )}
+      <span>{account.full_name || "-"}</span>
+    </div>
   )
 }
 
@@ -126,11 +174,9 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">Profile</TableHead>
               <TableHead onClick={() => handleSort('email')} className="cursor-pointer">
                 Email {sortKey === 'email' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
-              </TableHead>
-              <TableHead onClick={() => handleSort('full_name')} className="cursor-pointer">
-                Full Name {sortKey === 'full_name' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
               </TableHead>
               {isSuper && (
                 <TableHead onClick={() => handleSort('branch_name')} className="cursor-pointer">
@@ -152,15 +198,17 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
           <TableBody>
             {accounts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isSuper ? 7 : 6} className="text-center py-8">
+                <TableCell colSpan={isSuper ? 5 : 4} className="text-center py-8">
                   <p className="text-muted-foreground">No accounts found</p>
                 </TableCell>
               </TableRow>
             ) : (
               sortedAccounts.map((account) => (
                 <TableRow key={account.id}>
+                  <TableCell>
+                    <AccountAvatarCell account={account} />
+                  </TableCell>
                   <TableCell className="font-medium">{account.email}</TableCell>
-                  <TableCell>{account.full_name || "-"}</TableCell>
                   {isSuper && (
                     <TableCell>{account.branch_name || "-"}</TableCell>
                   )}

@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { LogOut, Settings, User } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+import { getAvatarSignedUrl } from "@/lib/supabase-storage"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,35 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
   const displayName = userProfile?.full_name || userEmail.split("@")[0]
   const userInitial = (userProfile?.full_name || userEmail).charAt(0).toUpperCase()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  // Convert public avatar URL to signed URL to bypass CORS
+  useEffect(() => {
+    if (userProfile?.avatar_url && userProfile.avatar_url.includes("user-pictures")) {
+      const fetchSignedUrl = async () => {
+        try {
+          // Extract path from public URL
+          const pathMatch = userProfile.avatar_url.match(/user-pictures\/(.*?)(\?|$)/)
+          if (pathMatch) {
+            const path = pathMatch[1]
+            // Generate signed URL with longer expiration (8 hours)
+            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+            if (signedUrl) {
+              setAvatarUrl(signedUrl)
+            } else {
+              setAvatarUrl(userProfile.avatar_url)
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching signed URL:", error)
+          setAvatarUrl(userProfile.avatar_url)
+        }
+      }
+      fetchSignedUrl()
+    } else {
+      setAvatarUrl(userProfile?.avatar_url || null)
+    }
+  }, [userProfile?.avatar_url])
 
   return (
     <>
@@ -30,11 +60,19 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
         <Button
           variant="ghost"
           size="icon"
-          className="relative rounded-full text-muted-foreground hover:text-foreground"
+          className="relative h-10 w-10 rounded-full p-0 text-muted-foreground hover:text-foreground"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold">
-            {userInitial || <User className="h-4 w-4" />}
-          </div>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="h-10 w-10 rounded-full object-cover border border-border"
+            />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+              {userInitial || <User className="h-4 w-4" />}
+            </div>
+          )}
           <span className="sr-only">User menu</span>
         </Button>
       </DropdownMenuTrigger>

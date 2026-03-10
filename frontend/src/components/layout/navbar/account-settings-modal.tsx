@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react"
-import { Camera, Loader2 } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Camera, Loader2, AlertCircle, CheckCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { uploadToSupabase, getAvatarSignedUrl } from "@/lib/supabase-storage"
+import { validateFile } from "@/lib/file-validation"
+import { convertToWebP, generateFileName } from "@/lib/image-utils"
 
 interface AccountSettingsModalProps {
   open: boolean
@@ -20,12 +23,21 @@ interface AccountSettingsModalProps {
 }
 
 const NAME_CHANGE_LIMIT = 5
+const AVATAR_BUCKET = "user-pictures"
 const currentMonth = () => new Date().toISOString().slice(0, 7) // "YYYY-MM"
 
 export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModalProps) {
   const { user, refreshUser, userProfile } = useAuth()
 
   const [fullName, setFullName] = useState("")
+  
+  // Avatar upload state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarProcessing, setAvatarProcessing] = useState(false)
+  const [avatarMsg, setAvatarMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   // Format role for display (e.g., "super_admin" -> "Super Admin")
   const formatRole = (role?: string): string => {
@@ -49,6 +61,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
   const [saving, setSaving]           = useState(false)
   const [profileMsg, setProfileMsg]   = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [passwordMsg, setPasswordMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [displayAvatarUrl, setDisplayAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -57,6 +70,11 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
           user?.email?.split("@")[0] ??
           ""
       )
+      // Get avatar from profile, or fallback to auth metadata
+      const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
+      setAvatarPreview(avatarUrl)
+      setAvatarFile(null)
+      setAvatarMsg(null)
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
@@ -64,6 +82,36 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       setPasswordMsg(null)
     }
   }, [open, user, userProfile])
+
+  // Convert public avatar URL to signed URL once, and cache it
+  useEffect(() => {
+    if (avatarPreview && avatarPreview.includes("user-pictures")) {
+      const fetchSignedUrl = async () => {
+        try {
+          // Extract path from public URL
+          const pathMatch = avatarPreview.match(/user-pictures\/(.*?)(\?|$)/)
+          if (pathMatch) {
+            const path = pathMatch[1]
+            // Generate signed URL with longer expiration (8 hours)
+            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+            if (signedUrl) {
+              setDisplayAvatarUrl(signedUrl)
+            } else {
+              setDisplayAvatarUrl(avatarPreview)
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching signed URL:", error)
+          // Fallback to public URL if signed URL fails
+          setDisplayAvatarUrl(avatarPreview)
+        }
+      }
+      fetchSignedUrl()
+    } else {
+      // Not a storage URL, use as-is
+      setDisplayAvatarUrl(avatarPreview)
+    }
+  }, [avatarPreview])
 
   const userInitial = (
     userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email ?? "?"
@@ -73,14 +121,93 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  async function handleSaveProfile() {
+  const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setAvatarMsg(null)
+    const errors = validateFile(file)
+
+    if (errors.length > 0) {
+      setAvatarMsg({ type: "error", text: errors.map((e) => e.message).join(", ") })
+      return
+    }
+
+    setAvatarFile(file)
+    const url = URL.createObjectURL(file)
+    setAvatarPreview(url)
+  }
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile || !user?.id) return
+
+    setAvatarProcessing(true)
+    setAvatarMsg(null)
+
+    try {
+      const processed = await convertToWebP(avatarFile, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.9,
+      })
+
+      setAvatarProcessing(false)
+      setAvatarUploading(true)
+
+      const fileName = generateFileName(avatarFile.name, "webp")
+      const path = `avatars/${user.id}/${fileName}`
+
+      const result = await uploadToSupabase(AVATAR_BUCKET, path, processed.blob)
+
+      if (!result.success || !result.url) {
+        throw new Error(result.error || "Upload failed")
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: {
+          avatar_url: result.url,
+        },
+      })
+
+      if (updateError) throw updateError
+
+      // Also try to update user_profiles if RLS allows it
+      await supabase
+        .from("user_profiles")
+        .update({ avatar_url: result.url })
+        .eq("id", user.id)
+      
+      // Silently ignore RLS errors - avatar is stored in auth metadata
+
+      await refreshUser()
+      setAvatarFile(null)
+      setAvatarMsg({ type: "success", text: "Avatar updated successfully!" })
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Upload failed"
+      setAvatarMsg({ type: "error", text: errorMsg })
+    } finally {
+      setAvatarProcessing(false)
+      setAvatarUploading(false)
+    }
+  }
+
+  const handleAvatarCancel = () => {
+    setAvatarFile(null)
+    const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
+    setAvatarPreview(avatarUrl)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  async function handleUpdateProfile() {
     if (nameChangeLimitReached) return
     setSaving(true)
     setProfileMsg(null)
 
     const newCount = nameChangeCount + 1
 
-    const [{ error: authError }, { error: profileError }] = await Promise.all([
+    const [authResult, profileResult] = await Promise.all([
       supabase.auth.updateUser({
         data: {
           full_name: fullName.trim(),
@@ -94,6 +221,8 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
         .eq("id", user!.id),
     ])
 
+    const authError = authResult.error
+    const profileError = profileResult.error
     const error = authError ?? profileError
     if (error) {
       setSaving(false)
@@ -157,7 +286,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent overlayBlur="subtle" className="max-w-md w-full" variant="top-right-centered">
+      <DialogContent overlayBlur="subtle" className="max-w-md w-full">
         <DialogHeader>
           <DialogTitle>Account Settings</DialogTitle>
           <DialogDescription>
@@ -175,24 +304,96 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             {/* Avatar */}
             <div className="flex items-center gap-4">
               <div className="relative group w-16 h-16 shrink-0">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold select-none">
-                  {userInitial}
-                </div>
-                {/* Change overlay – WIP webp */}
+                {displayAvatarUrl ? (
+                  <img
+                    src={displayAvatarUrl}
+                    alt="Avatar"
+                    className="h-16 w-16 rounded-full object-cover border border-border"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold select-none">
+                    {userInitial}
+                  </div>
+                )}
+                {/* Change overlay */}
                 <button
                   type="button"
-                  disabled
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-not-allowed"
-                  title="Photo upload coming soon"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarUploading || avatarProcessing}
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Camera className="w-5 h-5 text-white" />
+                  {avatarProcessing || avatarUploading ? (
+                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-white" />
+                  )}
                 </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFileSelect}
+                  className="hidden"
+                  disabled={avatarUploading || avatarProcessing}
+                />
               </div>
               <div className="flex flex-col gap-0.5">
                 <p className="text-sm font-medium leading-none">{fullName || "—"}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
               </div>
             </div>
+
+            {/* Avatar Upload Actions */}
+            {avatarFile && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleAvatarUpload}
+                  disabled={avatarUploading || avatarProcessing}
+                  className="gap-2 flex-1"
+                >
+                  {avatarProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : avatarUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    "Upload Photo"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAvatarCancel}
+                  disabled={avatarUploading || avatarProcessing}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+
+            {/* Avatar Messages */}
+            {avatarMsg && (
+              <div
+                className={`flex gap-2 p-3 rounded-md text-xs ${
+                  avatarMsg.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}
+              >
+                {avatarMsg.type === "success" ? (
+                  <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                )}
+                <p>{avatarMsg.text}</p>
+              </div>
+            )}
 
             {/* Fields */}
             <div className="flex flex-col gap-4">
@@ -253,7 +454,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             <div className="flex justify-end">
               <Button
                 size="sm"
-                onClick={handleSaveProfile}
+                onClick={handleUpdateProfile}
                 disabled={saving || !fullName.trim() || nameChangeLimitReached}
               >
                 {saving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}

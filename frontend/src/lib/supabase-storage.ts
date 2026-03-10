@@ -191,3 +191,27 @@ export async function fileExists(
     return false
   }
 }
+/**
+ * Get a signed URL for an avatar image (bypasses CORS issues)
+ */
+export async function getAvatarSignedUrl(
+  bucket: string,
+  path: string,
+  expirationSeconds: number = 3600
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(path, expirationSeconds)
+
+    if (error || !data?.signedUrl) {
+      console.error("Error creating signed URL:", error)
+      return null
+    }
+
+    return data.signedUrl
+  } catch (error) {
+    console.error("Error getting signed URL:", error)
+    return null
+  }
+}
