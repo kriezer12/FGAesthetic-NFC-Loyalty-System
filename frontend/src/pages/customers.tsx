@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useEffect, useMemo, useState, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Award,
   Calendar,
@@ -19,6 +19,10 @@ import {
   X,
   Archive,
   ArchiveRestore,
+  Image,
+  FileText,
+  Trash2,
+  Download,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useStaff } from "@/hooks/use-staff"
@@ -29,6 +33,7 @@ import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -42,6 +47,8 @@ import {
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
 import { supabase } from "@/lib/supabase"
+import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
+import { convertToWebP, downloadImageAsJpeg } from "@/lib/image-utils"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -54,13 +61,15 @@ import type { IntervalMinutes } from "@/types/appointment"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
 
 export default function CustomersPage() {
-  const location = useLocation()
   const navigate = useNavigate()
 
   const [cameFromNfc, setCameFromNfc] = useState(false)
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
+  useEffect(() => {
+    // This will be set by filterCustomers()
+  }, [])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
@@ -148,6 +157,20 @@ export default function CustomersPage() {
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
   const [prefillCustomer, setPrefillCustomer] = useState<Customer | null>(null)
   const { staff = [] } = useStaff()
+  
+  // Treatment documentation state
+  const [treatmentDocModalOpen, setTreatmentDocModalOpen] = useState(false)
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null)
+  const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' }>>([])
+  const [treatmentConsentPath, setTreatmentConsentPath] = useState<string>("")
+  const [treatmentConsentUrl, setTreatmentConsentUrl] = useState<string>("")
+  const [treatmentConsentUploaded, setTreatmentConsentUploaded] = useState(false)
+  const [treatmentGalleryError, setTreatmentGalleryError] = useState("")
+  const [treatmentConsentError, setTreatmentConsentError] = useState("")
+  const [treatmentGalleryUploading, setTreatmentGalleryUploading] = useState(false)
+  const [treatmentConsentUploading, setTreatmentConsentUploading] = useState(false)
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
+  
   const { appointments, addAppointment } = useAppointments()
   const [selectedDate] = useState(new Date())
   const [interval] = useState<IntervalMinutes>(DEFAULT_INTERVAL)
@@ -236,6 +259,179 @@ export default function CustomersPage() {
     }
   }
 
+  // Treatment-specific documentation handlers
+  const loadTreatmentPhotos = async (appointmentId: string, customerId: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("customer-picture")
+        .list(`customer-gallery/${customerId}/appointment-${appointmentId}`)
+      
+      if (error) {
+        console.log("No photos folder for treatment yet")
+        setTreatmentPhotos([])
+        return
+      }
+
+      const photos = (data || [])
+        .filter(f => !f.name.includes('_consent_'))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+      const paths = photos.map(f => `customer-gallery/${customerId}/appointment-${appointmentId}/${f.name}`)
+      const { data: signedData } = await supabase.storage
+        .from("customer-picture")
+        .createSignedUrls(paths, 3600)
+
+      const signedMap = new Map(
+        (signedData ?? []).map((s) => [s.path ?? "", s.signedUrl ?? ""])
+      )
+
+      const photoList = photos.map(f => {
+        const path = `customer-gallery/${customerId}/appointment-${appointmentId}/${f.name}`
+        const { data: urlData } = supabase.storage
+          .from("customer-picture")
+          .getPublicUrl(path)
+        return {
+          id: f.name,
+          path,
+          url: signedMap.get(path) ?? urlData.publicUrl,
+          type: f.name.includes('_before_') ? 'before' as const : 'after' as const
+        }
+      })
+
+      setTreatmentPhotos(photoList)
+    } catch (err) {
+      console.error("Error loading treatment photos:", err)
+      setTreatmentPhotos([])
+    }
+  }
+
+  const loadTreatmentConsentForm = async (appointmentId: string, customerId: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("customer-picture")
+        .list(`customer-treatment-consents/${customerId}/appointment-${appointmentId}`)
+      
+      if (error) {
+        console.log("No consent form folder for treatment yet")
+        setTreatmentConsentPath("")
+        setTreatmentConsentUrl("")
+        setTreatmentConsentUploaded(false)
+        return
+      }
+
+      const consentFiles = (data || [])
+        .filter(f => f.name.includes('_consent_'))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+      if (consentFiles.length > 0) {
+        const mostRecentFile = consentFiles[0]
+        const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentFile.name}`
+        const signedUrl = await getSignedUrl("customer-picture", path, 3600)
+        setTreatmentConsentPath(path)
+        setTreatmentConsentUrl(signedUrl)
+        setTreatmentConsentUploaded(true)
+      } else {
+        setTreatmentConsentPath("")
+        setTreatmentConsentUrl("")
+        setTreatmentConsentUploaded(false)
+      }
+    } catch (err) {
+      console.warn("Failed to load treatment consent form:", err)
+      setTreatmentConsentPath("")
+      setTreatmentConsentUrl("")
+      setTreatmentConsentUploaded(false)
+    }
+  }
+
+  const handleTreatmentPhotoUpload = async (file: File, photoType: 'before' | 'after') => {
+    if (!selectedAppointment) return
+    
+    setTreatmentGalleryError("")
+    setTreatmentGalleryUploading(true)
+    try {
+      const processed = await convertToWebP(file, { maxWidth: 2000, maxHeight: 2000, quality: 0.85 })
+      const timestamp = Date.now()
+      const filename = `${selectedAppointment.id}_${photoType}_${timestamp}.webp`
+      const path = `customer-gallery/${selectedAppointment.customer_id}/appointment-${selectedAppointment.id}/${filename}`
+      
+      const uploadResult = await uploadToSupabase("customer-picture", path, processed.blob)
+      
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || "Upload failed")
+      }
+
+      await loadTreatmentPhotos(selectedAppointment.id, selectedAppointment.customer_id)
+    } catch (err) {
+      console.error("Error uploading treatment photo:", err)
+      setTreatmentGalleryError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setTreatmentGalleryUploading(false)
+    }
+  }
+
+  const handleTreatmentConsentFormUpload = async (file: File) => {
+    if (!selectedAppointment) return
+    
+    setTreatmentConsentError("")
+    setTreatmentConsentUploading(true)
+    try {
+      const processed = await convertToWebP(file, { maxWidth: 2000, maxHeight: 2000, quality: 0.85 })
+      const timestamp = Date.now()
+      const filename = `${selectedAppointment.id}_consent_${timestamp}.webp`
+      const path = `customer-treatment-consents/${selectedAppointment.customer_id}/appointment-${selectedAppointment.id}/${filename}`
+      
+      const uploadResult = await uploadToSupabase("customer-picture", path, processed.blob)
+      
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || "Upload failed")
+      }
+
+      await loadTreatmentConsentForm(selectedAppointment.id, selectedAppointment.customer_id)
+      setTreatmentConsentError("")
+    } catch (err) {
+      console.error("Error uploading treatment consent form:", err)
+      setTreatmentConsentError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setTreatmentConsentUploading(false)
+    }
+  }
+
+  const handleDeleteTreatmentPhoto = async (photo: { id: string; path: string; url: string; type: 'before' | 'after' }) => {
+    try {
+      const { error } = await supabase.storage
+        .from("customer-picture")
+        .remove([photo.path])
+      
+      if (error) throw error
+      
+      setTreatmentPhotos(prev => prev.filter(p => p.id !== photo.id))
+    } catch (err) {
+      console.error("Error deleting treatment photo:", err)
+      setTreatmentGalleryError("Failed to delete photo")
+    }
+  }
+
+  const handleDeleteTreatmentConsentForm = async () => {
+    if (!treatmentConsentPath) return
+    
+    setTreatmentConsentError("")
+    try {
+      const { error } = await supabase.storage
+        .from("customer-picture")
+        .remove([treatmentConsentPath])
+      
+      if (error) throw error
+      
+      setTreatmentConsentPath("")
+      setTreatmentConsentUrl("")
+      setTreatmentConsentUploaded(false)
+      setTreatmentConsentError("")
+    } catch (err) {
+      console.error("Error deleting treatment consent form:", err)
+      setTreatmentConsentError(err instanceof Error ? err.message : "Failed to delete consent form")
+    }
+  }
+
   const filterCustomers = useCallback(() => {
     let filtered = [...customers]
 
@@ -270,38 +466,35 @@ export default function CustomersPage() {
       } else if (statusFilter === "archived") {
         filtered = filtered.filter(isArchivedClient)
       }
-    } else {
-      // default: hide archived clients unless user explicitly requests them
-      filtered = filtered.filter((c) => !isArchivedClient(c))
     }
 
-    // sort by status so that active come first, inactive next, archived last
-    filtered.sort((a, b) => statusRank(a) - statusRank(b))
-
-    // then apply metric sorting if requested
+    // sorting
     if (sortMetric) {
       filtered.sort((a, b) => {
-        const aValue = sortMetric === "points" ? (a.points || 0) : (a.visits || 0)
-        const bValue = sortMetric === "points" ? (b.points || 0) : (b.visits || 0)
-        return sortOrder === "asc" ? aValue - bValue : bValue - aValue
+        let aVal = 0,
+          bVal = 0
+        if (sortMetric === "points") {
+          aVal = a.points || 0
+          bVal = b.points || 0
+        } else if (sortMetric === "visits") {
+          aVal = a.visits || 0
+          bVal = b.visits || 0
+        }
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal
+      })
+    } else {
+      // default: sort by status then by recent creation date
+      filtered.sort((a, b) => {
+        const rankDiff = statusRank(a) - statusRank(b)
+        if (rankDiff !== 0) return rankDiff
+        return new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime()
       })
     }
 
     setFilteredCustomers(filtered)
-    setCurrentPage(1)
-  }, [
-    customers,
-    genderFilter,
-    searchQuery,
-    skinTypeFilter,
-    sortMetric,
-    sortOrder,
-    statusFilter,
-  ])
+  }, [searchQuery, skinTypeFilter, genderFilter, statusFilter, sortMetric, sortOrder, customers])
 
-  useEffect(() => {
-    filterCustomers()
-  }, [filterCustomers])
+  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric)
 
   const clearFilters = () => {
     setSearchQuery("")
@@ -312,29 +505,11 @@ export default function CustomersPage() {
     setSortOrder("desc")
   }
 
-  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric)
-
-  // if navigation brought a customer object, open the modal
+  // Filter customers whenever state changes
   useEffect(() => {
-    const { customer, fromNfc } = (location.state as any) || {}
-    if (customer) {
-      setSelectedCustomer(customer)
-    }
-    if (fromNfc) {
-      setCameFromNfc(true)
-    }
-    // clear the state so it doesn't reopen later
-    if (customer || fromNfc) {
-      window.history.replaceState({}, "", window.location.pathname)
-    }
-  }, [location.state])
-
-  // when customer is selected open, reset modal view to details
-  useEffect(() => {
-    if (selectedCustomer) {
-      setModalView("details")
-    }
-  }, [selectedCustomer])
+    filterCustomers()
+    setCurrentPage(1)
+  }, [filterCustomers])
 
   // if we opened from the NFC scanner, clear the flag when the modal closes
   // and make sure we stay on the same dashboard/customers route (clears state)
@@ -840,7 +1015,7 @@ export default function CustomersPage() {
                     )}
                   </div>
                 </>
-              ) : (
+              ) : modalView === "treatments" ? (
                 <> {/* treatments view */}
                   {selectedCustomer && (
                     <>
@@ -857,10 +1032,25 @@ export default function CustomersPage() {
                               .filter((a) => a.customer_id === selectedCustomer?.id)
                               .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
                               .map((a) => (
-                                <Card key={a.id} className="py-0 gap-0">
+                                <Card 
+                                  key={a.id} 
+                                  className="py-0 gap-0 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary hover:border-l-primary/80"
+                                  onClick={() => {
+                                    if (a.customer_id && a.id) {
+                                      setSelectedAppointment(a)
+                                      setTreatmentPhotos([])
+                                      setTreatmentConsentUrl("")
+                                      setTreatmentConsentUploaded(false)
+                                      setTreatmentConsentPath("")
+                                      loadTreatmentPhotos(a.id, a.customer_id)
+                                      loadTreatmentConsentForm(a.id, a.customer_id)
+                                      setTreatmentDocModalOpen(true)
+                                    }
+                                  }}
+                                >
                                   <CardContent className="p-4">
                                     <div className="flex items-start justify-between">
-                                      <div className="space-y-1">
+                                      <div className="space-y-1 flex-1">
                                         <p className="font-medium text-sm">{a.title}</p>
                                         {a.treatment_name && (
                                           <p className="text-xs text-muted-foreground">
@@ -873,7 +1063,7 @@ export default function CustomersPage() {
                                           </p>
                                         )}
                                       </div>
-                                      <div className="text-right space-y-1">
+                                      <div className="text-right space-y-1 flex-shrink-0 ml-4">
                                         <p className="text-sm font-medium">
                                           {new Date(a.start_time).toLocaleDateString(undefined, {
                                             year: "numeric",
@@ -897,6 +1087,9 @@ export default function CustomersPage() {
                                           )}
                                         </p>
                                       </div>
+                                      <div className="ml-4 flex-shrink-0">
+                                        <FileText className="h-5 w-5 text-muted-foreground" />
+                                      </div>
                                     </div>
                                     {a.notes && (
                                       <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
@@ -912,7 +1105,7 @@ export default function CustomersPage() {
                     </>
                   )}
                 </>
-              )}
+              ) : null}
 
               <div className="space-y-3 pb-2 md:hidden">
                 <Separator />
@@ -951,6 +1144,262 @@ export default function CustomersPage() {
               </div>
             </div>
             </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Treatment Documentation Modal */}
+      <Dialog open={treatmentDocModalOpen} onOpenChange={setTreatmentDocModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0">
+          <div className="px-6 pt-6 pb-4 border-b">
+            <DialogHeader>
+              <DialogTitle className="text-xl">
+                Treatment Documentation - {selectedAppointment?.title}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedAppointment?.treatment_name && `Treatment: ${selectedAppointment.treatment_name}`}
+                {selectedAppointment?.start_time && (
+                  <>, {new Date(selectedAppointment.start_time).toLocaleDateString()}</>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <ScrollArea className="flex-1 w-full overflow-y-auto pr-3">
+            <div className="space-y-6 px-6 py-4">
+              {/* Hidden file inputs */}
+              <input
+                id="treatment-before-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={treatmentGalleryUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleTreatmentPhotoUpload(file, 'before')
+                  }
+                  e.currentTarget.value = ''
+                }}
+              />
+              <input
+                id="treatment-after-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={treatmentGalleryUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleTreatmentPhotoUpload(file, 'after')
+                  }
+                  e.currentTarget.value = ''
+                }}
+              />
+              <input
+                id="treatment-consent-form-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={treatmentConsentUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleTreatmentConsentFormUpload(file)
+                  }
+                  e.currentTarget.value = ''
+                }}
+              />
+
+              {/* Error Messages */}
+              {treatmentGalleryError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm text-red-700">{treatmentGalleryError}</p>
+                </div>
+              )}
+              {treatmentConsentError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm text-red-700">{treatmentConsentError}</p>
+                </div>
+              )}
+
+              {/* Gallery Display */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Before Photos Column */}
+                  <div className="space-y-3">
+                    <h6 className="text-sm font-semibold text-muted-foreground">Before</h6>
+                  {treatmentPhotos.filter(p => p.type === 'before').length > 0 ? (
+                    treatmentPhotos.filter(p => p.type === 'before').map((photo) => (
+                      <div key={photo.id} className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
+                        <div className="bg-muted aspect-square flex items-center justify-center relative cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(photo.url)}>
+                          <img 
+                            src={photo.url} 
+                            alt={photo.type}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none'
+                            }}
+                          />
+                        </div>
+                        <div className="p-2 bg-background flex items-center justify-between border-t">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
+                              onClick={() => downloadImageAsJpeg(photo.url, `${photo.type}-photo`)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                              onClick={() => handleDeleteTreatmentPhoto(photo)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <button
+                      className="w-full aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={treatmentGalleryUploading}
+                      onClick={() => document.getElementById('treatment-before-input')?.click()}
+                    >
+                      <div className="bg-primary/10 p-2 rounded-lg">
+                        <Image className="h-5 w-5 text-primary" />
+                      </div>
+                      <p className="text-xs font-semibold">Upload Before</p>
+                    </button>
+                  )}
+                </div>
+
+                {/* After Photos Column */}
+                <div className="space-y-3">
+                  <h6 className="text-sm font-semibold text-muted-foreground">After</h6>
+                  {treatmentPhotos.filter(p => p.type === 'after').length > 0 ? (
+                    treatmentPhotos.filter(p => p.type === 'after').map((photo) => (
+                      <div key={photo.id} className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
+                        <div className="bg-muted aspect-square flex items-center justify-center relative cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(photo.url)}>
+                          <img 
+                            src={photo.url} 
+                            alt={photo.type}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none'
+                            }}
+                          />
+                        </div>
+                        <div className="p-2 bg-background flex items-center justify-between border-t">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
+                              onClick={() => downloadImageAsJpeg(photo.url, `${photo.type}-photo`)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                              onClick={() => handleDeleteTreatmentPhoto(photo)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <button
+                      className="w-full aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={treatmentGalleryUploading}
+                      onClick={() => document.getElementById('treatment-after-input')?.click()}
+                    >
+                      <div className="bg-primary/10 p-2 rounded-lg">
+                        <Image className="h-5 w-5 text-primary" />
+                      </div>
+                      <p className="text-xs font-semibold">Upload After</p>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+              {/* Consent Form Display */}
+              <div className="space-y-3">
+                <h6 className="text-sm font-semibold text-muted-foreground">Consent Form</h6>
+                {treatmentConsentUploaded && treatmentConsentUrl ? (
+                  <div className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
+                    <div className="bg-muted aspect-video flex items-center justify-center cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(treatmentConsentUrl)}>
+                      <img 
+                        src={treatmentConsentUrl}
+                        alt="Consent Form"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none'
+                        }}
+                      />
+                    </div>
+                    <div className="p-2 bg-background flex items-center justify-between border-t">
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
+                          onClick={() => downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                          onClick={handleDeleteTreatmentConsentForm}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="w-full py-4 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={treatmentConsentUploading}
+                    onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
+                  >
+                    <div className="bg-blue-100 p-2 rounded-lg">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <p className="text-xs font-semibold">Upload Consent Form</p>
+                  </button>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enlarged Image Dialog */}
+      <Dialog open={!!enlargedImage} onOpenChange={(open) => !open && setEnlargedImage(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Image Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center w-full h-full">
+            {enlargedImage && (
+              <img
+                src={enlargedImage}
+                alt="Enlarged preview"
+                className="max-w-full max-h-[70vh] object-contain"
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
