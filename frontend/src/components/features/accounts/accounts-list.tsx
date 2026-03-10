@@ -68,28 +68,25 @@ const AccountAvatarCell = ({ account }: { account: Account }) => {
   const initial = (account.full_name || account.email).charAt(0).toUpperCase()
 
   useEffect(() => {
-    if (account.avatar_url && account.avatar_url.includes("user-pictures")) {
-      const fetchSignedUrl = async () => {
+    const generateAvatarUrl = async () => {
+      if (account.avatar_url && account.avatar_url.includes("user-pictures")) {
         try {
-          const pathMatch = account.avatar_url?.match(/user-pictures\/(.*?)(\?|$)/)
+          const pathMatch = account.avatar_url.match(/user-pictures\/(.*?)(\?|$)/)
           if (pathMatch) {
             const path = pathMatch[1]
             const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
-            if (signedUrl) {
-              setAvatarUrl(signedUrl)
-            } else {
-              setAvatarUrl(account.avatar_url || null)
-            }
+            setAvatarUrl(signedUrl || account.avatar_url)
           }
         } catch (error) {
           console.error("Error fetching signed URL:", error)
-          setAvatarUrl(account.avatar_url || null)
+          setAvatarUrl(account.avatar_url)
         }
+      } else {
+        setAvatarUrl(account.avatar_url || null)
       }
-      fetchSignedUrl()
-    } else {
-      setAvatarUrl(account.avatar_url || null)
     }
+
+    generateAvatarUrl()
   }, [account.avatar_url])
 
   return (

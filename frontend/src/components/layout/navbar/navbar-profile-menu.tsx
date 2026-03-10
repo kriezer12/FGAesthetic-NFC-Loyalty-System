@@ -25,32 +25,28 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  // Convert public avatar URL to signed URL to bypass CORS
+  // Convert public avatar URL to signed URL immediately for faster display
   useEffect(() => {
-    if (userProfile?.avatar_url && userProfile.avatar_url.includes("user-pictures")) {
-      const fetchSignedUrl = async () => {
+    const generateAvatarUrl = async () => {
+      if (userProfile?.avatar_url && userProfile.avatar_url.includes("user-pictures")) {
         try {
-          // Extract path from public URL
           const pathMatch = userProfile.avatar_url.match(/user-pictures\/(.*?)(\?|$)/)
           if (pathMatch) {
             const path = pathMatch[1]
             // Generate signed URL with longer expiration (8 hours)
             const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
-            if (signedUrl) {
-              setAvatarUrl(signedUrl)
-            } else {
-              setAvatarUrl(userProfile.avatar_url)
-            }
+            setAvatarUrl(signedUrl || userProfile.avatar_url)
           }
         } catch (error) {
           console.error("Error fetching signed URL:", error)
           setAvatarUrl(userProfile.avatar_url)
         }
+      } else {
+        setAvatarUrl(userProfile?.avatar_url || null)
       }
-      fetchSignedUrl()
-    } else {
-      setAvatarUrl(userProfile?.avatar_url || null)
     }
+    
+    generateAvatarUrl()
   }, [userProfile?.avatar_url])
 
   return (

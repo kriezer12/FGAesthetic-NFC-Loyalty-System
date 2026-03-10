@@ -34,7 +34,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
   // Avatar upload state
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [_avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProcessing, setAvatarProcessing] = useState(false)
   const [avatarMsg, setAvatarMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -73,6 +73,32 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       // Get avatar from profile, or fallback to auth metadata
       const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
       setAvatarPreview(avatarUrl)
+      
+      // Generate signed URL immediately for faster display
+      if (avatarUrl && avatarUrl.includes("user-pictures")) {
+        const generateSignedUrl = async () => {
+          try {
+            const pathMatch = avatarUrl.match(/user-pictures\/(.*?)(\?|$)/)
+            if (pathMatch) {
+              const path = pathMatch[1]
+              const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+              if (signedUrl) {
+                setDisplayAvatarUrl(signedUrl)
+              } else {
+                setDisplayAvatarUrl(avatarUrl)
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching signed URL:", error)
+            setDisplayAvatarUrl(avatarUrl)
+          }
+        }
+        generateSignedUrl()
+      } else {
+        // Not a storage URL, use as-is
+        setDisplayAvatarUrl(avatarUrl)
+      }
+      
       setAvatarFile(null)
       setAvatarMsg(null)
       setCurrentPassword("")
@@ -82,36 +108,6 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       setPasswordMsg(null)
     }
   }, [open, user, userProfile])
-
-  // Convert public avatar URL to signed URL once, and cache it
-  useEffect(() => {
-    if (avatarPreview && avatarPreview.includes("user-pictures")) {
-      const fetchSignedUrl = async () => {
-        try {
-          // Extract path from public URL
-          const pathMatch = avatarPreview.match(/user-pictures\/(.*?)(\?|$)/)
-          if (pathMatch) {
-            const path = pathMatch[1]
-            // Generate signed URL with longer expiration (8 hours)
-            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
-            if (signedUrl) {
-              setDisplayAvatarUrl(signedUrl)
-            } else {
-              setDisplayAvatarUrl(avatarPreview)
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching signed URL:", error)
-          // Fallback to public URL if signed URL fails
-          setDisplayAvatarUrl(avatarPreview)
-        }
-      }
-      fetchSignedUrl()
-    } else {
-      // Not a storage URL, use as-is
-      setDisplayAvatarUrl(avatarPreview)
-    }
-  }, [avatarPreview])
 
   const userInitial = (
     userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email ?? "?"
