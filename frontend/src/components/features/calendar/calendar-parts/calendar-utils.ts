@@ -168,7 +168,7 @@ export function isSameDay(a: Date, b: Date): boolean {
   )
 }
 
-/** Simple unique-enough ID generator for client-side use. */
+/** Generate a RFC-4122 compliant UUID for use as Supabase record IDs. */
 export function generateId(): string {
-  return `apt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  return crypto.randomUUID()
 }

@@ -17,10 +17,11 @@ import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { formatTime, minutesSinceMidnight } from "./calendar-utils"
 import {
   Clock,
+  Briefcase,
   User,
-  UserRound,
   FileText,
   CircleDot,
+  Repeat,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -114,29 +115,52 @@ export function AppointmentDetailPopover({
             </span>
           </div>
 
-          {/* Staff */}
-          {appointment.staff_name && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-3.5 w-3.5 shrink-0" />
-              <span>{appointment.staff_name}</span>
-            </div>
-          )}
+          {/* Staff & Customer */}
+          <div className="flex flex-col gap-2">
+            {/* Staff */}
+            {appointment.staff_name && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950 p-2.5 border border-blue-200 dark:border-blue-800">
+                <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide mb-1">Staff</p>
+                <div className="flex items-center gap-1.5">
+                  <Briefcase className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="text-xs font-medium text-foreground">{appointment.staff_name}</span>
+                </div>
+              </div>
+            )}
 
-          {/* Customer */}
-          {appointment.customer_name && (
+            {/* Customer */}
+            {appointment.customer_name && (
+              <div className="rounded-md bg-amber-50 dark:bg-amber-950 p-2.5 border border-amber-200 dark:border-amber-800">
+                <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1">Customer</p>
+                <div className="flex items-center gap-1.5">
+                  <User className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="text-xs font-medium text-foreground">{appointment.customer_name}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recurrence */}
+          {appointment.recurrence_days && appointment.recurrence_count && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <UserRound className="h-3.5 w-3.5 shrink-0" />
-              <span>{appointment.customer_name}</span>
+              <Repeat className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Repeats every {appointment.recurrence_days} day(s)
+                {appointment.recurrence_count > 1 &&
+                  ` (${appointment.recurrence_count} times)`}
+              </span>
             </div>
           )}
 
           {/* Notes */}
           {appointment.notes && (
-            <div className="flex items-start gap-2 text-muted-foreground">
-              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span className="whitespace-pre-wrap text-xs leading-relaxed">
-                {appointment.notes}
-              </span>
+            <div className="flex items-start gap-2">
+              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1 rounded-md bg-muted/50 px-2 py-1.5">
+                <p className="whitespace-pre-wrap break-all text-xs leading-relaxed text-muted-foreground">
+                  {appointment.notes}
+                </p>
+              </div>
             </div>
           )}
         </div>

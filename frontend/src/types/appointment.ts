@@ -20,6 +20,14 @@ export interface Appointment {
   staff_id: string
   staff_name: string
   title: string
+  /** IDs of selected services from the service catalog */
+  service_ids?: string[]
+  /** days interval for recurring appointments (if any) */
+  recurrence_days?: number
+  /** total number of occurrences (including first) */
+  recurrence_count?: number
+  /** shared ID linking all appointments in a recurring series */
+  recurrence_group_id?: string
   /** optional reference to a treatment package chosen for this appointment */
   treatment_id?: string
   /** denormalized label since we don't join with customers.treatments on every query */
@@ -48,6 +56,8 @@ export interface BlockedTime {
 }
 
 export type IntervalMinutes = 15 | 30 | 60
+
+export type ViewMode = "day" | "week" | "month"
 
 export interface ClinicHours {
   open: number  // hour of day 0-23
