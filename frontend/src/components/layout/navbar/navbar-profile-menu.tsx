@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { LogOut, Settings, User } from "lucide-react"
 import { LogOut, Settings, User, Sun, Moon } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { getAvatarSignedUrl } from "@/lib/supabase-storage"
