@@ -20,6 +20,8 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    // Allow requests forwarded by ngrok during remote testing.
+    allowedHosts: ["localhost", "127.0.0.1", ".ngrok-free.dev", ".ngrok.app"],
     // Use native FS events inside the container; fall back to polling
     // only when the CHOKIDAR_USEPOLLING env var is set (Docker on
     // some hosts still needs it).
