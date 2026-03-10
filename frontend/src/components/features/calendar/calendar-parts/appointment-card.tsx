@@ -18,7 +18,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, Repeat } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -94,8 +94,11 @@ export function AppointmentCard({
               )}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold leading-tight">
+              <p className="truncate text-xs font-semibold leading-tight flex items-center">
                 {appointment.title}
+                {appointment.recurrence_days && (
+                  <Repeat className="ml-1 h-3 w-3 text-muted-foreground" />
+                )}
               </p>
               {renderHeight > 40 && appointment.customer_name && (
                 <p className="truncate text-[10px] text-muted-foreground">

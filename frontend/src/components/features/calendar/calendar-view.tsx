@@ -13,6 +13,7 @@ import type { Appointment, IntervalMinutes, StaffMember } from "@/types/appointm
 import {
   DEFAULT_INTERVAL,
 } from "./calendar-parts/calendar-config"
+import { generateId } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
@@ -173,16 +174,41 @@ export function CalendarView() {
   )
 
   /** Save from dialog (create or edit). */
+  const addDaysToIso = (iso: string, days: number) => {
+    const d = new Date(iso)
+    d.setDate(d.getDate() + days)
+    return d.toISOString()
+  }
+
   const handleSave = useCallback(async (appt: Appointment) => {
     try {
       const isNew = !appointments.find((a) => a.id === appt.id)
-      
+
       if (isNew) {
-        await addAppointment(appt)
+        // if recurrence requested, add sequence
+        if (appt.recurrence_days && appt.recurrence_count && appt.recurrence_count > 1) {
+          let current = appt
+          // first appointment
+          await addAppointment(current)
+          for (let i = 1; i < appt.recurrence_count; i++) {
+            const next: Appointment = {
+              ...current,
+              id: generateId(),
+              start_time: addDaysToIso(current.start_time, appt.recurrence_days),
+              end_time: addDaysToIso(current.end_time, appt.recurrence_days),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+            await addAppointment(next)
+            current = next
+          }
+        } else {
+          await addAppointment(appt)
+        }
       } else {
         await updateAppointment(appt.id, appt)
       }
-      
+
       setDialogOpen(false)
       setEditingAppointment(null)
     } catch (err) {
