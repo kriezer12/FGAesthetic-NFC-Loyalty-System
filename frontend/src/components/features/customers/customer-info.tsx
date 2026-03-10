@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { supabase } from "@/lib/supabase"
 import { CheckinHistory } from "./checkin-history"
@@ -13,7 +13,6 @@ import { CustomerPointsActions } from "./customer-info-parts/customer-points-act
 import { CustomerStatsGrid } from "./customer-info-parts/customer-stats-grid"
 
 import type { Customer, Treatment } from "@/types/customer"
-import { calculateChanges, logClientActivity } from "@/lib/activity-logger"
 
 interface CustomerInfoProps {
   customer: Customer
@@ -30,11 +29,10 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
   const [showTreatmentHistory, setShowTreatmentHistory] = React.useState(false)
   const [treatmentHistoryKey, setTreatmentHistoryKey] = React.useState(0)
 
-  // helper to persist treatment changes and emit audit log
+  // helper to persist treatment changes
   const updateTreatments = async (newTreatments: Treatment[]) => {
     setIsUpdating(true)
     try {
-      const diff = calculateChanges({ treatments: customer.treatments || [] }, { treatments: newTreatments })
       const { data, error } = await supabase
         .from("customers")
         .update({ treatments: newTreatments })
@@ -44,10 +42,7 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
 
       if (!error && data) {
         onUpdate(data)
-        if (Object.keys(diff).length > 0) {
-          await logClientActivity(customer.id, diff)
-          setTreatmentHistoryKey((k) => k + 1)
-        }
+        setTreatmentHistoryKey((k) => k + 1)
       }
     } catch (err) {
       console.error("Error updating treatments:", err)
