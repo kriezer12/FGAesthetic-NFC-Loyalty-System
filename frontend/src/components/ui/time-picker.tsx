@@ -2,21 +2,22 @@
  * Time Picker Component
  * =====================
  *
- * A user-friendly time picker with hour and minute selection.
- * Uses 12-hour format with AM/PM toggle.
+ * A user-friendly time picker that combines a typeable input with a
+ * scrollable dropdown of time slots. Users can either type a time
+ * (e.g. "2:30 PM", "14:30") or pick from the list.
+ * Uses 12-hour display format, stores 24-hour HH:MM values.
  */
 
 import * as React from "react"
-import { Clock } from "lucide-react"
+import { Clock, Check } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,9 +35,9 @@ interface TimePickerProps {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-/** Convert 24-hour time (HH:MM) to 12-hour display (H:MM AM/PM) */
-function formatTimeDisplay(timeStr: string): string {
-  if (!timeStr) return "Select time"
+/** Convert 24-hour time (HH:MM) to 12-hour display (h:mm AM/PM) */
+function to12Hour(timeStr: string): string {
+  if (!timeStr) return ""
   const [h, m] = timeStr.split(":").map(Number)
   const hour24 = h % 24
   const hour12 = hour24 % 12 || 12
@@ -44,21 +45,52 @@ function formatTimeDisplay(timeStr: string): string {
   return `${hour12}:${m.toString().padStart(2, "0")} ${period}`
 }
 
-/** Convert 12-hour values to 24-hour string */
-function time12to24(hour12: number, minute: number, isAM: boolean): string {
-  let hour24 = hour12 % 12
-  if (!isAM) hour24 += 12
-  return `${hour24.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+/** Generate all time slot values for a given step */
+function generateSlots(step: number): string[] {
+  const slots: string[] = []
+  for (let mins = 0; mins < 24 * 60; mins += step) {
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    slots.push(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`)
+  }
+  return slots
 }
 
-/** Parse 24-hour time string to 12-hour + AM/PM */
-function parse24To12(timeStr: string): { hour12: number; minute: number; isAM: boolean } {
-  if (!timeStr) return { hour12: 9, minute: 0, isAM: true }
-  const [h, m] = timeStr.split(":").map(Number)
-  const hour24 = h % 24
-  const isAM = hour24 < 12
-  const hour12 = hour24 % 12 || 12
-  return { hour12, minute: m, isAM }
+/**
+ * Try to parse a freeform time string into 24-hour HH:MM.
+ * Accepts: "2:30 PM", "2:30PM", "14:30", "2 PM", "2pm", etc.
+ * Returns null if unparseable.
+ */
+function parseTimeInput(input: string): string | null {
+  const trimmed = input.trim()
+  if (!trimmed) return null
+
+  // Match patterns like "2:30 PM", "2:30pm", "14:30", "2 pm", "2pm"
+  const match = trimmed.match(
+    /^(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?$/,
+  )
+  if (!match) return null
+
+  let hour = parseInt(match[1], 10)
+  const minute = match[2] ? parseInt(match[2], 10) : 0
+  const period = match[3]?.toUpperCase()
+
+  if (minute < 0 || minute > 59) return null
+
+  if (period) {
+    // 12-hour input
+    if (hour < 1 || hour > 12) return null
+    if (period === "AM") {
+      hour = hour === 12 ? 0 : hour
+    } else {
+      hour = hour === 12 ? 12 : hour + 12
+    }
+  } else {
+    // 24-hour input
+    if (hour < 0 || hour > 23) return null
+  }
+
+  return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
 }
 
 // ---------------------------------------------------------------------------
@@ -73,131 +105,122 @@ export function TimePicker({
   minuteStep = 15,
 }: TimePickerProps) {
   const [open, setOpen] = React.useState(false)
-  const [hour12, setHour12] = React.useState(9)
-  const [minute, setMinute] = React.useState(0)
-  const [isAM, setIsAM] = React.useState(true)
+  const [inputValue, setInputValue] = React.useState("")
+  const activeRef = React.useRef<HTMLButtonElement | null>(null)
 
-  // Parse value when it changes
+  const slots = React.useMemo(() => generateSlots(minuteStep), [minuteStep])
+
+  // Sync display text when the controlled value changes (and the popover isn't focused for typing)
   React.useEffect(() => {
-    if (value) {
-      const { hour12: h, minute: m, isAM: am } = parse24To12(value)
-      setHour12(h)
-      setMinute(m)
-      setIsAM(am)
+    if (!open) {
+      setInputValue(to12Hour(value))
     }
-  }, [value])
+  }, [value, open])
 
-  const handleApply = () => {
-    const timeString = time12to24(hour12, minute, isAM)
-    onChange?.(timeString)
+  // Scroll to the active slot when the popover opens
+  React.useEffect(() => {
+    if (open) {
+      // Small delay to let the DOM render
+      const t = setTimeout(() => {
+        activeRef.current?.scrollIntoView({ block: "center" })
+      }, 50)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  const handleSelect = (slot: string) => {
+    onChange?.(slot)
+    setInputValue(to12Hour(slot))
     setOpen(false)
   }
 
-  const displayValue = formatTimeDisplay(value)
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const parsed = parseTimeInput(inputValue)
+      if (parsed) {
+        onChange?.(parsed)
+        setInputValue(to12Hour(parsed))
+        setOpen(false)
+      }
+    }
+    if (e.key === "Escape") {
+      setInputValue(to12Hour(value))
+      setOpen(false)
+    }
+  }
 
-  const hours = Array.from({ length: 12 }, (_, i) => i + 1) // 1-12
-  const minutes = Array.from(
-    { length: 60 / minuteStep },
-    (_, i) => i * minuteStep
-  )
+  const handleInputBlur = () => {
+    // Try to parse what's typed; if valid, commit it
+    const parsed = parseTimeInput(inputValue)
+    if (parsed) {
+      onChange?.(parsed)
+      setInputValue(to12Hour(parsed))
+    } else {
+      // Revert to current value
+      setInputValue(to12Hour(value))
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={disabled}
+        <div
           className={cn(
-            "w-full justify-start text-left font-normal",
-            !value && "text-muted-foreground",
-            className
+            "flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-transparent px-3 text-sm shadow-xs",
+            "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
+            disabled && "cursor-not-allowed opacity-50",
+            className,
           )}
         >
-          <Clock className="mr-2 h-4 w-4" />
-          {displayValue}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <div className="p-4">
-          <div className="mb-3">
-            <Label className="text-xs text-muted-foreground">Select Time</Label>
-          </div>
-          <div className="flex gap-2">
-            {/* Hour picker */}
-            <div className="flex flex-col gap-1">
-              <Label className="text-center text-xs font-medium">Hour</Label>
-              <div className="flex h-48 w-16 flex-col overflow-y-auto rounded-md border">
-                {hours.map((h) => (
-                  <button
-                    key={h}
-                    type="button"
-                    onClick={() => setHour12(h)}
-                    className={cn(
-                      "flex-none px-3 py-1.5 text-sm hover:bg-accent",
-                      h === hour12 && "bg-primary text-primary-foreground hover:bg-primary"
-                    )}
-                  >
-                    {h}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Minute picker */}
-            <div className="flex flex-col gap-1">
-              <Label className="text-center text-xs font-medium">Min</Label>
-              <div className="flex h-48 w-16 flex-col overflow-y-auto rounded-md border">
-                {minutes.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMinute(m)}
-                    className={cn(
-                      "flex-none px-3 py-1.5 text-sm hover:bg-accent",
-                      m === minute && "bg-primary text-primary-foreground hover:bg-primary"
-                    )}
-                  >
-                    {m.toString().padStart(2, "0")}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* AM/PM toggle */}
-            <div className="flex flex-col gap-1">
-              <Label className="text-center text-xs font-medium">Period</Label>
-              <div className="flex h-48 w-16 flex-col overflow-y-auto rounded-md border">
-                {["AM", "PM"].map((period) => (
-                  <button
-                    key={period}
-                    type="button"
-                    onClick={() => setIsAM(period === "AM")}
-                    className={cn(
-                      "flex-none px-3 py-1.5 text-sm hover:bg-accent",
-                      (isAM && period === "AM" || !isAM && period === "PM") && "bg-primary text-primary-foreground hover:bg-primary"
-                    )}
-                  >
-                    {period}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" className="flex-1" onClick={handleApply}>
-              Apply
-            </Button>
-          </div>
+          <Clock className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            disabled={disabled}
+            placeholder="e.g. 2:30 PM"
+            value={inputValue}
+            size={1}
+            onChange={(e) => setInputValue(e.target.value)}
+            onFocus={() => setOpen(true)}
+            onKeyDown={handleInputKeyDown}
+            onBlur={handleInputBlur}
+            className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+          />
         </div>
+      </PopoverTrigger>
+
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <ScrollArea className="h-56">
+          <div className="py-1">
+            {slots.map((slot) => {
+              const isActive = slot === value
+              return (
+                <button
+                  key={slot}
+                  ref={isActive ? activeRef : undefined}
+                  type="button"
+                  onMouseDown={(e) => {
+                    // Prevent the input blur from firing before the click registers
+                    e.preventDefault()
+                    handleSelect(slot)
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between px-3 py-1.5 text-sm transition-colors",
+                    isActive
+                      ? "bg-accent font-medium"
+                      : "hover:bg-accent/50",
+                  )}
+                >
+                  {to12Hour(slot)}
+                  {isActive && <Check className="h-4 w-4 text-primary" />}
+                </button>
+              )
+            })}
+          </div>
+        </ScrollArea>
       </PopoverContent>
     </Popover>
   )
