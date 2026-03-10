@@ -23,6 +23,7 @@ interface UserProfile {
   full_name?: string
   branch_id?: string
   branch_name?: string
+  avatar_url?: string
   created_at?: string
   first_login?: boolean
 }
@@ -71,6 +72,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
             ;(data as any).branch_name = rel[0].name
           }
           delete (data as any).branches
+        }
+        // Fallback to auth metadata avatar_url if not in profile
+        if (data && !data.avatar_url) {
+          const authAvatarUrl = (user?.user_metadata?.avatar_url as string) || null
+          if (authAvatarUrl) {
+            data.avatar_url = authAvatarUrl
+          }
         }
         setUserProfile(data as UserProfile)
       }
