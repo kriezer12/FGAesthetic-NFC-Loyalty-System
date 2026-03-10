@@ -6,7 +6,7 @@
  * Validates working hours, overlaps and blocked-time conflicts before saving.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -45,6 +45,17 @@ import {
   setTimeOnDate,
   timeInputToMinutes,
 } from "./calendar-utils"
+import { TriangleAlert, Pencil } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // ---------------------------------------------------------------------------
 // Props
@@ -70,7 +81,7 @@ interface AppointmentDialogProps {
   /** All appointments (for overlap validation). */
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
-  onSave: (appointment: Appointment) => void
+  onSave: (appointment: Appointment) => Promise<void>
   onDelete?: (id: string) => void
 }
 
@@ -127,6 +138,8 @@ export function AppointmentDialog({
   const [recurrenceInterval, setRecurrenceInterval] = useState<number | undefined>(undefined)
   const [notes, setNotes]               = useState("")
   const [error, setError]               = useState("")
+  const [saving, setSaving]             = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // ---- memoized options ----
   const staffOptions: ComboboxOption[] = useMemo(
@@ -214,14 +227,6 @@ export function AppointmentDialog({
     []
   )
 
-  // ---- debounced customer search ----
-  const handleCustomerSearch = useCallback(
-    (query: string) => {
-      searchCustomers(query)
-    },
-    [searchCustomers]
-  )
-
   // ---- handle customer selection ----
   const handleCustomerChange = useCallback(
     (value: string) => {
@@ -241,6 +246,7 @@ export function AppointmentDialog({
   // ---- reset / populate on open ----
   useEffect(() => {
     if (!open) return
+    setConfirmingDelete(false)
     if (appointment) {
       setServiceIds(appointment.service_ids ?? [])
       setCustomerId(appointment.customer_id ?? "")
@@ -278,7 +284,12 @@ export function AppointmentDialog({
 
   // sync interval when package selection changes; default to 7 (weekly) if service has no interval set
   useEffect(() => {
-    if (!hasPackageSelected) return
+    if (!hasPackageSelected) {
+      // Reset recurrence fields when no package is selected
+      setRecurrenceInterval(undefined)
+      setRecurrenceCount(1)
+      return
+    }
     setRecurrenceInterval(derivedRecurrenceDays ?? 7)
   }, [derivedRecurrenceDays, hasPackageSelected])
 
@@ -290,9 +301,10 @@ export function AppointmentDialog({
   }, [derivedSessionCount])
 
   // ---- save handler ----
-  const handleSave = () => {
+  const handleSave = async () => {
     /* required fields */
     if (serviceIds.length === 0) { setError("Please select at least one service."); return }
+    if (!customerId && !customerName) { setError("Please select or enter a customer."); return }
     if (!staffId)                { setError("Please select a staff member."); return }
     if (!startTime || !endTime)  { setError("Start and end times are required."); return }
     if (hasPackageSelected) {
@@ -336,6 +348,7 @@ export function AppointmentDialog({
     const endDate   = setTimeOnDate(appointmentDate, endMin)
     const staffMember = staff.find((s) => s.id === staffId)!
 
+    const now = new Date().toISOString()
     const appt: Appointment = {
       id:               appointment?.id ?? generateId(),
       customer_id:      customerId || appointment?.customer_id,
@@ -349,13 +362,25 @@ export function AppointmentDialog({
       status:           status,
       notes:            notes || undefined,
       treatment_id:     treatmentId || undefined,
-      recurrence_days:  recurrenceInterval,
-      recurrence_count: recurrenceInterval ? recurrenceCount : undefined,
+      recurrence_days:  hasPackageSelected ? recurrenceInterval : undefined,
+      recurrence_count: hasPackageSelected && recurrenceInterval ? recurrenceCount : undefined,
+      recurrence_group_id: appointment?.recurrence_group_id,
+      created_at:       appointment?.created_at ?? now,
+      updated_at:       now,
     }
-    onSave(appt)
+    setSaving(true)
+    try {
+      await onSave(appt)
+      onOpenChange(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save appointment.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -484,14 +509,25 @@ export function AppointmentDialog({
 
           {/* Notes */}
           <div className="grid gap-1.5">
-            <Label htmlFor="appt-notes">Notes</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="appt-notes">Notes</Label>
+              <span className={`text-xs tabular-nums ${
+                notes.length > 360 ? "text-destructive" : "text-muted-foreground"
+              }`}>
+                {notes.length}/400
+              </span>
+            </div>
             <Textarea
               id="appt-notes"
               rows={3}
-              placeholder="Optional notes…"
+              maxLength={400}
+              placeholder="Skin/hair sensitivities, product preferences, allergies, follow-up reminders…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
+            <p className="text-[11px] text-muted-foreground">
+              Use for skin/hair sensitivities, preferences, product notes, or follow-up reminders.
+            </p>
           </div>
 
           {/* Validation error */}
@@ -508,19 +544,69 @@ export function AppointmentDialog({
               variant="destructive"
               size="sm"
               className="mr-auto"
-              onClick={() => onDelete(appointment.id)}
+              onClick={() => {
+                if (appointment.recurrence_group_id) {
+                  onDelete(appointment.id)
+                } else {
+                  setConfirmingDelete(true)
+                }
+              }}
             >
               Delete
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSave}>
-            {isEdit ? "Save Changes" : "Create"}
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : isEdit ? "Save Changes" : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Delete confirmation — centred AlertDialog over the edit dialog */}
+    <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+      <AlertDialogContent className="flex flex-col gap-4">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <TriangleAlert className="h-4 w-4 text-destructive" />
+            Delete this appointment?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {appointment && (
+              <>
+                <span className="font-medium text-foreground">
+                  {appointment.title}
+                  {appointment.customer_name ? ` — ${appointment.customer_name}` : ""}
+                </span>
+                <br />
+              </>
+            )}
+            This action is permanent and cannot be undone. Were you trying to make a change instead?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          Deleted appointments are removed permanently and cannot be recovered.
+        </div>
+        <AlertDialogFooter className="gap-3 sm:gap-3 mt-2">
+          <button
+            onClick={() => setConfirmingDelete(false)}
+            className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit instead
+          </button>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => appointment && onDelete!(appointment.id)}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Yes, delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
