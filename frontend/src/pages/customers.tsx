@@ -25,6 +25,7 @@ import {
   Download,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
+import { useAuth } from "@/contexts/auth-context"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
 import { Button } from "@/components/ui/button"
@@ -50,6 +51,8 @@ import { AppointmentDialog } from "@/components/features/calendar/calendar-parts
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
 import { convertToWebP, downloadImageAsJpeg } from "@/lib/image-utils"
+import { calculateChanges } from "@/lib/activity-logger"
+import { logUserAction } from "@/lib/user-log"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -64,6 +67,7 @@ import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/
 export default function CustomersPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { userProfile } = useAuth()
 
   const [cameFromNfc, setCameFromNfc] = useState(false)
 
@@ -302,6 +306,8 @@ export default function CustomersPage() {
   const handleSaveProfile = async () => {
     if (!editingCustomerId) return
 
+    const existingCustomer = customers.find((c) => c.id === editingCustomerId) || null
+
     const first = profileForm.first_name.trim()
     const middle = profileForm.middle_name.trim()
     const last = profileForm.last_name.trim()
@@ -336,6 +342,53 @@ export default function CustomersPage() {
 
       setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)))
       setSelectedCustomer((prev) => (prev?.id === data.id ? data : prev))
+
+      const beforeSnapshot = existingCustomer
+        ? {
+            first_name: existingCustomer.first_name || null,
+            middle_name: existingCustomer.middle_name || null,
+            last_name: existingCustomer.last_name || null,
+            name: existingCustomer.name || null,
+            email: existingCustomer.email || null,
+            phone: existingCustomer.phone || null,
+            date_of_birth: existingCustomer.date_of_birth || null,
+            gender: existingCustomer.gender || null,
+            skin_type: existingCustomer.skin_type || null,
+            address: existingCustomer.address || null,
+            emergency_contact: existingCustomer.emergency_contact || null,
+            allergies: existingCustomer.allergies || null,
+            notes: existingCustomer.notes || null,
+          }
+        : {}
+
+      const afterSnapshot = {
+        first_name: data.first_name || null,
+        middle_name: data.middle_name || null,
+        last_name: data.last_name || null,
+        name: data.name || null,
+        email: data.email || null,
+        phone: data.phone || null,
+        date_of_birth: data.date_of_birth || null,
+        gender: data.gender || null,
+        skin_type: data.skin_type || null,
+        address: data.address || null,
+        emergency_contact: data.emergency_contact || null,
+        allergies: data.allergies || null,
+        notes: data.notes || null,
+      }
+
+      await logUserAction({
+        actionType: "edited_client_data",
+        entityType: "customer",
+        entityId: data.id,
+        entityName: data.name || `${data.first_name || ""} ${data.last_name || ""}`.trim() || "Customer",
+        branchId: userProfile?.branch_id || null,
+        changes: calculateChanges(beforeSnapshot, afterSnapshot),
+        metadata: {
+          source: "customers_profile_editor",
+        },
+      })
+
       setProfileEditorOpen(false)
     } catch (err) {
       console.error("Error updating customer profile:", err)
