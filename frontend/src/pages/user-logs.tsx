@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { DatePicker } from "@/components/ui/date-picker"
 import { supabase } from "@/lib/supabase"
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 interface BranchLookup { [id: string]: string }
 interface UserProfileLookup { [userId: string]: { role: string; branch_id: string | null } }
@@ -153,6 +153,17 @@ export default function UserLogsPage() {
       .replace(/\b\w/g, (char) => char.toUpperCase())
   }
 
+  const getActionWithOp = (log: UserLogRow) => {
+    const base = getActionLabel(log.action_type)
+    const op = log.metadata?.operation as string | undefined
+    if (!op) return base
+    let human = op
+    if (op === "create") human = "added"
+    else if (op === "update") human = "modified"
+    else if (op === "delete") human = "deleted"
+    return `${base} (${human})`
+  }
+
   const formatDateTime = (dateString?: string | null) => {
     if (!dateString) return "-"
 
@@ -285,7 +296,7 @@ export default function UserLogsPage() {
                 <DatePicker
                   value={dateFrom ? new Date(dateFrom) : undefined}
                   onChange={(d) => setDateFrom(d ? d.toISOString().slice(0,10) : "")}
-                  className="h-9 w-40 text-sm"
+                  className="h-9 w-52 max-w-full text-sm truncate"
                   placeholder="Start date"
                 />
               </div>
@@ -294,7 +305,7 @@ export default function UserLogsPage() {
                 <DatePicker
                   value={dateTo ? new Date(dateTo) : undefined}
                   onChange={(d) => setDateTo(d ? d.toISOString().slice(0,10) : "")}
-                  className="h-9 w-40 text-sm"
+                  className="h-9 w-52 max-w-full text-sm truncate"
                   placeholder="End date"
                 />
               </div>
@@ -370,10 +381,10 @@ export default function UserLogsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-3 text-sm font-medium">{getActionLabel(log.action_type)}</td>
-                      <td className="p-3 align-top">
-                        <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                          <Calendar className="mt-0.5 h-4 w-4" />
+                      <td className="p-3 text-sm font-medium">{getActionWithOp(log)}</td>
+                      <td className="p-3 align-middle">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
                           <span>{formatDateTime(log.created_at)}</span>
                         </div>
                       </td>
