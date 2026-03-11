@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
   Calendar,
@@ -30,6 +30,7 @@ import { useAppointments } from "@/hooks/use-appointments"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -62,6 +63,7 @@ import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/
 
 export default function CustomersPage() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [cameFromNfc, setCameFromNfc] = useState(false)
 
@@ -76,6 +78,23 @@ export default function CustomersPage() {
 
   // which panel is shown inside the customer modal
   const [modalView, setModalView] = useState<"details" | "treatments">("details")
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false)
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
+  const [profileForm, setProfileForm] = useState({
+    first_name: "",
+    middle_name: "",
+    last_name: "",
+    email: "",
+    phone: "",
+    date_of_birth: "",
+    gender: "",
+    skin_type: "",
+    address: "",
+    emergency_contact: "",
+    allergies: "",
+    notes: "",
+  })
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
@@ -256,6 +275,72 @@ export default function CustomersPage() {
       fetchCustomers()
     } catch (err) {
       console.error("Error updating archive status:", err)
+    }
+  }
+
+  const openProfileEditor = (customer: Customer | null) => {
+    if (!customer) return
+
+    setEditingCustomerId(customer.id)
+    setProfileForm({
+      first_name: customer.first_name || "",
+      middle_name: customer.middle_name || "",
+      last_name: customer.last_name || "",
+      email: customer.email || "",
+      phone: customer.phone || "",
+      date_of_birth: customer.date_of_birth ? customer.date_of_birth.split("T")[0] : "",
+      gender: customer.gender || "",
+      skin_type: customer.skin_type || "",
+      address: customer.address || "",
+      emergency_contact: customer.emergency_contact || "",
+      allergies: customer.allergies || "",
+      notes: customer.notes || "",
+    })
+    setProfileEditorOpen(true)
+  }
+
+  const handleSaveProfile = async () => {
+    if (!editingCustomerId) return
+
+    const first = profileForm.first_name.trim()
+    const middle = profileForm.middle_name.trim()
+    const last = profileForm.last_name.trim()
+    const fullName = [first, middle, last].filter(Boolean).join(" ").trim()
+
+    const payload = {
+      first_name: first || null,
+      middle_name: middle || null,
+      last_name: last || null,
+      name: fullName || null,
+      email: profileForm.email.trim() || null,
+      phone: profileForm.phone.trim() || null,
+      date_of_birth: profileForm.date_of_birth || null,
+      gender: profileForm.gender.trim() || null,
+      skin_type: profileForm.skin_type.trim() || null,
+      address: profileForm.address.trim() || null,
+      emergency_contact: profileForm.emergency_contact.trim() || null,
+      allergies: profileForm.allergies.trim() || null,
+      notes: profileForm.notes.trim() || null,
+    }
+
+    setSavingProfile(true)
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .update(payload)
+        .eq("id", editingCustomerId)
+        .select("*")
+        .single()
+
+      if (error) throw error
+
+      setCustomers((prev) => prev.map((c) => (c.id === data.id ? data : c)))
+      setSelectedCustomer((prev) => (prev?.id === data.id ? data : prev))
+      setProfileEditorOpen(false)
+    } catch (err) {
+      console.error("Error updating customer profile:", err)
+    } finally {
+      setSavingProfile(false)
     }
   }
 
@@ -510,6 +595,18 @@ export default function CustomersPage() {
     filterCustomers()
     setCurrentPage(1)
   }, [filterCustomers])
+
+  // open the customer modal when arriving from the NFC scanner page
+  useEffect(() => {
+    const state = location.state as { customer?: Customer; fromNfc?: boolean } | null
+    if (!state?.fromNfc || !state.customer) return
+
+    const customerFromList = customers.find((c) => c.id === state.customer?.id)
+    setSelectedCustomer(customerFromList || state.customer)
+    setModalView("details")
+    setCameFromNfc(true)
+    navigate("/dashboard/customers", { replace: true })
+  }, [location.state, customers, navigate])
 
   // if we opened from the NFC scanner, clear the flag when the modal closes
   // and make sure we stay on the same dashboard/customers route (clears state)
@@ -798,17 +895,22 @@ export default function CustomersPage() {
                             <Calendar className="mr-2 h-4 w-4" />
                             Set Appointment
                           </ContextMenuItem>
-                          <ContextMenuItem>
+                          <ContextMenuItem onClick={() => {
+                            setSelectedCustomer(customer)
+                            openProfileEditor(customer)
+                          }}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
-                          </ContextMenuItem>                          <ContextMenuItem onClick={() => toggleArchive(customer)}>
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => toggleArchive(customer)}>
                             {isArchivedClient(customer) ? (
                               <ArchiveRestore className="mr-2 h-4 w-4" />
                             ) : (
                               <Archive className="mr-2 h-4 w-4" />
                             )}
                             {isArchivedClient(customer) ? "Unarchive" : "Archive"}
-                          </ContextMenuItem>                        </ContextMenuContent>
+                          </ContextMenuItem>
+                        </ContextMenuContent>
                       </ContextMenu>
                     ))
                   )}
@@ -885,7 +987,11 @@ export default function CustomersPage() {
                 <Calendar className="mr-2 h-4 w-4" />
                 Book Appointment
               </Button>
-              <Button variant="outline" className="justify-start">
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => openProfileEditor(selectedCustomer)}
+              >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit Profile
               </Button>
@@ -1136,7 +1242,7 @@ export default function CustomersPage() {
                     <Calendar className="mr-2 h-4 w-4" />
                     Book Appointment
                   </Button>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={() => openProfileEditor(selectedCustomer)}>
                     <Edit className="mr-2 h-4 w-4" />
                     Edit Profile
                   </Button>
@@ -1144,6 +1250,115 @@ export default function CustomersPage() {
               </div>
             </div>
             </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={profileEditorOpen} onOpenChange={setProfileEditorOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>Update the selected customer's profile information.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">First Name</label>
+              <Input
+                value={profileForm.first_name}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Middle Name</label>
+              <Input
+                value={profileForm.middle_name}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, middle_name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Last Name</label>
+              <Input
+                value={profileForm.last_name}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                value={profileForm.email}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Phone</label>
+              <Input
+                value={profileForm.phone}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date of Birth</label>
+              <Input
+                type="date"
+                value={profileForm.date_of_birth}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, date_of_birth: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Gender</label>
+              <Input
+                value={profileForm.gender}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, gender: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Skin Type</label>
+              <Input
+                value={profileForm.skin_type}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, skin_type: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Address</label>
+              <Input
+                value={profileForm.address}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, address: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Emergency Contact</label>
+              <Input
+                value={profileForm.emergency_contact}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, emergency_contact: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Allergies</label>
+              <Textarea
+                rows={3}
+                value={profileForm.allergies}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, allergies: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea
+                rows={4}
+                value={profileForm.notes}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="mt-2 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving..." : "Save Changes"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1172,6 +1387,8 @@ export default function CustomersPage() {
                 id="treatment-before-input"
                 type="file"
                 accept="image/*"
+                title="Upload before photo"
+                aria-label="Upload before photo"
                 className="hidden"
                 disabled={treatmentGalleryUploading}
                 onChange={(e) => {
@@ -1186,6 +1403,8 @@ export default function CustomersPage() {
                 id="treatment-after-input"
                 type="file"
                 accept="image/*"
+                title="Upload after photo"
+                aria-label="Upload after photo"
                 className="hidden"
                 disabled={treatmentGalleryUploading}
                 onChange={(e) => {
@@ -1200,6 +1419,8 @@ export default function CustomersPage() {
                 id="treatment-consent-form-input"
                 type="file"
                 accept="image/*"
+                title="Upload consent form"
+                aria-label="Upload consent form"
                 className="hidden"
                 disabled={treatmentConsentUploading}
                 onChange={(e) => {
@@ -1414,8 +1635,8 @@ export default function CustomersPage() {
         clinicHours={clinicHours}
         appointments={appointments}
         blockedTimes={[]}
-        onSave={(appointment) => {
-          addAppointment(appointment)
+        onSave={async (appointment) => {
+          await addAppointment(appointment)
           setAppointmentDialogOpen(false)
           setPrefillCustomer(null)
         }}
