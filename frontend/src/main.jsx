@@ -25,6 +25,7 @@ import { DashboardLayout } from "./components/layout"
 // Lazy load all page components for code splitting
 const Dashboard = lazy(() => import("./pages/dashboard.tsx"))
 const CheckinLogsPage = lazy(() => import("./pages/checkin-logs.tsx"))
+const UserLogsPage = lazy(() => import("./pages/user-logs.tsx"))
 const CustomersPage = lazy(() => import("./pages/customers.tsx"))
 const NFCScanPage = lazy(() => import("./pages/nfc-scan.tsx"))
 const LoginPage = lazy(() => import("./pages/login.tsx"))
@@ -90,6 +91,11 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/checkin-logs" element={
             <Suspense fallback={<PageLoader />}>
               <CheckinLogsPage />
+            </Suspense>
+          } />
+          <Route path="/dashboard/user-logs" element={
+            <Suspense fallback={<PageLoader />}>
+              <UserLogsPage />
             </Suspense>
           } />
           <Route path="/dashboard/appointments" element={
