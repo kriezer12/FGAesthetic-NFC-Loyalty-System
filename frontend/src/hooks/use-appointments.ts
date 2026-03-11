@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
+import { logUserAction } from "@/lib/user-log"
 import type { Appointment } from "@/types/appointment"
 
 interface UseAppointmentsReturn {
@@ -60,6 +61,21 @@ export function useAppointments(): UseAppointmentsReturn {
 
       // Update local state (realtime will also push, but this is instant)
       setAppointments((prev) => [...prev, appt])
+
+      await logUserAction({
+        actionType: "appointed_schedule",
+        entityType: "appointment",
+        entityId: appt.id,
+        entityName: appt.customer_name || "Appointment",
+        changes: { before: null, after: appt },
+        metadata: {
+          operation: "create",
+          staff_id: appt.staff_id,
+          staff_name: appt.staff_name,
+          start_time: appt.start_time,
+          end_time: appt.end_time,
+        },
+      })
     } catch (err) {
       console.error("Error adding appointment:", err)
       setError(err instanceof Error ? err.message : "Failed to add appointment")
@@ -69,6 +85,8 @@ export function useAppointments(): UseAppointmentsReturn {
 
   const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>) => {
     try {
+      const existing = appointments.find((a) => a.id === id) || null
+
       const { error: updateError } = await supabase
         .from("appointments")
         .update(updates)
@@ -80,15 +98,29 @@ export function useAppointments(): UseAppointmentsReturn {
       setAppointments((prev) =>
         prev.map((a) => (a.id === id ? { ...a, ...updates } : a))
       )
+
+      await logUserAction({
+        actionType: "appointed_schedule",
+        entityType: "appointment",
+        entityId: id,
+        entityName: existing?.customer_name || "Appointment",
+        changes: { before: existing, after: existing ? { ...existing, ...updates } : updates },
+        metadata: {
+          operation: "update",
+          updated_fields: Object.keys(updates),
+        },
+      })
     } catch (err) {
       console.error("Error updating appointment:", err)
       setError(err instanceof Error ? err.message : "Failed to update appointment")
       throw err
     }
-  }, [])
+  }, [appointments])
 
   const deleteAppointment = useCallback(async (id: string) => {
     try {
+      const existing = appointments.find((a) => a.id === id) || null
+
       const { error: deleteError } = await supabase
         .from("appointments")
         .delete()
@@ -98,12 +130,27 @@ export function useAppointments(): UseAppointmentsReturn {
 
       // Update local state
       setAppointments((prev) => prev.filter((a) => a.id !== id))
+
+      await logUserAction({
+        actionType: "appointed_schedule",
+        entityType: "appointment",
+        entityId: id,
+        entityName: existing?.customer_name || "Appointment",
+        changes: { before: existing, after: null },
+        metadata: {
+          operation: "delete",
+          staff_id: existing?.staff_id,
+          staff_name: existing?.staff_name,
+          start_time: existing?.start_time,
+          end_time: existing?.end_time,
+        },
+      })
     } catch (err) {
       console.error("Error deleting appointment:", err)
       setError(err instanceof Error ? err.message : "Failed to delete appointment")
       throw err
     }
-  }, [])
+  }, [appointments])
 
   useEffect(() => {
     fetchAppointments()
