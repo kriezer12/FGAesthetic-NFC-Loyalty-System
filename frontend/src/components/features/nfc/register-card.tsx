@@ -8,6 +8,7 @@ import { RegisterCardHeader } from "./register-card-parts/register-card-header"
 import { RegisterCardMedicalSection } from "./register-card-parts/register-card-medical-section"
 import { RegisterCardPersonalSection } from "./register-card-parts/register-card-personal-section"
 import { initialRegisterCardFormData } from "./register-card-parts/register-card.types"
+import { logUserAction } from "@/lib/user-log"
 
 import type { Customer } from "@/types/customer"
 
@@ -104,6 +105,26 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
         setError(insertError.message)
         return
       }
+
+      await logUserAction({
+        actionType: "registered_new_client",
+        entityType: "customer",
+        entityId: (data as Customer).id,
+        entityName: (data as Customer).name || `${(data as Customer).first_name || ""} ${(data as Customer).last_name || ""}`.trim() || "Customer",
+        changes: {
+          before: null,
+          after: {
+            id: (data as Customer).id,
+            nfc_uid: (data as Customer).nfc_uid,
+            name: (data as Customer).name,
+            email: (data as Customer).email,
+            phone: (data as Customer).phone,
+          },
+        },
+        metadata: {
+          source: "nfc_register_card",
+        },
+      })
 
       onSuccess(data as Customer)
     } catch (err) {
