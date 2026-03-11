@@ -8,3 +8,4 @@
 export * from "./customers"
 export * from "./nfc"
 export * from "./calendar"
+export * from "./reports"

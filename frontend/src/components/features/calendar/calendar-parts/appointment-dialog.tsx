@@ -26,6 +26,7 @@ import { ServicePicker } from "./service-picker"
 import { supabase } from "@/lib/supabase"
 import { useCustomers } from "@/hooks/use-customers"
 import type { Service } from "@/types/service"
+import type { Treatment } from "@/types/customer"
 import type {
   Appointment,
   AppointmentStatus,
@@ -371,6 +372,37 @@ export function AppointmentDialog({
     setSaving(true)
     try {
       await onSave(appt)
+
+      // Auto-assign package services as treatments on the customer record
+      if (!isEdit && customerId) {
+        const packageServices = serviceIds
+          .map((id) => serviceMap.get(id))
+          .filter((s): s is Service => !!s && !!s.is_package && s.session_count != null)
+
+        if (packageServices.length > 0) {
+          const customer = customers.find((c) => c.id === customerId)
+          if (customer) {
+            const existing: Treatment[] = customer.treatments || []
+            const existingNames = new Set(existing.map((t) => t.name))
+            const newTreatments: Treatment[] = packageServices
+              .filter((s) => !existingNames.has(s.name))
+              .map((s) => ({
+                id: generateId(),
+                name: s.name,
+                total_sessions: s.session_count!,
+                used_sessions: 0,
+                remaining_sessions: s.session_count!,
+              }))
+            if (newTreatments.length > 0) {
+              await supabase
+                .from("customers")
+                .update({ treatments: [...existing, ...newTreatments] })
+                .eq("id", customerId)
+            }
+          }
+        }
+      }
+
       onOpenChange(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save appointment.")
