@@ -35,6 +35,8 @@ export interface Appointment {
   start_time: string // ISO datetime
   end_time: string   // ISO datetime
   status: AppointmentStatus
+  appointment_type?: "consultation" | "treatment" | "followup"
+  location_type?: "branch" | "home_based"
   notes?: string
   created_at?: string
   updated_at?: string

@@ -29,6 +29,8 @@ interface TimePickerProps {
   className?: string
   disabled?: boolean
   minuteStep?: 15 | 30 | 60
+  minTime?: string // HH:MM
+  maxTime?: string // HH:MM
 }
 
 // ---------------------------------------------------------------------------
@@ -45,13 +47,32 @@ function to12Hour(timeStr: string): string {
   return `${hour12}:${m.toString().padStart(2, "0")} ${period}`
 }
 
-/** Generate all time slot values for a given step */
-function generateSlots(step: number): string[] {
+/** Generate all time slot values for a given step, constrained by optional min/max times */
+function generateSlots(step: number, minTime?: string, maxTime?: string): string[] {
   const slots: string[] = []
+  
+  let minMins = 0;
+  if (minTime) {
+    const [h, m] = minTime.split(":").map(Number);
+    minMins = h * 60 + (m || 0);
+  }
+  
+  let maxMins = 24 * 60;
+  if (maxTime) {
+    const [h, m] = maxTime.split(":").map(Number);
+    maxMins = h * 60 + (m || 0);
+  }
+
   for (let mins = 0; mins < 24 * 60; mins += step) {
-    const h = Math.floor(mins / 60)
-    const m = mins % 60
-    slots.push(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`)
+    if (mins >= minMins && mins <= maxMins) {
+      const h = Math.floor(mins / 60)
+      const m = mins % 60
+      slots.push(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`)
+    }
+  }
+  // Also push maxTime if it's not exactly on a step boundary, though typically it is.
+  if (maxTime && !slots.includes(maxTime)) {
+    slots.push(maxTime)
   }
   return slots
 }
@@ -103,12 +124,14 @@ export function TimePicker({
   className,
   disabled = false,
   minuteStep = 15,
+  minTime,
+  maxTime,
 }: TimePickerProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
   const activeRef = React.useRef<HTMLButtonElement | null>(null)
 
-  const slots = React.useMemo(() => generateSlots(minuteStep), [minuteStep])
+  const slots = React.useMemo(() => generateSlots(minuteStep, minTime, maxTime), [minuteStep, minTime, maxTime])
 
   // Sync display text when the controlled value changes (and the popover isn't focused for typing)
   React.useEffect(() => {

@@ -22,6 +22,7 @@ import {
   FileText,
   CircleDot,
   Repeat,
+  Home,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -95,12 +96,20 @@ export function AppointmentDetailPopover({
           <h4 className="text-sm font-semibold leading-tight">
             {appointment.title}
           </h4>
-          <span
-            className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${status.className}`}
-          >
-            <CircleDot className="h-3 w-3" />
-            {status.label}
-          </span>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${status.className}`}
+            >
+              <CircleDot className="h-3 w-3" />
+              {status.label}
+            </span>
+            {appointment.location_type === "home_based" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[11px] font-medium">
+                <Home className="h-3 w-3" />
+                Home Service Appointment
+              </span>
+            )}
+          </div>
         </div>
 
         <Separator />

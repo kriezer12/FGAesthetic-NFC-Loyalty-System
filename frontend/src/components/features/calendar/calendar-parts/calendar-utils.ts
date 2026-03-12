@@ -110,24 +110,36 @@ export function isWithinWorkingHours(
   return startMinutes >= clinicHours.open * 60 && endMinutes <= clinicHours.close * 60
 }
 
-/** True when the proposed range overlaps any existing appointment for that staff on the given date. */
+/** True when the proposed range overlaps any existing appointment for that staff or customer on the given date. */
 export function hasOverlap(
   excludeId: string,
   staffId: string,
+  customerId: string | undefined,
   startMinutes: number,
   endMinutes: number,
   appointmentDate: Date,
   appointments: Appointment[],
-): boolean {
-  return appointments.some((a) => {
-    if (a.id === excludeId || a.staff_id !== staffId) return false
-    if (a.status === "cancelled") return false
+): "staff" | "customer" | false {
+  for (const a of appointments) {
+    if (a.id === excludeId) continue
+    if (a.status === "cancelled") continue
     // Must be on the same day
-    if (!isSameDay(new Date(a.start_time), appointmentDate)) return false
+    if (!isSameDay(new Date(a.start_time), appointmentDate)) continue
+    
+    const isSameStaff = a.staff_id === staffId
+    const isSameCustomer = Boolean(customerId && a.customer_id === customerId)
+
+    if (!isSameStaff && !isSameCustomer) continue
+
     const aStart = minutesSinceMidnight(a.start_time)
     const aEnd = minutesSinceMidnight(a.end_time)
-    return startMinutes < aEnd && endMinutes > aStart
-  })
+    
+    if (startMinutes < aEnd && endMinutes > aStart) {
+      if (isSameCustomer) return "customer"
+      return "staff"
+    }
+  }
+  return false
 }
 
 /** True when the proposed range overlaps any blocked time for that staff on the given date. */

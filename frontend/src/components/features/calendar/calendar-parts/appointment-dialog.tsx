@@ -101,6 +101,16 @@ const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// Appointment type options
+// ---------------------------------------------------------------------------
+
+const APPOINTMENT_TYPE_OPTIONS: { value: "consultation" | "treatment" | "followup"; label: string }[] = [
+  { value: "consultation", label: "Consultation" },
+  { value: "treatment",    label: "Treatment" },
+  { value: "followup",     label: "Follow‑up" },
+]
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -128,6 +138,7 @@ export function AppointmentDialog({
   const { customers, loading: customersLoading } = useCustomers()
 
   // ---- form state ----
+  const [appointmentType, setAppointmentType] = useState<"consultation" | "treatment" | "followup">("treatment")
   const [serviceIds, setServiceIds]     = useState<string[]>([])
   const [allServices, setAllServices]   = useState<Service[]>([])
   const [customerId, setCustomerId]     = useState("")
@@ -137,6 +148,7 @@ export function AppointmentDialog({
   const [startTime, setStartTime]       = useState("")
   const [endTime, setEndTime]           = useState("")
   const [status, setStatus]             = useState<AppointmentStatus>("scheduled")
+  const [locationType, setLocationType] = useState<"branch" | "home_based">("branch")
   const [treatmentId, setTreatmentId]   = useState<string>("")
   const [recurrenceCount, setRecurrenceCount] = useState(1)
   const [recurrenceInterval, setRecurrenceInterval] = useState<number | undefined>(undefined)
@@ -170,11 +182,11 @@ export function AppointmentDialog({
     [allServices],
   )
 
-  // Derive title from selected services
-  const derivedTitle = useMemo(
-    () => serviceIds.map((id) => serviceMap.get(id)?.name).filter(Boolean).join(", "),
-    [serviceIds, serviceMap],
-  )
+  // Derive title from selected services (consultations get explicit label)
+  const derivedTitle = useMemo(() => {
+    if (appointmentType === "consultation") return "Consultation"
+    return serviceIds.map((id) => serviceMap.get(id)?.name).filter(Boolean).join(", ")
+  }, [serviceIds, serviceMap, appointmentType])
 
   const derivedRecurrenceDays = useMemo(() => {
     const days = new Set<number>()
@@ -204,6 +216,14 @@ export function AppointmentDialog({
     return undefined
   }, [serviceIds, serviceMap])
 
+  // @ts-expect-error - treatmentOptions is declared but its value is never read
+  const treatmentOptions: ComboboxOption[] = useMemo(() => {
+    const cust = customers.find((c) => c.id === customerId)
+    return (cust?.treatments || []).map((t) => ({
+      value: t.id,
+      label: t.name,
+    }))
+  }, [customers, customerId])
 
   const customerOptions: ComboboxOption[] = useMemo(
     () =>
@@ -221,6 +241,14 @@ export function AppointmentDialog({
         value: s.value,
         label: s.label,
       })),
+    []
+  )
+
+  const locationOptions: ComboboxOption[] = useMemo(
+    () => [
+      { value: "branch", label: "Branch" },
+      { value: "home_based", label: "Home Service" },
+    ],
     []
   )
 
@@ -245,6 +273,7 @@ export function AppointmentDialog({
     if (!open) return
     setConfirmingDelete(false)
     if (appointment) {
+      setAppointmentType(appointment.appointment_type ?? "treatment")
       setServiceIds(appointment.service_ids ?? [])
       setCustomerId(appointment.customer_id ?? "")
       setCustomerName(appointment.customer_name ?? "")
@@ -253,11 +282,13 @@ export function AppointmentDialog({
       setStartTime(isoToTimeInput(appointment.start_time))
       setEndTime(isoToTimeInput(appointment.end_time))
       setStatus(appointment.status)
+      setLocationType(appointment.location_type ?? "branch")
       setTreatmentId(appointment.treatment_id ?? "")
       setNotes(appointment.notes ?? "")
       setRecurrenceCount(appointment.recurrence_count ?? 1)
       setRecurrenceInterval(appointment.recurrence_days)
     } else {
+      setAppointmentType("treatment")
       setServiceIds(prefillServiceIds ?? [])
       setCustomerId(prefillCustomerId ?? "")
       setCustomerName(prefillCustomerName ?? "")
@@ -272,6 +303,7 @@ export function AppointmentDialog({
           : "",
       )
       setStatus("scheduled")
+      setLocationType("branch")
       setNotes("")
       setRecurrenceCount(1)
       setRecurrenceInterval(undefined)
@@ -300,7 +332,7 @@ export function AppointmentDialog({
   // ---- save handler ----
   const handleSave = async () => {
     /* required fields */
-    if (serviceIds.length === 0) { setError("Please select at least one service."); return }
+    if (appointmentType !== "consultation" && serviceIds.length === 0) { setError("Please select at least one service."); return }
     if (!customerId && !customerName) { setError("Please select or enter a customer."); return }
     if (!staffId)                { setError("Please select a staff member."); return }
     if (!startTime || !endTime)  { setError("Start and end times are required."); return }
@@ -330,8 +362,13 @@ export function AppointmentDialog({
 
     /* overlap */
     const excludeId = appointment?.id ?? ""
-    if (hasOverlap(excludeId, staffId, startMin, endMin, appointmentDate, appointments)) {
-      setError("This time conflicts with another appointment for the selected staff.")
+    const overlapType = hasOverlap(excludeId, staffId, customerId || undefined, startMin, endMin, appointmentDate, appointments)
+    if (overlapType) {
+      if (overlapType === "customer") {
+        setError("This customer already has an appointment at this time.")
+      } else {
+        setError("This time conflicts with another appointment for the selected staff.")
+      }
       return
     }
 
@@ -348,6 +385,7 @@ export function AppointmentDialog({
     const now = new Date().toISOString()
     const appt: Appointment = {
       id:               appointment?.id ?? generateId(),
+      appointment_type: appointmentType,
       customer_id:      customerId || appointment?.customer_id,
       customer_name:    customerName || undefined,
       staff_id:         staffId,
@@ -357,6 +395,7 @@ export function AppointmentDialog({
       start_time:       startDate.toISOString(),
       end_time:         endDate.toISOString(),
       status:           status,
+      location_type:    locationType,
       notes:            notes || undefined,
       treatment_id:     treatmentId || undefined,
       recurrence_days:  hasPackageSelected ? recurrenceInterval : undefined,
@@ -421,16 +460,28 @@ export function AppointmentDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-2 overflow-y-auto overflow-x-hidden pr-1">
-          {/* Services */}
+          {/* Appointment type */}
           <div className="grid gap-1.5">
-            <Label>
-              Services <span className="text-destructive">*</span>
-            </Label>
-            <ServicePicker
-              value={serviceIds}
-              onChange={setServiceIds}
+            <Label>Appointment Type</Label>
+            <Combobox
+              options={APPOINTMENT_TYPE_OPTIONS}
+              value={appointmentType}
+              onValueChange={setAppointmentType}
             />
           </div>
+
+          {/* Services (only for non-consultation) */}
+          {appointmentType !== "consultation" && (
+            <div className="grid gap-1.5">
+              <Label>
+                Services <span className="text-destructive">*</span>
+              </Label>
+              <ServicePicker
+                value={serviceIds}
+                onChange={setServiceIds}
+              />
+            </div>
+          )}
 
           {/* Customer */}
           <div className="grid gap-1.5">
@@ -480,6 +531,8 @@ export function AppointmentDialog({
                 value={startTime}
                 onChange={setStartTime}
                 minuteStep={interval as 15 | 30 | 60}
+                minTime={minutesToTimeInput(clinicHours.open * 60)}
+                maxTime={minutesToTimeInput(clinicHours.close * 60)}
               />
             </div>
             <div className="grid gap-1.5">
@@ -490,6 +543,8 @@ export function AppointmentDialog({
                 value={endTime}
                 onChange={setEndTime}
                 minuteStep={interval as 15 | 30 | 60}
+                minTime={minutesToTimeInput(clinicHours.open * 60)}
+                maxTime={minutesToTimeInput(clinicHours.close * 60)}
               />
             </div>
           </div>
@@ -521,6 +576,19 @@ export function AppointmentDialog({
               </div>
             </div>
           )}
+
+          {/* Location */}
+          <div className="grid gap-1.5">
+            <Label>Location</Label>
+            <Combobox
+              options={locationOptions}
+              value={locationType}
+              onValueChange={(val) => setLocationType(val as "branch" | "home_based")}
+              placeholder="Select location..."
+              searchPlaceholder="Search location..."
+              emptyMessage="No location found."
+            />
+          </div>
 
           {/* Status */}
           <div className="grid gap-1.5">

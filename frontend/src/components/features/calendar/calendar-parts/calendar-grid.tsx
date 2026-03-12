@@ -279,9 +279,18 @@ export function CalendarGrid({
         return
       }
 
+      const appt = appointments.find((a) => a.id === drag.appointmentId)
+      if (!appt) {
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
+      }
+
       // validate overlaps
-      if (hasOverlap(drag.appointmentId, newStaffId, newStartMin, newEndMin, selectedDate, appointments)) {
-        setValidationError("Time slot conflicts with another appointment.")
+      const overlapType = hasOverlap(drag.appointmentId, newStaffId, appt.customer_id, newStartMin, newEndMin, selectedDate, appointments)
+      if (overlapType) {
+        setValidationError(overlapType === "customer" ? "This customer already has an appointment at this time." : "Time slot conflicts with another appointment.")
         dragRef.current = null
         lastPreviewRef.current = null
         setDragPreview(null)
@@ -581,8 +590,11 @@ export function CalendarGrid({
                     }
                     onResizePointerDown={(e) =>
                       handleResizePointerDown(e, appt, staffIndex)
-                    }                    onEdit={() => onEditAppointment(appt)}
-                    onDelete={() => onDeleteAppointment(appt.id)}                  />
+                    }
+                    onEdit={() => onEditAppointment(appt)}
+                    onDelete={() => onDeleteAppointment(appt.id)}
+                    onStatusChange={(status) => onAppointmentUpdate(appt.id, { status })}
+                  />
                 )
               })}
 
