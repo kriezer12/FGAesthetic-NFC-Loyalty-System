@@ -61,7 +61,6 @@ desktop.ini
 *.tgz
 
 # Python
-__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -90,5 +89,3 @@ wheels/
 *~
 *.swp
 *.sw?
-
-__pycache__/
