@@ -221,7 +221,7 @@ export function CalendarView() {
       if (appt.recurrence_days && appt.recurrence_count && appt.recurrence_count > 1) {
         const groupId = appt.recurrence_group_id || generateId()
         let current: Appointment = { ...appt, recurrence_group_id: groupId }
-        // first appointment
+        // first appointment uses whatever type user chose
         await addAppointment(current)
         for (let i = 1; i < appt.recurrence_count; i++) {
           const next: Appointment = {
@@ -230,6 +230,7 @@ export function CalendarView() {
             recurrence_group_id: groupId,
             start_time: addDaysToIso(current.start_time, appt.recurrence_days),
             end_time: addDaysToIso(current.end_time, appt.recurrence_days),
+            appointment_type: "followup", // force followups after the first session
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }

@@ -59,6 +59,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .eq("id", userId)
         .single()
 
+      console.log("raw profile data response:", data, "error", error)
       if (error) {
         console.error("Error fetching user profile:", error)
         console.log("Attempted to fetch with userId:", userId)
@@ -68,8 +69,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // if branch relation included, normalize to branch_name field
         if (data && (data as any).branches) {
           const rel = (data as any).branches
+          // supabase may return array or object
           if (Array.isArray(rel) && rel.length > 0) {
             ;(data as any).branch_name = rel[0].name
+          } else if (rel && typeof rel === "object" && "name" in rel) {
+            ;(data as any).branch_name = rel.name
           }
           delete (data as any).branches
         }
@@ -79,6 +83,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (authAvatarUrl) {
             data.avatar_url = authAvatarUrl
           }
+        }
+        // fallback to branch_id if no name provided
+        if (data && !(data as any).branch_name && (data as any).branch_id) {
+          (data as any).branch_name = `(branch ${ (data as any).branch_id })`
         }
         setUserProfile(data as UserProfile)
       }

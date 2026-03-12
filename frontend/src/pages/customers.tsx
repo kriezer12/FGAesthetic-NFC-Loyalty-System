@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { Customer } from "@/types/customer"
 import type { IntervalMinutes } from "@/types/appointment"
+import type { Service } from "@/types/service"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
 
 export default function CustomersPage() {
@@ -197,6 +198,20 @@ export default function CustomersPage() {
   const { appointments, addAppointment } = useAppointments()
   const [selectedDate] = useState(new Date())
   const [interval] = useState<IntervalMinutes>(DEFAULT_INTERVAL)
+
+  // load service catalog (used to split multi‑service appointments)
+  const [services, setServices] = useState<Service[]>([])
+  const serviceMap = useMemo(
+    () => new Map(services.map((s) => [s.id, s])),
+    [services],
+  )
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("services").select("*")
+      setServices((data || []) as Service[])
+    }
+    load()
+  }, [])
   
   const clinicHours = { open: 9, close: 18 }
 
@@ -1187,77 +1202,133 @@ export default function CustomersPage() {
                           <p className="text-sm text-muted-foreground">No appointments found.</p>
                         ) : (
                           <div className="space-y-2">
-                            {appointments
-                              .filter((a) => a.customer_id === selectedCustomer?.id)
-                              .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
-                              .map((a) => (
-                                <Card 
-                                  key={a.id} 
-                                  className="py-0 gap-0 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary hover:border-l-primary/80"
-                                  onClick={() => {
-                                    if (a.customer_id && a.id) {
-                                      setSelectedAppointment(a)
-                                      setTreatmentPhotos([])
-                                      setTreatmentConsentUrl("")
-                                      setTreatmentConsentUploaded(false)
-                                      setTreatmentConsentPath("")
-                                      loadTreatmentPhotos(a.id, a.customer_id)
-                                      loadTreatmentConsentForm(a.id, a.customer_id)
-                                      setTreatmentDocModalOpen(true)
-                                    }
-                                  }}
-                                >
-                                  <CardContent className="p-4">
-                                    <div className="flex items-start justify-between">
-                                      <div className="space-y-1 flex-1">
-                                        <p className="font-medium text-sm">{a.title}</p>
-                                        {a.treatment_name && (
-                                          <p className="text-xs text-muted-foreground">
-                                            Treatment: {a.treatment_name}
+                            {(() => {
+                              const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer?.id);
+
+                              // split any single appointment that contains multiple services into separate "virtual" appts
+                              const displayAppts = customerAppts.flatMap((a) => {
+                                if (a.service_ids && a.service_ids.length > 1) {
+                                  return a.service_ids.map((sid) => ({
+                                    ...a,
+                                    virtualServiceId: sid,
+                                    title: serviceMap.get(sid)?.name || a.title,
+                                    service_ids: [sid],
+                                  }))
+                                }
+                                return [a]
+                              })
+
+                              // Group by recurrence_group_id + service, or just appointment + service
+                              const grouped = displayAppts.reduce((acc, a) => {
+                                const keyBase = a.recurrence_group_id || a.id
+                                const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
+                                const key = `${keyBase}:${svcSuffix}`
+                                if (!acc[key]) {
+                                  acc[key] = {
+                                    id: key,
+                                    isPackage: !!a.recurrence_group_id,
+                                    sessions: [a],
+                                    primaryAppointment: a,
+                                  };
+                                } else {
+                                  acc[key].sessions.push(a);
+                                }
+                                return acc;
+                              }, {} as Record<string, { id: string; isPackage: boolean; sessions: typeof displayAppts; primaryAppointment: (typeof displayAppts)[0] }>);
+
+                              const groupList = Object.values(grouped).map(g => {
+                                // sort sessions ascending by date
+                                g.sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+                                // set the primary to the first session, so docs are always stored against the first session's ID
+                                g.primaryAppointment = g.sessions[0];
+                                return g;
+                              });
+
+                              // Sort groups by the start time of their primary appointment (descending for history)
+                              groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
+
+                              return groupList.map((g) => {
+                                const a = g.primaryAppointment;
+                                return (
+                                  <Card 
+                                    key={g.id} 
+                                    className="py-0 gap-0 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary hover:border-l-primary/80"
+                                    onClick={() => {
+                                      if (a.customer_id && a.id) {
+                                        setSelectedAppointment(a);
+                                        setTreatmentPhotos([]);
+                                        setTreatmentConsentUrl("");
+                                        setTreatmentConsentUploaded(false);
+                                        setTreatmentConsentPath("");
+                                        loadTreatmentPhotos(a.id, a.customer_id);
+                                        loadTreatmentConsentForm(a.id, a.customer_id);
+                                        setTreatmentDocModalOpen(true);
+                                      }
+                                    }}
+                                  >
+                                    <CardContent className="p-4">
+                                      <div className="flex items-start justify-between">
+                                        <div className="space-y-1 flex-1">
+                                          <p className="font-medium text-sm">
+                                            {a.title} {g.isPackage && <span className="text-xs font-normal text-muted-foreground ml-2">(Package of {g.sessions.length} sessions)</span>}
                                           </p>
-                                        )}
-                                        {a.staff_name && (
-                                          <p className="text-xs text-muted-foreground">
-                                            Staff: {a.staff_name}
-                                          </p>
-                                        )}
-                                      </div>
-                                      <div className="text-right space-y-1 flex-shrink-0 ml-4">
-                                        <p className="text-sm font-medium">
-                                          {new Date(a.start_time).toLocaleDateString(undefined, {
-                                            year: "numeric",
-                                            month: "short",
-                                            day: "numeric",
-                                          })}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                          {new Date(a.start_time).toLocaleTimeString(undefined, {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          })}
-                                          {a.end_time && (
-                                            <>
-                                              {" – "}
-                                              {new Date(a.end_time).toLocaleTimeString(undefined, {
-                                                hour: "2-digit",
-                                                minute: "2-digit",
-                                              })}
-                                            </>
+                                          {a.treatment_name && (
+                                            <p className="text-xs text-muted-foreground">
+                                              Treatment: {a.treatment_name}
+                                            </p>
                                           )}
+                                          {a.staff_name && (
+                                            <p className="text-xs text-muted-foreground">
+                                              Staff: {a.staff_name}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="text-right space-y-1 flex-shrink-0 ml-4">
+                                          <p className="text-sm font-medium">
+                                            {new Date(a.start_time).toLocaleDateString(undefined, {
+                                              year: "numeric",
+                                              month: "short",
+                                              day: "numeric",
+                                            })}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {new Date(a.start_time).toLocaleTimeString(undefined, {
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                            })}
+                                            {a.end_time && (
+                                              <>
+                                                {" – "}
+                                                {new Date(a.end_time).toLocaleTimeString(undefined, {
+                                                  hour: "2-digit",
+                                                  minute: "2-digit",
+                                                })}
+                                              </>
+                                            )}
+                                          </p>
+                                          {g.isPackage && g.sessions.length > 1 && (
+                                            <p className="text-[10px] text-muted-foreground mt-1">
+                                              Last session: {new Date(g.sessions[g.sessions.length - 1].start_time).toLocaleDateString(undefined, {
+                                                month: "short",
+                                                day: "numeric",
+                                              })}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="ml-4 flex-shrink-0">
+                                          <FileText className="h-5 w-5 text-muted-foreground" />
+                                        </div>
+                                      </div>
+                                      {a.notes && (
+                                        <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+                                          {a.notes}
                                         </p>
-                                      </div>
-                                      <div className="ml-4 flex-shrink-0">
-                                        <FileText className="h-5 w-5 text-muted-foreground" />
-                                      </div>
-                                    </div>
-                                    {a.notes && (
-                                      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
-                                        {a.notes}
-                                      </p>
-                                    )}
-                                  </CardContent>
-                                </Card>
-                              ))}
+                                      )}
+                                    </CardContent>
+                                  </Card>
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </div>

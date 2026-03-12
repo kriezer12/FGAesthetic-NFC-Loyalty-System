@@ -47,6 +47,9 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
 } from "@/components/ui/context-menu"
 import { Pencil, Trash2, Repeat } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -421,8 +424,9 @@ export function CalendarWeekGrid({
         return
       }
 
-      if (hasOverlap(drag.appointmentId, appt.staff_id, newStartMin, newEndMin, targetDay, appointments)) {
-        setValidationError("Time slot conflicts with another appointment.")
+      const overlapType = hasOverlap(drag.appointmentId, appt.staff_id, appt.customer_id, newStartMin, newEndMin, targetDay, appointments)
+      if (overlapType) {
+        setValidationError(overlapType === "customer" ? "This customer already has an appointment at this time." : "Time slot conflicts with another appointment.")
         dragRef.current = null
         lastPreviewRef.current = null
         setDragPreview(null)
@@ -716,6 +720,26 @@ export function CalendarWeekGrid({
                         </ContextMenuTrigger>
 
                         <ContextMenuContent className="w-48">
+                          <ContextMenuSub>
+                            <ContextMenuSubTrigger className="gap-2 flex justify-between items-center">
+                              Status
+                            </ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="w-40">
+                              <ContextMenuItem onClick={() => onAppointmentUpdate(appt.id, { status: "confirmed" })}>
+                                Confirmed
+                              </ContextMenuItem>
+                              <ContextMenuItem onClick={() => onAppointmentUpdate(appt.id, { status: "in-progress" })}>
+                                In Progress
+                              </ContextMenuItem>
+                              <ContextMenuItem onClick={() => onAppointmentUpdate(appt.id, { status: "completed" })}>
+                                Completed
+                              </ContextMenuItem>
+                              <ContextMenuItem onClick={() => onAppointmentUpdate(appt.id, { status: "cancelled" })} className="text-destructive">
+                                Cancelled
+                              </ContextMenuItem>
+                            </ContextMenuSubContent>
+                          </ContextMenuSub>
+                          <ContextMenuSeparator />
                           <ContextMenuItem
                             onClick={() => onEditAppointment(appt)}
                             className="gap-2"

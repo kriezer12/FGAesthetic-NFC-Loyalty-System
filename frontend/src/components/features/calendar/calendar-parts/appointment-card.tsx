@@ -17,6 +17,9 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
 } from "@/components/ui/context-menu"
 import {
   AlertDialog,
@@ -29,7 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useState } from "react"
-import { Pencil, Trash2, Repeat, TriangleAlert } from "lucide-react"
+import { Pencil, Trash2, Repeat, TriangleAlert, Home } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -57,6 +60,8 @@ interface AppointmentCardProps {
   onResizePointerDown: (e: React.PointerEvent) => void
   onEdit: () => void
   onDelete: () => void
+  /** Callback for changing status via context menu */
+  onStatusChange?: (status: AppointmentStatus) => void
 }
 
 export function AppointmentCard({
@@ -69,6 +74,7 @@ export function AppointmentCard({
   onResizePointerDown,
   onEdit,
   onDelete,
+  onStatusChange,
 }: AppointmentCardProps) {
   const startLabel = formatTime(minutesSinceMidnight(appointment.start_time))
   const endLabel   = formatTime(minutesSinceMidnight(appointment.end_time))
@@ -146,6 +152,9 @@ export function AppointmentCard({
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold leading-tight flex items-center">
+                {appointment.location_type === "home_based" && (
+                  <Home className="mr-1 h-3 w-3 text-blue-500" />
+                )}
                 {appointment.title}
                 {appointment.recurrence_days && (
                   <Repeat className="ml-1 h-3 w-3 text-muted-foreground" />
@@ -176,6 +185,22 @@ export function AppointmentCard({
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-48">
+        {/* status submenu */}
+        {onStatusChange && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger className="gap-2 flex justify-between items-center">
+              Status
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-40">
+              <ContextMenuItem onClick={() => onStatusChange!("confirmed")}>Confirmed</ContextMenuItem>
+              <ContextMenuItem onClick={() => onStatusChange!("in-progress")}>In Progress</ContextMenuItem>
+              <ContextMenuItem onClick={() => onStatusChange!("completed")}>Completed</ContextMenuItem>
+              <ContextMenuItem onClick={() => onStatusChange!("cancelled")} className="text-destructive">
+                Cancelled
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
         <ContextMenuItem onClick={onEdit} className="gap-2">
           <Pencil className="h-4 w-4" />
           Edit Appointment
