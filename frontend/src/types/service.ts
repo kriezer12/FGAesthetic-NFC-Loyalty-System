@@ -18,7 +18,6 @@ export interface Service {
   // selected product id/name (populated once inventory catalog exists)
   product?: string
   price: number
-  points_value: number
   /** mark service as a multi-session package (e.g. gluta drip) */
   is_package?: boolean
   /** total number of sessions in the package (e.g. 15 for a 15-drip package) */

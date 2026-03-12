@@ -47,6 +47,9 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
+import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
+import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
+import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
 import { convertToWebP, downloadImageAsJpeg } from "@/lib/image-utils"
@@ -77,7 +80,7 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
   // which panel is shown inside the customer modal
-  const [modalView, setModalView] = useState<"details" | "treatments">("details")
+  const [modalView, setModalView] = useState<"details" | "treatments" | "loyalty">("details")
   const [profileEditorOpen, setProfileEditorOpen] = useState(false)
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
   const [profileForm, setProfileForm] = useState({
@@ -95,6 +98,8 @@ export default function CustomersPage() {
     notes: "",
   })
   const [savingProfile, setSavingProfile] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [showPointsHistory, setShowPointsHistory] = useState(false)
 
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
@@ -175,6 +180,8 @@ export default function CustomersPage() {
   // Appointment dialog state
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
   const [prefillCustomer, setPrefillCustomer] = useState<Customer | null>(null)
+  const [prefillServiceIds, setPrefillServiceIds] = useState<string[]>([])
+  const [pendingReward, setPendingReward] = useState<LoyaltyReward | null>(null)
   const { staff = [] } = useStaff()
   
   // Treatment documentation state
@@ -259,6 +266,87 @@ export default function CustomersPage() {
       console.error("Error fetching customers:", err)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const redeemReward = async (reward: LoyaltyReward) => {
+    if (!selectedCustomer || selectedCustomer.points < reward.points_required) return
+    
+    if (reward.reward_treatment_id) {
+      // If it's a treatment reward, open appointment dialog first
+      // Points will be deducted in onSave of the AppointmentDialog
+      setPendingReward(reward)
+      setPrefillCustomer(selectedCustomer)
+      setPrefillServiceIds([reward.reward_treatment_id])
+      setAppointmentDialogOpen(true)
+      setSelectedCustomer(null) // close details modal
+      return
+    }
+
+    setIsUpdating(true)
+    try {
+      const newPoints = selectedCustomer.points - reward.points_required
+      const { data, error } = await supabase
+        .from("customers")
+        .update({ points: newPoints })
+        .eq("id", selectedCustomer.id)
+        .select()
+        .single()
+      
+      if (!error && data) {
+        await supabase
+          .from("points_transactions")
+          .insert({
+            customer_id: selectedCustomer.id,
+            points_change: -reward.points_required,
+            reason: reward.reward_name,
+            type: "redeem"
+          })
+        
+        setCustomers(prev => prev.map(c => c.id === data.id ? data : c))
+        setSelectedCustomer(data)
+      }
+    } catch (err) {
+      console.error("Error redeeming reward:", err)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const earnPoints = async (rule: { description?: string; points_earned: number }) => {
+    if (!selectedCustomer) return
+    setIsUpdating(true)
+    try {
+      const newPoints = (selectedCustomer.points || 0) + rule.points_earned
+      const newVisits = selectedCustomer.visits + 1
+      const { data, error } = await supabase
+        .from("customers")
+        .update({ 
+          points: newPoints,
+          visits: newVisits,
+          last_visit: new Date().toISOString()
+        })
+        .eq("id", selectedCustomer.id)
+        .select()
+        .single()
+      
+      if (!error && data) {
+        await supabase
+          .from("points_transactions")
+          .insert({
+            customer_id: selectedCustomer.id,
+            points_change: rule.points_earned,
+            reason: rule.description || "Earned Points",
+            type: "earn"
+          })
+        
+        setCustomers(prev => prev.map(c => c.id === data.id ? data : c))
+        setSelectedCustomer(data)
+      }
+    } catch (err) {
+      console.error("Error earning points:", err)
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -598,13 +686,17 @@ export default function CustomersPage() {
 
   // open the customer modal when arriving from the NFC scanner page
   useEffect(() => {
-    const state = location.state as { customer?: Customer; fromNfc?: boolean } | null
+    const state = location.state as { customer?: Customer; fromNfc?: boolean; pointsAdded?: number } | null
     if (!state?.fromNfc || !state.customer) return
 
     const customerFromList = customers.find((c) => c.id === state.customer?.id)
     setSelectedCustomer(customerFromList || state.customer)
     setModalView("details")
     setCameFromNfc(true)
+    if (state.pointsAdded) {
+      // Refresh the list if points were added
+      fetchCustomers()
+    }
     navigate("/dashboard/customers", { replace: true })
   }, [location.state, customers, navigate])
 
@@ -959,7 +1051,7 @@ export default function CustomersPage() {
             <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/20 p-4">
               <h4 className="text-sm font-semibold text-muted-foreground">Quick Actions</h4>
               <Button
-                variant="outline"
+                variant={modalView === "details" ? "default" : "outline"}
                 className="justify-start"
                 onClick={() => setModalView("details")}
               >
@@ -967,12 +1059,20 @@ export default function CustomersPage() {
                 Details
               </Button>
               <Button
-                variant="outline"
+                variant={modalView === "treatments" ? "default" : "outline"}
                 className="justify-start"
                 onClick={() => setModalView("treatments")}
               >
                 <Award className="mr-2 h-4 w-4" />
                 Treatments
+              </Button>
+              <Button
+                variant={modalView === "loyalty" ? "default" : "outline"}
+                className="justify-start"
+                onClick={() => setModalView("loyalty")}
+              >
+                <Award className="mr-2 h-4 w-4" />
+                Rewards & Points
               </Button>
               <Separator className="my-1" />
               <Button
@@ -1097,15 +1197,12 @@ export default function CustomersPage() {
 
                   {/* Allergies */}
                   {selectedCustomer?.allergies && (
-                    <>
-                      <Separator />
-                      <div className="space-y-3">
-                        <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
-                        <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-                          <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
-                        </div>
+                    <div className="space-y-3">
+                      <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
+                      <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
+                        <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {/* timestamps */}
@@ -1119,6 +1216,60 @@ export default function CustomersPage() {
                     {selectedCustomer?.archived_at && (
                       <div>Archived on: {formatDate(selectedCustomer.archived_at)}</div>
                     )}
+                  </div>
+                </>
+              ) : modalView === "loyalty" ? (
+                <> {/* Loyalty tab view */}
+                  <div className="space-y-6">
+                    <h4 className="text-xl font-semibold flex items-center gap-2">
+                      <Award className="h-5 w-5 text-primary" />
+                      Loyalty Points & Rewards
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card className="border-primary/20 bg-primary/5">
+                        <CardContent className="p-6">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-muted-foreground">Available Points</p>
+                              <p className="text-4xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                            </div>
+                            <Award className="h-12 w-12 text-primary opacity-50" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardContent className="p-6 text-center flex flex-col items-center justify-center">
+                          <p className="text-sm font-medium text-muted-foreground mb-1">Total Visits</p>
+                          <p className="text-2xl font-bold">{selectedCustomer?.visits || 0}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Client since {formatDate(selectedCustomer?.created_at)}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <CustomerPointsDashboard
+                        isUpdating={isUpdating}
+                        currentPoints={selectedCustomer?.points || 0}
+                        showHistory={showPointsHistory}
+                        onRedeemReward={redeemReward}
+                        onEarnPoints={earnPoints}
+                        onToggleHistory={() => setShowPointsHistory(!showPointsHistory)}
+                      />
+                      
+                      {showPointsHistory && selectedCustomer && (
+                        <div className="mt-4 pt-4 border-t">
+                          <h5 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                             <Clock className="h-4 w-4" />
+                             Transaction History
+                          </h5>
+                          <PointsHistory customerId={selectedCustomer.id} />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : modalView === "treatments" ? (
@@ -1224,12 +1375,19 @@ export default function CustomersPage() {
                     <Eye className="mr-2 h-4 w-4" />
                     Details
                   </Button>
-              <Button
-                    variant="outline"
+                  <Button
+                    variant={modalView === "treatments" ? "default" : "outline"}
                     onClick={() => setModalView("treatments")}
                   >
                     <Award className="mr-2 h-4 w-4" />
                     Treatments
+                  </Button>
+                  <Button
+                    variant={modalView === "loyalty" ? "default" : "outline"}
+                    onClick={() => setModalView("loyalty")}
+                  >
+                    <Award className="mr-2 h-4 w-4" />
+                    Rewards
                   </Button>
               <Button
                     variant="outline"
@@ -1637,11 +1795,41 @@ export default function CustomersPage() {
         blockedTimes={[]}
         onSave={async (appointment) => {
           await addAppointment(appointment)
+          
+          // If this was a reward redemption, deduct points now
+          if (pendingReward && prefillCustomer) {
+            const newPoints = (prefillCustomer.points || 0) - pendingReward.points_required
+            
+            const { data: updatedCust, error: updateErr } = await supabase
+              .from("customers")
+              .update({ points: newPoints })
+              .eq("id", prefillCustomer.id)
+              .select()
+              .single()
+            
+            if (!updateErr && updatedCust) {
+              await supabase
+                .from("points_transactions")
+                .insert({
+                  customer_id: prefillCustomer.id,
+                  points_change: -pendingReward.points_required,
+                  reason: `Redeemed: ${pendingReward.reward_name}`,
+                  type: "redeem",
+                  appointment_id: appointment.id
+                })
+              
+              setCustomers(prev => prev.map(c => c.id === updatedCust.id ? updatedCust : c))
+            }
+          }
+
           setAppointmentDialogOpen(false)
           setPrefillCustomer(null)
+          setPrefillServiceIds([])
+          setPendingReward(null)
         }}
         prefillCustomerId={prefillCustomer?.id}
         prefillCustomerName={prefillCustomer?.name || `${prefillCustomer?.first_name || ''} ${prefillCustomer?.last_name || ''}`.trim()}
+        prefillServiceIds={prefillServiceIds}
       />
     </div>
   )

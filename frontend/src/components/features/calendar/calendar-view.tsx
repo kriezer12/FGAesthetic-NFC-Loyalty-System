@@ -28,6 +28,7 @@ import {
   type RecurrenceActionScope,
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
+import { awardPointsForAppointment } from "./calendar-parts/loyalty-utils"
 
 // ---- localStorage key ----
 const SETTINGS_STORAGE_KEY = "calendar-settings"
@@ -195,15 +196,25 @@ export function CalendarView() {
 
   /** Inline update (drag / resize). */
   const handleAppointmentUpdate = useCallback(
-    (id: string, updates: Partial<Appointment>) => {
-      updateAppointment(id, {
-        ...updates,
-        updated_at: new Date().toISOString(),
-      }).catch((err) => {
+    async (id: string, updates: Partial<Appointment>) => {
+      const oldAppt = appointments.find((a) => a.id === id)
+      
+      try {
+        await updateAppointment(id, {
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+
+        // If status changed to completed, award points
+        if (updates.status === "completed" && oldAppt?.status !== "completed") {
+          const updatedAppt = { ...oldAppt, ...updates } as Appointment
+          await awardPointsForAppointment(updatedAppt)
+        }
+      } catch (err) {
         console.error("Failed to update appointment:", err)
-      })
+      }
     },
-    [updateAppointment],
+    [updateAppointment, appointments],
   )
 
   /** Save from dialog (create or edit). */
@@ -214,7 +225,8 @@ export function CalendarView() {
   }
 
   const handleSave = useCallback(async (appt: Appointment): Promise<void> => {
-    const isNew = !appointments.find((a) => a.id === appt.id)
+    const oldAppt = appointments.find((a) => a.id === appt.id)
+    const isNew = !oldAppt
 
     if (isNew) {
       // if recurrence requested, add sequence
@@ -239,8 +251,18 @@ export function CalendarView() {
       } else {
         await addAppointment(appt)
       }
+      
+      // If created as completed (unlikely but possible), award points
+      if (appt.status === "completed") {
+        await awardPointsForAppointment(appt)
+      }
     } else {
       await updateAppointment(appt.id, appt)
+      
+      // If status changed to completed, award points
+      if (appt.status === "completed" && oldAppt?.status !== "completed") {
+        await awardPointsForAppointment(appt)
+      }
     }
     // Dialog closes itself on success; errors propagate back to the dialog
   }, [appointments, addAppointment, updateAppointment])

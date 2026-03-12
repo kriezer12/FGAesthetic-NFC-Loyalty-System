@@ -33,6 +33,7 @@ const UploadPage = lazy(() => import("./pages/upload.tsx"))
 const AccountsPage = lazy(() => import("./pages/accounts.tsx"))
 const TreatmentsPage = lazy(() => import("./pages/treatments.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/reset-password.tsx"))
+const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
 
 // Loading fallback component
 function PageLoader() {
@@ -100,6 +101,11 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/treatments" element={
             <Suspense fallback={<PageLoader />}>
               <TreatmentsPage />
+            </Suspense>
+          } />
+          <Route path="/dashboard/loyalty" element={
+            <Suspense fallback={<PageLoader />}>
+              <LoyaltyAdminPage />
             </Suspense>
           } />
           <Route path="/dashboard/upload" element={

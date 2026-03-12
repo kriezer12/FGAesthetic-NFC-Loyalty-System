@@ -74,6 +74,8 @@ interface AppointmentDialogProps {
   prefillCustomerId?: string
   /** Pre-filled customer name (e.g., from customer page). */
   prefillCustomerName?: string
+  /** Pre-filled service ids (e.g. from loyalty reward). */
+  prefillServiceIds?: string[]
   staff: StaffMember[]
   selectedDate: Date
   interval: IntervalMinutes
@@ -109,6 +111,7 @@ export function AppointmentDialog({
   prefillStartMinutes,
   prefillCustomerId,
   prefillCustomerName,
+  prefillServiceIds,
   staff,
   selectedDate,
   interval,
@@ -121,7 +124,7 @@ export function AppointmentDialog({
   const isEdit = Boolean(appointment)
 
   // ---- hooks ----
-  const { customers, loading: customersLoading, search: searchCustomers } = useCustomers()
+  const { customers, loading: customersLoading } = useCustomers()
 
   // ---- form state ----
   const [serviceIds, setServiceIds]     = useState<string[]>([])
@@ -200,13 +203,6 @@ export function AppointmentDialog({
     return undefined
   }, [serviceIds, serviceMap])
 
-  const treatmentOptions: ComboboxOption[] = useMemo(() => {
-    const cust = customers.find((c) => c.id === customerId)
-    return (cust?.treatments || []).map((t) => ({
-      value: t.id,
-      label: t.name,
-    }))
-  }, [customers, customerId])
 
   const customerOptions: ComboboxOption[] = useMemo(
     () =>
@@ -261,7 +257,7 @@ export function AppointmentDialog({
       setRecurrenceCount(appointment.recurrence_count ?? 1)
       setRecurrenceInterval(appointment.recurrence_days)
     } else {
-      setServiceIds([])
+      setServiceIds(prefillServiceIds ?? [])
       setCustomerId(prefillCustomerId ?? "")
       setCustomerName(prefillCustomerName ?? "")
       setStaffId(prefillStaffId ?? staff[0]?.id ?? "")
@@ -280,7 +276,7 @@ export function AppointmentDialog({
       setRecurrenceInterval(undefined)
     }
     setError("")
-  }, [open, appointment, prefillStaffId, prefillStartMinutes, prefillCustomerId, prefillCustomerName, staff, interval, selectedDate])
+  }, [open, appointment, prefillStaffId, prefillStartMinutes, prefillCustomerId, prefillCustomerName, prefillServiceIds, staff, interval, selectedDate])
 
   // sync interval when package selection changes; default to 7 (weekly) if service has no interval set
   useEffect(() => {

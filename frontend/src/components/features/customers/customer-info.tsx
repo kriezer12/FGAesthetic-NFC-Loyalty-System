@@ -4,13 +4,15 @@ import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { supabase } from "@/lib/supabase"
 import { CheckinHistory } from "./checkin-history"
+import { PointsHistory } from "./customer-info-parts/points-history"
 import { TreatmentStatusManager } from "./treatment-status-manager"
 import { TreatmentHistory } from "./treatment-history"
 import { CustomerAllergiesAlert } from "./customer-info-parts/customer-allergies-alert"
 import { CustomerContactDetails } from "./customer-info-parts/customer-contact-details"
 import { CustomerInfoHeader } from "./customer-info-parts/customer-info-header"
-import { CustomerPointsActions } from "./customer-info-parts/customer-points-actions"
+import { CustomerPointsDashboard } from "./customer-info-parts/customer-points-dashboard"
 import { CustomerStatsGrid } from "./customer-info-parts/customer-stats-grid"
+import type { LoyaltyReward } from "@/pages/loyalty-admin"
 
 import type { Customer, Treatment } from "@/types/customer"
 
@@ -60,11 +62,11 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
     })
   }
 
-  const addPoints = async (amount: number) => {
+  const earnPoints = async (rule: { description?: string; points_earned: number }) => {
     setIsUpdating(true)
     try {
-      const newPoints = Math.max(0, customer.points + amount)
-      const newVisits = amount > 0 ? customer.visits + 1 : customer.visits
+      const newPoints = (customer.points || 0) + rule.points_earned
+      const newVisits = customer.visits + 1
       const { data, error } = await supabase
         .from("customers")
         .update({ 
@@ -75,24 +77,63 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
         .eq("id", customer.id)
         .select()
         .single()
-
+      
       if (!error && data) {
-        // Log the check-in
+        await supabase
+          .from("points_transactions")
+          .insert({
+            customer_id: customer.id,
+            points_change: rule.points_earned,
+            reason: rule.description || "Earned Points",
+            type: "earn"
+          })
+        
         await supabase
           .from("checkin_logs")
           .insert({
             customer_id: customer.id,
             checked_in_at: new Date().toISOString(),
-            points_added: amount,
+            points_added: rule.points_earned,
           })
         
-        // Refresh the history
         setHistoryRefreshKey((k) => k + 1)
-        
         onUpdate(data)
       }
     } catch (err) {
-      console.error("Error updating points:", err)
+      console.error("Error earning points:", err)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const redeemReward = async (reward: LoyaltyReward) => {
+    if (customer.points < reward.points_required) return
+    setIsUpdating(true)
+    try {
+      const newPoints = customer.points - reward.points_required
+      const { data, error } = await supabase
+        .from("customers")
+        .update({ points: newPoints })
+        .eq("id", customer.id)
+        .select()
+        .single()
+      
+      if (!error && data) {
+        // Log the point transaction
+        await supabase
+          .from("points_transactions")
+          .insert({
+            customer_id: customer.id,
+            points_change: -reward.points_required,
+            reason: reward.reward_name,
+            type: "redeem"
+          })
+        
+        setHistoryRefreshKey((k) => k + 1)
+        onUpdate(data)
+      }
+    } catch (err) {
+      console.error("Error redeeming reward:", err)
     } finally {
       setIsUpdating(false)
     }
@@ -115,12 +156,13 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
 
         <Separator />
 
-        <CustomerPointsActions
+        <CustomerPointsDashboard
+          customerId={customer.id}
           isUpdating={isUpdating}
           currentPoints={customer.points || 0}
           showHistory={showHistory}
-          onRedeem={() => addPoints(-10)}
-          onAdd={() => addPoints(10)}
+          onRedeemReward={redeemReward}
+          onEarnPoints={earnPoints}
           onToggleHistory={() => setShowHistory(!showHistory)}
         />
 
@@ -182,7 +224,17 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
         </div>
 
         {showHistory && (
-          <CheckinHistory customerId={customer.id} refreshKey={historyRefreshKey} />
+          <div className="flex flex-col gap-4">
+            <PointsHistory customerId={customer.id} refreshKey={historyRefreshKey} />
+            <div className="text-xs text-center text-muted-foreground w-full py-2 bg-muted/30 rounded-md">
+              Check-in logs are still recorded, but points are now tracked here.
+            </div>
+            {/* Keeping check-in history for backward compatibility or dual-view if needed */}
+            <div className="mt-4 border-t pt-2">
+              <h4 className="text-sm font-semibold mb-2">Recent Check-ins</h4>
+              <CheckinHistory customerId={customer.id} refreshKey={historyRefreshKey} />
+            </div>
+          </div>
         )}
       </CardContent>
       <CardFooter>
