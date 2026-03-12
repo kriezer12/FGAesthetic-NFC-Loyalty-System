@@ -12,6 +12,7 @@ Usage:
     result = supabase.table('users').select('*').execute()
 """
 
+import sys
 from supabase import create_client, Client
 from app.config import config
 
@@ -35,10 +36,11 @@ def get_supabase() -> Client:
     
     if _supabase_client is None:
         if not config.SUPABASE_URL or not config.SUPABASE_KEY:
-            raise Exception(
-                "SUPABASE_URL and SUPABASE_KEY must be set in .env file"
-            )
+            error_msg = "SUPABASE_URL and SUPABASE_KEY must be set in .env file"
+            print(f"[SUPABASE ERROR] {error_msg}", file=sys.stderr)
+            raise Exception(error_msg)
         
+        print("[SUPABASE] Initializing client with anon key...", file=sys.stderr)
         _supabase_client = create_client(
             config.SUPABASE_URL,
             config.SUPABASE_KEY
@@ -62,11 +64,14 @@ def get_supabase_admin() -> Client:
     
     if _supabase_admin_client is None:
         if not config.SUPABASE_URL or not config.SUPABASE_SERVICE_KEY:
-            raise Exception(
+            error_msg = (
                 "SUPABASE_SERVICE_KEY must be set in .env file. "
                 "Find it in Supabase Dashboard → Project Settings → API → service_role key."
             )
+            print(f"[SUPABASE ERROR] {error_msg}", file=sys.stderr)
+            raise Exception(error_msg)
         
+        print("[SUPABASE] Initializing admin client with service_role key...", file=sys.stderr)
         _supabase_admin_client = create_client(
             config.SUPABASE_URL,
             config.SUPABASE_SERVICE_KEY

@@ -25,6 +25,7 @@ import { DashboardLayout } from "./components/layout"
 // Lazy load all page components for code splitting
 const Dashboard = lazy(() => import("./pages/dashboard.tsx"))
 const CheckinLogsPage = lazy(() => import("./pages/checkin-logs.tsx"))
+const UserLogsPage = lazy(() => import("./pages/user-logs.tsx"))
 const CustomersPage = lazy(() => import("./pages/customers.tsx"))
 const NFCScanPage = lazy(() => import("./pages/nfc-scan.tsx"))
 const LoginPage = lazy(() => import("./pages/login.tsx"))
@@ -32,6 +33,7 @@ const AppointmentsPage = lazy(() => import("./pages/appointments.tsx"))
 const UploadPage = lazy(() => import("./pages/upload.tsx"))
 const AccountsPage = lazy(() => import("./pages/accounts.tsx"))
 const TreatmentsPage = lazy(() => import("./pages/treatments.tsx"))
+const ReportsPage = lazy(() => import("./pages/reports.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/reset-password.tsx"))
 const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
 
@@ -93,6 +95,11 @@ createRoot(document.getElementById('root')).render(
               <CheckinLogsPage />
             </Suspense>
           } />
+          <Route path="/dashboard/user-logs" element={
+            <Suspense fallback={<PageLoader />}>
+              <UserLogsPage />
+            </Suspense>
+          } />
           <Route path="/dashboard/appointments" element={
             <Suspense fallback={<PageLoader />}>
               <AppointmentsPage />
@@ -116,6 +123,11 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/accounts" element={
             <Suspense fallback={<PageLoader />}>
               <AccountsPage />
+            </Suspense>
+          } />
+          <Route path="/dashboard/reports" element={
+            <Suspense fallback={<PageLoader />}>
+              <ReportsPage />
             </Suspense>
           } />
         </Route>

@@ -2,6 +2,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { CheckinHistory } from "./checkin-history"
 import { PointsHistory } from "./customer-info-parts/points-history"
@@ -23,6 +24,7 @@ interface CustomerInfoProps {
 }
 
 export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps) {
+  const { user, userProfile } = useAuth()
   const [isUpdating, setIsUpdating] = React.useState(false)
   const [showHistory, setShowHistory] = React.useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0)
@@ -94,6 +96,9 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
             customer_id: customer.id,
             checked_in_at: new Date().toISOString(),
             points_added: rule.points_earned,
+            points_added: amount,
+            processed_by: user?.id || null,
+            branch_id: userProfile?.branch_id || null,
           })
         
         setHistoryRefreshKey((k) => k + 1)
