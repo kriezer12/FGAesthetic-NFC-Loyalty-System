@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { supabase } from "@/lib/supabase"
+import { applyAutomatedPoints } from "@/lib/loyalty-utils"
 import { validatePhilippinePhone } from "./register-card-parts/phone-utils"
 import { RegisterCardContactSection } from "./register-card-parts/register-card-contact-section"
 import { RegisterCardError } from "./register-card-parts/register-card-error"
@@ -106,6 +107,18 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
         return
       }
 
+      // Automatically apply points for first visit
+      const newCustomer = data as Customer
+      await applyAutomatedPoints(newCustomer.id)
+      
+      // Fetch updated customer data
+      const { data: updatedCustomer } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", newCustomer.id)
+        .single()
+
+      onSuccess((updatedCustomer as Customer) || newCustomer)
       await logUserAction({
         actionType: "registered_new_client",
         entityType: "customer",

@@ -115,7 +115,6 @@ export default function TreatmentsPage() {
                         <TableHead>Product</TableHead>
                         <TableHead className="text-center">Package</TableHead>
                         <TableHead className="text-right">Price</TableHead>
-                        <TableHead className="text-right">Points</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -133,7 +132,6 @@ export default function TreatmentsPage() {
                                 ) : "—"}
                               </TableCell>
                               <TableCell className="text-right">₱{s.price.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">{s.points_value}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-1">
                                   <Button size="icon" variant="ghost" className="size-8" onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
@@ -209,7 +207,6 @@ export default function TreatmentsPage() {
                   uses_product: es?.uses_product || false,
                   product: es?.product,
                   price: es?.price || 0,
-                  points_value: es?.points_value || 0,
                   is_package: es?.is_package || false,
                   session_count: es?.session_count || undefined,
                   recurrence_days: es?.recurrence_days || undefined,
@@ -280,17 +277,6 @@ export default function TreatmentsPage() {
               />
             </div>
 
-            {/* Points */}
-            <div className="grid gap-1">
-              <Label>Loyalty Points Earned</Label>
-              <Input
-                type="number"
-                min={0}
-                value={editingService?.points_value ?? 0}
-                onChange={(e) => setEditingService((es) => ({ ...es!, points_value: parseInt(e.target.value, 10) || 0 }))}
-                placeholder="0"
-              />
-            </div>
 
             {/* Package flag + recurrence */}
             <div className="grid gap-1">
