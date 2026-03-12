@@ -6,7 +6,9 @@
  */
 
 const getApiBaseUrl = (): string => {
-  return ""
+  // When running in Docker with Vite dev server, requests to /api are proxied to the backend
+  // In production, API_BASE_URL should be set via environment variable or use relative paths
+  return import.meta.env.VITE_API_URL || "/api"
 }
 
 export const API_BASE_URL = getApiBaseUrl()

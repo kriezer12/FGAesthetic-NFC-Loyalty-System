@@ -6,6 +6,7 @@ const adminLinks: { title: string; url: string }[] = [
   { title: "Check-in Logs", url: "/dashboard/checkin-logs" },
   { title: "User Logs", url: "/dashboard/user-logs" },
   { title: "Treatments", url: "/dashboard/treatments" },
+  { title: "Reports", url: "/dashboard/reports" },
 ]
 
 export function NavbarAdminDropdown() {
