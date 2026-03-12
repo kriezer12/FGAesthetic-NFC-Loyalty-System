@@ -23,4 +23,5 @@ export interface TreatmentSummary {
   total_sessions: number
   used_sessions: number
   remaining_sessions: number
+  clients?: { id: string; name: string }[]
 }

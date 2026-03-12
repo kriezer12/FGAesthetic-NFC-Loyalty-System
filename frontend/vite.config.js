@@ -29,7 +29,9 @@ export default defineConfig({
       usePolling: process.env.CHOKIDAR_USEPOLLING === "true",
       interval: Number(process.env.CHOKIDAR_INTERVAL ?? 500),
     },
-    hmr: true,
+    hmr: {
+      clientPort: 5173
+    },
     // Proxy API requests to backend during development.
     // Uses BACKEND_URL (no VITE_ prefix) so it stays server-side only
     // and is never baked into the browser bundle.

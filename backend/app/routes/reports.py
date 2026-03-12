@@ -149,6 +149,23 @@ def get_treatment_summary():
         ).neq("status", "cancelled").execute()
         appointments = appts_resp.data or []
 
+        # Get all unique customer IDs from appointments to fetch names in one go
+        customer_ids_to_fetch = {appt.get("customer_id") for appt in appointments if appt.get("customer_id")}
+
+        # Fetch basic customer profiles for these IDs
+        customer_map: Dict[str, Dict[str, str]] = {}
+        if customer_ids_to_fetch:
+            # We must batch requests if the list is incredibly large, but usually it fits in one `in_` filter.
+            # Convert set to list for python supabase client's .in_()
+            customer_ids_list = list(customer_ids_to_fetch)
+            # In case list exceeds single request capacity (e.g. > 1000 items), fetch all customers just to be safe.
+            # But better to just fetch first/last_name and id for all customers to avoid complex chunking if this is small scale.
+            # Let's just fetch all customers name mapping for simplicity as this is a dashboard report
+            cust_resp = supabase.table("customers").select("id, name, first_name, last_name").execute()
+            for c in (cust_resp.data or []):
+                full_name = c.get("name") or f"{c.get('first_name', '')} {c.get('last_name', '')}".strip() or "Unknown Client"
+                customer_map[c["id"]] = {"id": c["id"], "name": full_name}
+
         # Aggregate per package service name
         treatment_map: Dict[str, Any] = {}
 
@@ -167,6 +184,7 @@ def get_treatment_summary():
                     treatment_map[name] = {
                         "treatment_name": name,
                         "_client_ids": set(),
+                        "clients": {},  # Use dict to dedupe clients by ID
                         "total_sessions": 0,
                         "used_sessions": 0,
                         "remaining_sessions": 0,
@@ -175,6 +193,8 @@ def get_treatment_summary():
                 treatment_map[name]["total_sessions"] += 1
                 if customer_id:
                     treatment_map[name]["_client_ids"].add(customer_id)
+                    if customer_id in customer_map:
+                        treatment_map[name]["clients"][customer_id] = customer_map[customer_id]
                 if status == "completed":
                     treatment_map[name]["used_sessions"] += 1
                 else:
@@ -184,6 +204,7 @@ def get_treatment_summary():
             {
                 "treatment_name": v["treatment_name"],
                 "total_clients": len(v["_client_ids"]),
+                "clients": list(v["clients"].values()),
                 "total_sessions": v["total_sessions"],
                 "used_sessions": v["used_sessions"],
                 "remaining_sessions": v["remaining_sessions"],

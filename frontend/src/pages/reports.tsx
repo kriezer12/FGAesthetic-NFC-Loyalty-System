@@ -135,21 +135,55 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto">
-        <ReportsHeader loading={loading} onRefresh={fetchReportData} />
+    <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background p-4 md:p-8 transition-colors duration-500">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header Section */}
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both">
+          <ReportsHeader loading={loading} onRefresh={fetchReportData} />
+        </div>
 
-        {error && <ErrorBanner error={error} />}
+        {/* Error Banner */}
+        {error && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+            <ErrorBanner error={error} />
+          </div>
+        )}
 
-        <ClientStatusCards clientCounts={clientCounts} loading={loading} />
+        {/* Key Metrics Section */}
+        <section className="space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both delay-100">
+          <div className="px-1">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">Client Overview</h2>
+            <p className="text-sm text-muted-foreground mt-1">Current client status distribution</p>
+          </div>
+          <ClientStatusCards clientCounts={clientCounts} loading={loading} />
+        </section>
 
-        <ExportSection exporting={exporting} loading={loading} onExport={handleExportCSV} />
+        {/* Main Content - Export & Data Tables */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Export Section - Sidebar */}
+          <section className="lg:col-span-1 animate-in fade-in slide-in-from-left-8 duration-700 fill-mode-both delay-200">
+            <ExportSection exporting={exporting} loading={loading} onExport={handleExportCSV} />
+          </section>
 
-        <ArchivedClientsTable archivedClients={archivedClients} />
+          {/* Data Tables - Main Content */}
+          <section className="lg:col-span-3 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both delay-300">
+            {/* Treatment Summary */}
+            <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border">
+              <TreatmentSummaryTable treatmentSummary={treatmentSummary} loading={loading} />
+            </div>
 
-        <TreatmentSummaryTable treatmentSummary={treatmentSummary} loading={loading} />
+            {/* Archived Clients */}
+            <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border">
+              <ArchivedClientsTable archivedClients={archivedClients} />
+            </div>
+          </section>
+        </div>
 
-        <EmptyState loading={loading} clientCounts={clientCounts} />      </div>
+        {/* Empty State */}
+        <div className="animate-in fade-in duration-700 delay-500 fill-mode-both">
+          <EmptyState loading={loading} clientCounts={clientCounts} />
+        </div>
+      </div>
     </div>
   )
 }
