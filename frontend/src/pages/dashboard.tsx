@@ -245,6 +245,29 @@ export default function Dashboard() {
   const dailyActivity = useMemo(() => computeChart(rawRows, activityFilter, "last_visit"), [rawRows, activityFilter])
   const monthlyGrowth = useMemo(() => computeChart(rawRows, registrationsFilter, "created_at"), [rawRows, registrationsFilter])
 
+  // progressive dots for line charts – reveal each dot in sequence so they
+  // match the drawing animation.  This mirrors the behavior observed on the
+  // dashboard card and avoids early/static dots when the chart is first drawn.
+  const totalGrowthPoints = monthlyGrowth.length
+  const lineAnimationMs = 950
+  const ProgressiveDot: React.FC<any> = ({ cx, cy, index }) => {
+    const [visible, setVisible] = useState(false)
+
+    useEffect(() => {
+      if (totalGrowthPoints <= 1) {
+        // nothing to animate
+        setVisible(true)
+        return
+      }
+      const delay = (index / (totalGrowthPoints - 1)) * lineAnimationMs
+      const timer = setTimeout(() => setVisible(true), delay)
+      return () => clearTimeout(timer)
+    }, [index])
+
+    if (!visible) return null
+    return <circle cx={cx} cy={cy} r={4} fill={GOLD} strokeWidth={0} />
+  }
+
   const totalCustomersCount = useCounter(stats.totalCustomers, 1200)
   const activeCardsCount = useCounter(stats.activeCards, 1200)
   const totalVisitsCount = useCounter(stats.totalVisits, 1200)
@@ -254,6 +277,16 @@ export default function Dashboard() {
     document.title = "Dashboard - FG Aesthetic Centre"
     loadAll()
   }, [])
+
+  // When a modal with charts opens we need to trigger a resize event
+  // so Recharts can recalculate dimensions. The modal is initially
+  // hidden which can cause the animation/render to misbehave.
+  useEffect(() => {
+    if (openModal) {
+      // dispatch after paint so charts can measure themselves
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 50)
+    }
+  }, [openModal])
 
   const loadAll = async () => {
     try {
@@ -367,7 +400,7 @@ export default function Dashboard() {
                   name="Registered"
                   stroke={GOLD}
                   strokeWidth={2}
-                  dot={{ r: 4, fill: GOLD, strokeWidth: 0 }}
+                  dot={<ProgressiveDot />}
                   activeDot={{ r: 5 }}
                 />
               </LineChart>
@@ -479,7 +512,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">New Registrations Over Time</p>
               <FilterToggle value={registrationsFilter} onChange={setRegistrationsFilter} />
             </div>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer key={openModal} width="100%" height={300}>
               <LineChart data={monthlyGrowth}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
@@ -491,8 +524,9 @@ export default function Dashboard() {
                   name="Registered"
                   stroke={GOLD}
                   strokeWidth={2}
-                  dot={{ r: 4, fill: GOLD, strokeWidth: 0 }}
+                  dot={<ProgressiveDot />}
                   activeDot={{ r: 5 }}
+                  // let Recharts handle the animation by default
                 />
               </LineChart>
             </ResponsiveContainer>
