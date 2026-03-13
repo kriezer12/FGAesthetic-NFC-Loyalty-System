@@ -5,6 +5,7 @@ import { Outlet } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
 import { AppNavbar } from "./app-navbar"
 import { FirstLoginModal } from "../auth/first-login-modal"
+import { AppointmentNotifier } from "../features/appointments/appointment-notifier"
 import { GlobalNFCListener } from "../features/nfc/global-nfc-listener"
 
 export function DashboardLayout() {
@@ -27,6 +28,7 @@ export function DashboardLayout() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <GlobalNFCListener />
+      <AppointmentNotifier />
       <AppNavbar />
       <main className="flex-1 p-6">
         <Outlet />

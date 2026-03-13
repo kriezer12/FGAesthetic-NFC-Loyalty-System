@@ -31,7 +31,7 @@ export async function logUserAction(params: LogUserActionParams) {
       branch_id: params.branchId,
       changes: params.changes,
       metadata: params.metadata,
-      timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     });
 
     if (error) {
