@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { DatePicker } from "@/components/ui/date-picker"
 import { TimePicker } from "@/components/ui/time-picker"
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox"
@@ -449,7 +450,7 @@ export function AppointmentDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Appointment" : "New Appointment"}</DialogTitle>
           <DialogDescription>
@@ -459,9 +460,9 @@ export function AppointmentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2 overflow-y-auto overflow-x-hidden pr-1">
+        <ScrollArea className="flex-1 min-h-0 grid gap-4 py-3 px-5">
           {/* Appointment type */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Appointment Type</Label>
             <Combobox
               options={APPOINTMENT_TYPE_OPTIONS}
@@ -472,7 +473,7 @@ export function AppointmentDialog({
 
           {/* Services (only for non-consultation) */}
           {appointmentType !== "consultation" && (
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>
                 Services <span className="text-destructive">*</span>
               </Label>
@@ -484,7 +485,7 @@ export function AppointmentDialog({
           )}
 
           {/* Customer */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Customer</Label>
             <Combobox
               options={customerOptions}
@@ -497,7 +498,7 @@ export function AppointmentDialog({
           </div>
 
           {/* Staff */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>
               Staff <span className="text-destructive">*</span>
             </Label>
@@ -512,7 +513,7 @@ export function AppointmentDialog({
           </div>
 
           {/* Appointment Date */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Appointment Date</Label>
             <DatePicker
               value={appointmentDate}
@@ -523,7 +524,7 @@ export function AppointmentDialog({
 
           {/* Start / End times */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>
                 Start Time <span className="text-destructive">*</span>
               </Label>
@@ -535,7 +536,7 @@ export function AppointmentDialog({
                 maxTime={minutesToTimeInput(clinicHours.close * 60)}
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-2">
               <Label>
                 End Time <span className="text-destructive">*</span>
               </Label>
@@ -554,7 +555,7 @@ export function AppointmentDialog({
             <div className="rounded-md border bg-muted/40 p-3 grid gap-3">
               <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
               <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Days between sessions</Label>
                   <Input
                     type="number"
@@ -564,7 +565,7 @@ export function AppointmentDialog({
                     placeholder="7 (weekly)"
                   />
                 </div>
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   <Label>Total sessions</Label>
                   <Input
                     type="number"
@@ -578,7 +579,7 @@ export function AppointmentDialog({
           )}
 
           {/* Location */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Location</Label>
             <Combobox
               options={locationOptions}
@@ -591,7 +592,7 @@ export function AppointmentDialog({
           </div>
 
           {/* Status */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <Label>Status</Label>
             <Combobox
               options={statusOptions}
@@ -604,7 +605,7 @@ export function AppointmentDialog({
           </div>
 
           {/* Notes */}
-          <div className="grid gap-1.5">
+          <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="appt-notes">Notes</Label>
               <span className={`text-xs tabular-nums ${
@@ -632,7 +633,7 @@ export function AppointmentDialog({
               {error}
             </p>
           )}
-        </div>
+        </ScrollArea>
 
         <DialogFooter className="gap-2">
           {isEdit && onDelete && appointment && (
