@@ -92,13 +92,24 @@ def create_account():
         
         # authorization: branch_admin cannot create super_admin or branch_admin
         try:
-            auth_client = get_supabase()
-            caller_profile = get_supabase_admin().table('user_profiles').select('role').eq('id', admin_user_id).single().execute()
+            supabase_admin = get_supabase_admin()
+            caller_profile = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', admin_user_id).single().execute()
             caller_role = caller_profile.data.get('role') if caller_profile.data else None
-            if caller_role == 'branch_admin' and data.get('role') != 'staff':
-                return jsonify({'error': 'Branch admin may only create staff accounts'}), 403
-        except Exception:
-            pass
+            caller_branch_id = caller_profile.data.get('branch_id')
+
+            if caller_role == 'branch_admin':
+                if data.get('role') != 'staff':
+                    return jsonify({'error': 'Branch admin may only create staff accounts'}), 403
+                
+                # Force branch_id to be same as admin's
+                if not caller_branch_id:
+                    return jsonify({'error': 'Branch admin must have an assigned branch to create accounts'}), 403
+                
+                data['branch_id'] = caller_branch_id
+            elif caller_role != 'super_admin':
+                return jsonify({'error': 'Unauthorized: Insufficient permissions'}), 403
+        except Exception as e:
+            return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
 
         try:
             supabase_admin = get_supabase_admin()
@@ -179,33 +190,46 @@ def create_account():
 @accounts_bp.route('/list', methods=['GET'])
 def list_accounts():
     """
-    Get all user accounts.
-    
-    Returns:
-    {
-        "accounts": [
-            {
-                "id": "user_id",
-                "email": "user@example.com",
-                "full_name": "User Name",
-                "role": "staff",
-                "is_active": true,
-                "branch_id": "uuid",
-                "branch_name": "Makati",
-                "created_at": "2024-01-01T00:00:00Z"
-            },
-            ...
-        ]
-    }
+    Get user accounts.
+    - super_admin: sees all accounts
+    - branch_admin: sees only accounts in their branch
     """
     try:
+        # Authenticate and get caller info
+        try:
+            caller_id = get_user_from_token()
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
+
         supabase = get_supabase_admin()
         
-        # Fetch all user profiles
-        response = supabase.table('user_profiles').select('*').execute()
+        # Get caller's profile to check role and branch
+        caller_profile = supabase.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
+        
+        if not caller_profile.data:
+            return jsonify({'error': 'User profile not found'}), 404
+            
+        caller_role = caller_profile.data.get('role')
+        caller_branch_id = caller_profile.data.get('branch_id')
+        
+        # Build query based on role
+        query = supabase.table('user_profiles').select('*')
+        
+        if caller_role == 'branch_admin':
+            if not caller_branch_id:
+                # Branch admin without a branch assigned
+                return jsonify({'success': True, 'accounts': []}), 200
+            query = query.eq('branch_id', caller_branch_id)
+        elif caller_role != 'super_admin':
+            # Other roles (e.g. staff) are not authorized to list accounts
+            return jsonify({'error': 'Unauthorized: Insufficient permissions'}), 403
+            
+        # Fetch filtered user profiles
+        response = query.execute()
         
         if not response.data:
             return jsonify({
+                'success': True,
                 'accounts': []
             }), 200
         
@@ -262,17 +286,30 @@ def update_account(user_id):
         # authorization check before modifying
         try:
             caller_id = get_user_from_token()
-            caller_prof = get_supabase_admin().table('user_profiles').select('role').eq('id', caller_id).single().execute()
+            supabase_admin = get_supabase_admin()
+            caller_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
             caller_role = caller_prof.data.get('role') if caller_prof.data else None
+            caller_branch_id = caller_prof.data.get('branch_id')
+
             if caller_role == 'branch_admin':
-                target_prof = get_supabase_admin().table('user_profiles').select('role').eq('id', user_id).single().execute()
-                target_role = target_prof.data.get('role') if target_prof.data else None
+                target_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).single().execute()
+                if not target_prof.data:
+                    return jsonify({'error': 'Target user not found'}), 404
+                
+                target_role = target_prof.data.get('role')
+                target_branch_id = target_prof.data.get('branch_id')
+
                 if target_role != 'staff':
                     return jsonify({'error': 'Branch admin may only edit staff accounts'}), 403
+                
+                if target_branch_id != caller_branch_id:
+                    return jsonify({'error': 'Branch admin may only edit staff in their own branch'}), 403
+            elif caller_role != 'super_admin':
+                return jsonify({'error': 'Unauthorized'}), 403
         except ValueError as e:
             return jsonify({'error': str(e)}), 401
-        except Exception:
-            pass
+        except Exception as e:
+            return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
         
         supabase = get_supabase_admin()
         
@@ -327,6 +364,34 @@ def delete_account(user_id):
     }
     """
     try:
+        # authorization check before deleting
+        try:
+            caller_id = get_user_from_token()
+            supabase_admin = get_supabase_admin()
+            caller_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
+            caller_role = caller_prof.data.get('role') if caller_prof.data else None
+            caller_branch_id = caller_prof.data.get('branch_id')
+
+            if caller_role == 'branch_admin':
+                target_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).single().execute()
+                if not target_prof.data:
+                    return jsonify({'error': 'Target user not found'}), 404
+                
+                target_role = target_prof.data.get('role')
+                target_branch_id = target_prof.data.get('branch_id')
+
+                if target_role != 'staff':
+                    return jsonify({'error': 'Branch admin may only delete staff accounts'}), 403
+                
+                if target_branch_id != caller_branch_id:
+                    return jsonify({'error': 'Branch admin may only delete staff in their own branch'}), 403
+            elif caller_role != 'super_admin':
+                return jsonify({'error': 'Unauthorized'}), 403
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
+        except Exception as e:
+            return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
+
         supabase = get_supabase_admin()
         
         # Delete user auth record using admin API
