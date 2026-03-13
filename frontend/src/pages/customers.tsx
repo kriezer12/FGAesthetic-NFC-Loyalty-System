@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   Dialog,
   DialogContent,
@@ -1537,13 +1538,14 @@ export default function CustomersPage() {
       </Dialog>
 
       <Dialog open={profileEditorOpen} onOpenChange={setProfileEditorOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-            <DialogDescription>Update the selected customer's profile information.</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>Edit Profile</DialogTitle>
+          <DialogDescription>Update the selected customer's profile information.</DialogDescription>
+        </DialogHeader>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <ScrollArea className="flex-1 h-full min-h-0 px-6 py-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">First Name</label>
               <Input
@@ -1582,10 +1584,16 @@ export default function CustomersPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Date of Birth</label>
-              <Input
-                type="date"
-                value={profileForm.date_of_birth}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, date_of_birth: e.target.value }))}
+              <DatePicker
+                value={profileForm.date_of_birth ? new Date(profileForm.date_of_birth) : undefined}
+                onChange={(date) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    date_of_birth: date ? date.toISOString().slice(0, 10) : "",
+                  }))
+                }
+                captionLayout="dropdown"
+                enableManualInput
               />
             </div>
             <div className="space-y-2">
@@ -1633,16 +1641,17 @@ export default function CustomersPage() {
               />
             </div>
           </div>
+        </ScrollArea>
 
-          <div className="mt-2 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveProfile} disabled={savingProfile}>
-              {savingProfile ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </DialogContent>
+        <div className="mt-2 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
+            Cancel
+          </Button>
+          <Button onClick={handleSaveProfile} disabled={savingProfile}>
+            {savingProfile ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </DialogContent>
       </Dialog>
 
       {/* Treatment Documentation Modal */}
