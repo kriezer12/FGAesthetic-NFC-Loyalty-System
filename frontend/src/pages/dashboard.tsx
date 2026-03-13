@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
 import {
-  BarChart, Bar, LineChart, Line,
+  BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts"
 
@@ -52,59 +52,57 @@ const GOLD = "var(--color-primary)"
 // ---------------------------------------------------------------------------
 // Chart data computation
 // ---------------------------------------------------------------------------
-function buildDailyPoints(rows: RawRow[], dateKey: "last_visit" | "created_at"): ChartPoint[] {
-  const counts: Record<string, number> = {}
-  const labels: string[] = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i)
-    counts[d.toISOString().slice(0, 10)] = 0
-    labels.push(d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }))
+function generateTimeBuckets(filter: TimeFilter): { label: string; start: number; end: number; count: number }[] {
+  const buckets: { label: string; start: number; end: number; count: number }[] = []
+  const now = new Date()
+  
+  if (filter === "daily") {
+    // 7 days ending today
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+      const start = d.getTime()
+      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime()
+      buckets.push({ label: d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }), start, end, count: 0 })
+    }
+  } else if (filter === "weekly") {
+    // 8 weeks ending today
+    for (let i = 7; i >= 0; i--) {
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (i * 7), 23, 59, 59, 999)
+      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6, 0, 0, 0, 0)
+      buckets.push({ label: start.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), start: start.getTime(), end: end.getTime(), count: 0 })
+    }
+  } else if (filter === "yearly") {
+    // 12 months ending this month
+    for (let i = 11; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1, 0, 0, 0, 0)
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999)
+      buckets.push({ label: start.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), start: start.getTime(), end: end.getTime(), count: 0 })
+    }
   }
-  const isoKeys = Object.keys(counts)
-  rows.forEach((row) => {
-    const val = row[dateKey]; if (!val) return
-    const iso = val.slice(0, 10)
-    if (iso in counts) counts[iso]++
-  })
-  return isoKeys.map((iso, i) => ({ label: labels[i], count: counts[iso] }))
-}
-
-function buildWeeklyPoints(rows: RawRow[], dateKey: "last_visit" | "created_at"): ChartPoint[] {
-  const weeks: { label: string; start: Date; end: Date; count: number }[] = []
-  for (let i = 7; i >= 0; i--) {
-    const end = new Date(); end.setDate(end.getDate() - i * 7)
-    const start = new Date(end); start.setDate(start.getDate() - 6)
-    start.setHours(0, 0, 0, 0); end.setHours(23, 59, 59, 999)
-    weeks.push({ label: start.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), start, end, count: 0 })
-  }
-  rows.forEach((row) => {
-    const val = row[dateKey]; if (!val) return
-    const d = new Date(val)
-    for (const w of weeks) { if (d >= w.start && d <= w.end) { w.count++; break } }
-  })
-  return weeks.map(({ label, count }) => ({ label, count }))
-}
-
-function buildYearlyPoints(rows: RawRow[], dateKey: "last_visit" | "created_at"): ChartPoint[] {
-  const counts: Record<string, number> = {}
-  const labels: string[] = []
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(); d.setMonth(d.getMonth() - i)
-    const key = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
-    counts[key] = 0; labels.push(key)
-  }
-  rows.forEach((row) => {
-    const val = row[dateKey]; if (!val) return
-    const key = new Date(val).toLocaleDateString("en-GB", { month: "short", year: "2-digit" })
-    if (key in counts) counts[key]++
-  })
-  return labels.map((label) => ({ label, count: counts[label] }))
+  return buckets
 }
 
 function computeChart(rows: RawRow[], filter: TimeFilter, dateKey: "last_visit" | "created_at"): ChartPoint[] {
-  if (filter === "daily") return buildDailyPoints(rows, dateKey)
-  if (filter === "weekly") return buildWeeklyPoints(rows, dateKey)
-  return buildYearlyPoints(rows, dateKey)
+  const buckets = generateTimeBuckets(filter)
+  
+  for (const row of rows) {
+    const val = row[dateKey]
+    if (!val) continue
+    
+    // Parse the date robustly
+    const time = new Date(val).getTime()
+    if (isNaN(time)) continue
+    
+    // Find matching bucket
+    for (const b of buckets) {
+      if (time >= b.start && time <= b.end) {
+        b.count++
+        break
+      }
+    }
+  }
+  
+  return buckets.map(b => ({ label: b.label, count: b.count }))
 }
 
 const FILTER_SUBTITLES: Record<"activity" | "registrations", Record<TimeFilter, string>> = {
@@ -245,29 +243,6 @@ export default function Dashboard() {
   const dailyActivity = useMemo(() => computeChart(rawRows, activityFilter, "last_visit"), [rawRows, activityFilter])
   const monthlyGrowth = useMemo(() => computeChart(rawRows, registrationsFilter, "created_at"), [rawRows, registrationsFilter])
 
-  // progressive dots for line charts – reveal each dot in sequence so they
-  // match the drawing animation.  This mirrors the behavior observed on the
-  // dashboard card and avoids early/static dots when the chart is first drawn.
-  const totalGrowthPoints = monthlyGrowth.length
-  const lineAnimationMs = 950
-  const ProgressiveDot: React.FC<any> = ({ cx, cy, index }) => {
-    const [visible, setVisible] = useState(false)
-
-    useEffect(() => {
-      if (totalGrowthPoints <= 1) {
-        // nothing to animate
-        setVisible(true)
-        return
-      }
-      const delay = (index / (totalGrowthPoints - 1)) * lineAnimationMs
-      const timer = setTimeout(() => setVisible(true), delay)
-      return () => clearTimeout(timer)
-    }, [index])
-
-    if (!visible) return null
-    return <circle cx={cx} cy={cy} r={4} fill={GOLD} strokeWidth={0} />
-  }
-
   const totalCustomersCount = useCounter(stats.totalCustomers, 1200)
   const activeCardsCount = useCounter(stats.activeCards, 1200)
   const totalVisitsCount = useCounter(stats.totalVisits, 1200)
@@ -368,10 +343,10 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={dailyActivity} barCategoryGap="30%">
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                <Bar dataKey="count" name="Customers" fill={GOLD} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" name="Customers" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -388,22 +363,33 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="px-2 pb-4">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={monthlyGrowth}>
+            <ResponsiveContainer key={`registrations-${registrationsFilter}`} width="100%" height={200}>
+              <AreaChart data={monthlyGrowth}>
+                <defs>
+                  <linearGradient id="regGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                 <Tooltip content={<ChartTooltip />} />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="count"
                   name="Registered"
-                  stroke={GOLD}
+                  stroke="var(--color-primary)"
                   strokeWidth={2}
-                  dot={<ProgressiveDot />}
-                  activeDot={{ r: 5 }}
+                  fill="url(#regGradient)"
+                  dot={{ r: 3, fill: "var(--color-primary)", strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-background)", fill: "var(--color-primary)" }}
+                  isAnimationActive={true}
+                  animationBegin={0}
+                  animationDuration={1500}
+                  animationEasing="ease-in-out"
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -512,25 +498,35 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">New Registrations Over Time</p>
               <FilterToggle value={registrationsFilter} onChange={setRegistrationsFilter} />
             </div>
-            <ResponsiveContainer key={openModal} width="100%" height={300}>
-              <LineChart data={monthlyGrowth}>
+            <ResponsiveContainer key={`modal-registrations-${registrationsFilter}-${openModal}`} width="100%" height={300}>
+              <AreaChart data={monthlyGrowth}>
+                <defs>
+                  <linearGradient id="regGradientModal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                 <Tooltip content={<ChartTooltip />} />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="count"
                   name="Registered"
-                  stroke={GOLD}
+                  stroke="var(--color-primary)"
                   strokeWidth={2}
-                  dot={<ProgressiveDot />}
-                  activeDot={{ r: 5 }}
-                  // let Recharts handle the animation by default
+                  fill="url(#regGradientModal)"
+                  dot={{ r: 3, fill: "var(--color-primary)", strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-background)", fill: "var(--color-primary)" }}
+                  isAnimationActive={true}
+                  animationBegin={0}
+                  animationDuration={1500}
+                  animationEasing="ease-in-out"
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
-            <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
+            <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
           </div>
         </DialogContent>
       </Dialog>
@@ -561,10 +557,10 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={monthlyGrowth} barCategoryGap="30%">
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                  <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                   <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                  <Bar dataKey="count" name="Cards" fill={GOLD} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="Cards" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -597,10 +593,10 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={dailyActivity} barCategoryGap="30%">
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                  <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                   <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                  <Bar dataKey="count" name="Visits" fill={GOLD} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="Visits" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
               <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.activity[activityFilter]}</p>
@@ -628,10 +624,10 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={dailyActivity} barCategoryGap="30%">
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
+                  <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
                   <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                  <Bar dataKey="count" name="Check-ins" fill={GOLD} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="Check-ins" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
               <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.activity[activityFilter]}</p>

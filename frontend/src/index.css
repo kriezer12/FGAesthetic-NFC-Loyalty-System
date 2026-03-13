@@ -122,4 +122,11 @@
     @apply bg-background text-foreground;
     font-family: 'Manrope', sans-serif;
   }
+  /* Reset inherited Tailwind v4 variable-based font-size/letter-spacing
+     on SVG text elements (Recharts) which can't parse CSS variable expressions */
+  .recharts-wrapper text,
+  .recharts-wrapper .recharts-text {
+    font-size: 12px;
+    letter-spacing: normal;
+  }
 }
