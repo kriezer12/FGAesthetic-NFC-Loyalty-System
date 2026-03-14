@@ -10,6 +10,7 @@ Endpoints:
 - GET /health   : Health check for monitoring
 """
 
+import sys
 from flask import Flask, jsonify
 from flask_cors import CORS
 from app.config import config
@@ -28,18 +29,35 @@ def create_app() -> Flask:
         Flask: Configured Flask application instance.
     """
     app = Flask(__name__)
+    
+    # Validate configuration
+    print("[APP] Validating configuration...", file=sys.stderr)
+    config.validate()
 
     # Configure CORS for frontend communication
+    cors_origins = [
+        config.FRONTEND_URL,
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://fgaesthetic-frontend:5173",  # Docker container hostname
+    ]
+    print(f"[APP] CORS Origins: {cors_origins}", file=sys.stderr)
+    
     CORS(
         app,
-        origins=[
-            config.FRONTEND_URL,
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://localhost:5175",
-        ],
-        supports_credentials=True
+        origins=cors_origins,
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     )
+
+    # Register blueprints
+    from app.routes.accounts import accounts_bp
+    from app.routes.reports import reports_bp
+    
+    app.register_blueprint(accounts_bp)
+    app.register_blueprint(reports_bp)
 
     # ==================== Routes ====================
 
@@ -70,5 +88,12 @@ def create_app() -> Flask:
 # ==================== Entry Point ====================
 
 if __name__ == "__main__":
+    print("[APP] Starting FG Aesthetic NFC Loyalty System API...", file=sys.stderr)
+    print(f"[APP] SUPABASE_URL: {'✓ Set' if config.SUPABASE_URL else '✗ MISSING'}", file=sys.stderr)
+    print(f"[APP] SUPABASE_KEY: {'✓ Set' if config.SUPABASE_KEY else '✗ MISSING'}", file=sys.stderr)
+    print(f"[APP] SUPABASE_SERVICE_KEY: {'✓ Set' if config.SUPABASE_SERVICE_KEY else '✗ MISSING'}", file=sys.stderr)
+    
     app = create_app()
+    print("[APP] Application initialized successfully!", file=sys.stderr)
+    print("[APP] Listening on http://0.0.0.0:5000", file=sys.stderr)
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -3,6 +3,7 @@
     "composite": true,
     "skipLibCheck": true,
     "allowJs": true,
+    "outDir": "dist",
     "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler"

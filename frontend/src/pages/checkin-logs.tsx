@@ -10,6 +10,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 
@@ -19,11 +26,19 @@ interface CheckinLogWithCustomer {
   checked_in_at: string
   points_added: number
   notes?: string
+  [key: string]: unknown
   customers?: {
     name?: string
     first_name?: string
     last_name?: string
   }
+}
+
+interface PreviousLog {
+  id: string
+  checked_in_at: string
+  points_added: number
+  notes?: string
 }
 
 const LOGS_PER_PAGE = 10
@@ -34,6 +49,13 @@ export default function CheckinLogsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
+  const [selectedLog, setSelectedLog] = useState<CheckinLogWithCustomer | null>(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false)
+  const [detailsError, setDetailsError] = useState<string | null>(null)
+  const [selectedBranchName, setSelectedBranchName] = useState("Unknown Branch")
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState("Unknown Employee")
+  const [previousLogs, setPreviousLogs] = useState<PreviousLog[]>([])
 
   const fetchLogs = useCallback(async () => {
     setIsLoading(true)
@@ -104,6 +126,122 @@ export default function CheckinLogsPage() {
     })
   }
 
+  const getStringField = (row: CheckinLogWithCustomer, keys: string[]) => {
+    for (const key of keys) {
+      const value = row[key]
+      if (typeof value === "string" && value.trim()) {
+        return value.trim()
+      }
+    }
+    return undefined
+  }
+
+  const resolveBranchName = async (log: CheckinLogWithCustomer) => {
+    const branchName = getStringField(log, ["branch_name", "branch", "processed_branch"])
+    if (branchName) return branchName
+
+    const branchId = getStringField(log, ["branch_id"])
+    if (!branchId) return "Unknown Branch"
+
+    const { data } = await supabase
+      .from("branches")
+      .select("name")
+      .eq("id", branchId)
+      .maybeSingle()
+
+    if (!data || typeof data.name !== "string" || !data.name.trim()) {
+      return "Unknown Branch"
+    }
+
+    return data.name
+  }
+
+  const resolveEmployeeName = async (log: CheckinLogWithCustomer) => {
+    const employeeName = getStringField(log, [
+      "processed_by_name",
+      "employee_name",
+      "staff_name",
+      "processed_by",
+    ])
+    if (employeeName) return employeeName
+
+    const employeeId = getStringField(log, ["processed_by", "processed_by_id", "employee_id", "staff_id", "user_id"])
+    if (!employeeId) return "Unknown Employee"
+
+    const { data } = await supabase
+      .from("user_profiles")
+      .select("full_name, email")
+      .eq("id", employeeId)
+      .maybeSingle()
+
+    if (!data) return "Unknown Employee"
+
+    if (typeof data.full_name === "string" && data.full_name.trim()) {
+      return data.full_name
+    }
+
+    if (typeof data.email === "string" && data.email.trim()) {
+      return data.email
+    }
+
+    return "Unknown Employee"
+  }
+
+  const openLogDetails = async (log: CheckinLogWithCustomer) => {
+    setIsDetailsOpen(true)
+    setIsDetailsLoading(true)
+    setDetailsError(null)
+    setSelectedLog(log)
+    setSelectedBranchName("Unknown Branch")
+    setSelectedEmployeeName("Unknown Employee")
+    setPreviousLogs([])
+
+    try {
+      const { data: fullLog, error: fullLogError } = await supabase
+        .from("checkin_logs")
+        .select("*")
+        .eq("id", log.id)
+        .maybeSingle()
+
+      if (fullLogError) throw fullLogError
+
+      const mergedLog = {
+        ...log,
+        ...((fullLog || {}) as CheckinLogWithCustomer),
+      }
+
+      setSelectedLog(mergedLog)
+
+      const [branchName, employeeName] = await Promise.all([
+        resolveBranchName(mergedLog),
+        resolveEmployeeName(mergedLog),
+      ])
+
+      setSelectedBranchName(branchName)
+      setSelectedEmployeeName(employeeName)
+
+      const { data: customerLogs, error: previousLogsError } = await supabase
+        .from("checkin_logs")
+        .select("id, checked_in_at, points_added, notes")
+        .eq("customer_id", mergedLog.customer_id)
+        .order("checked_in_at", { ascending: false })
+        .limit(11)
+
+      if (previousLogsError) throw previousLogsError
+
+      const history = ((customerLogs || []) as PreviousLog[])
+        .filter((entry) => entry.id !== mergedLog.id)
+        .slice(0, 10)
+
+      setPreviousLogs(history)
+    } catch (err) {
+      console.error("Error loading check-in details:", err)
+      setDetailsError("Unable to load check-in details right now.")
+    } finally {
+      setIsDetailsLoading(false)
+    }
+  }
+
   const filteredLogs = searchQuery
     ? logs.filter((log) => {
         const name = getCustomerName(log).toLowerCase()
@@ -164,6 +302,9 @@ export default function CheckinLogsPage() {
 
           {/* Logs Table */}
           <div className="rounded-lg border bg-card">
+            <div className="border-b bg-muted/20 px-4 py-2 text-sm text-muted-foreground">
+              Click a log entry to view branch, employee, and previous check-ins.
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -189,7 +330,20 @@ export default function CheckinLogsPage() {
                     </tr>
                   ) : (
                     filteredLogs.map((log) => (
-                      <tr key={log.id} className="border-b transition-colors hover:bg-muted/30">
+                      <tr
+                        key={log.id}
+                        className="cursor-pointer border-b transition-colors hover:bg-muted/30"
+                        onClick={() => openLogDetails(log)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            openLogDetails(log)
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View details for ${getCustomerName(log)}`}
+                      >
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
@@ -251,6 +405,82 @@ export default function CheckinLogsPage() {
               </div>
             )}
       </div>
+
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogHeader className="border-b px-6 pt-6 pb-4">
+            <DialogTitle>
+              {selectedLog ? `${getCustomerName(selectedLog)} Check-in Details` : "Check-in Details"}
+            </DialogTitle>
+            <DialogDescription>
+              Extra details about this check-in and the customer&apos;s previous logs.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
+            {isDetailsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading details...</p>
+            ) : detailsError ? (
+              <p className="text-sm text-destructive">{detailsError}</p>
+            ) : selectedLog ? (
+              <>
+                <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Processed Branch</p>
+                    <p className="mt-1 font-medium">{selectedBranchName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Processed By</p>
+                    <p className="mt-1 font-medium">{selectedEmployeeName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Date</p>
+                    <p className="mt-1 font-medium">{formatDate(selectedLog.checked_in_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Time</p>
+                    <p className="mt-1 font-medium">{formatTime(selectedLog.checked_in_at)}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold">Customer Previous Logs</h3>
+                  {previousLogs.length === 0 ? (
+                    <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                      No previous logs found for this customer.
+                    </p>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">Date</th>
+                            <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">Time</th>
+                            <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">Points</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previousLogs.map((entry) => (
+                            <tr key={entry.id} className="border-b last:border-b-0">
+                              <td className="p-3 text-sm">{formatDate(entry.checked_in_at)}</td>
+                              <td className="p-3 text-sm text-muted-foreground">{formatTime(entry.checked_in_at)}</td>
+                              <td className="p-3 text-sm font-medium">
+                                <span className={entry.points_added > 0 ? "text-primary" : entry.points_added < 0 ? "text-destructive" : "text-muted-foreground"}>
+                                  {entry.points_added > 0 ? "+" : ""}{entry.points_added} pts
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

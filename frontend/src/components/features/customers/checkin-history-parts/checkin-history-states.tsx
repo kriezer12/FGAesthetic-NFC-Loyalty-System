@@ -8,10 +8,10 @@ export function CheckinHistoryLoading() {
   )
 }
 
-export function CheckinHistoryEmpty() {
+export function CheckinHistoryEmpty({ message }: { message?: string }) {
   return (
     <p className="text-sm text-muted-foreground text-center py-4">
-      No check-in history found.
+      {message ?? "No check-in history found."}
     </p>
   )
 }

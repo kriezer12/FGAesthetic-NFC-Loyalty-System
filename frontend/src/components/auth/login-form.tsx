@@ -3,21 +3,19 @@
  * ======================================
  *
  * Handles user authentication via Supabase Auth.
- * Supports email/password and Google OAuth login.
+ * Supports email/password login and forgot-password flow.
  * Uses the shadcn login-02 block design.
  */
 
-import { useState, type ComponentProps, type FormEvent } from "react"
-import { Link, useNavigate, useLocation } from "react-router-dom"
+import { useState, useEffect, type ComponentProps, type FormEvent } from "react"
+import { useNavigate, useLocation } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
@@ -29,17 +27,31 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
 
   // Get the redirect path from location state (set by ProtectedRoute)
   const from = location.state?.from?.pathname || "/dashboard"
+  // Message passed via router state (e.g. after a successful password reset)
+  const stateMessage: string | undefined = location.state?.message
 
   // Form state
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(stateMessage ?? null)
   const [loading, setLoading] = useState(false)
+  const [mode, setMode] = useState<"login" | "forgot">("login")
+
+  // Listen for PASSWORD_RECOVERY event — redirect to the dedicated page
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        navigate("/reset-password", { replace: true })
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [navigate])
 
   /**
    * Handle email/password form submission
    */
-  const handleSubmit = async (e: FormEvent) => {
+  const handleLoginSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
@@ -53,7 +65,6 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
       if (error) {
         setError(error.message)
       } else {
-        // Redirect to the originally requested page or dashboard
         navigate(from, { replace: true })
       }
     } catch {
@@ -64,35 +75,120 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
   }
 
   /**
-   * Handle Google OAuth login
+   * Handle forgot password — sends a reset email via Supabase
    */
-  const handleGoogleLogin = async () => {
+  const handleForgotSubmit = async (e: FormEvent) => {
+    e.preventDefault()
     setError(null)
+    setSuccess(null)
+    setLoading(true)
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`,
-      },
-    })
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
 
-    if (error) {
-      setError(error.message)
+      if (error) {
+        setError(error.message)
+      } else {
+        setSuccess("Password reset email sent. Check your inbox.")
+      }
+    } catch {
+      setError("An unexpected error occurred")
+    } finally {
+      setLoading(false)
     }
+  }
+
+  const switchToForgot = () => {
+    setError(null)
+    setSuccess(null)
+    setMode("forgot")
+  }
+
+  const switchToLogin = () => {
+    setError(null)
+    setSuccess(null)
+    setMode("login")
+  }
+
+  if (mode === "forgot") {
+    return (
+      <form
+        className={cn("flex flex-col gap-5", className)}
+        onSubmit={handleForgotSubmit}
+        {...props}
+      >
+        <FieldGroup>
+          {/* Header */}
+          <div className="flex flex-col items-center gap-1 text-center">
+            <h1 className="text-xl font-bold">Reset your password</h1>
+            <p className="text-muted-foreground text-sm text-balance">
+              Enter your email and we'll send you a reset link
+            </p>
+          </div>
+
+          {/* Feedback messages */}
+          {error && (
+            <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md text-center">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="text-sm text-green-600 bg-green-50 dark:bg-green-950/50 p-3 rounded-md text-center">
+              {success}
+            </div>
+          )}
+
+          {/* Email field */}
+          <Field>
+            <FieldLabel htmlFor="reset-email">Email</FieldLabel>
+            <Input
+              id="reset-email"
+              type="email"
+              placeholder="m@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              className="border-border bg-muted/50"
+            />
+          </Field>
+
+          {/* Submit button */}
+          <Field>
+            <Button type="submit" disabled={loading || !!success}>
+              {loading ? "Sending..." : "Send reset email"}
+            </Button>
+          </Field>
+
+          {/* Back to login */}
+          <p className="text-center text-sm">
+            <button
+              type="button"
+              onClick={switchToLogin}
+              className="underline underline-offset-4 hover:text-primary"
+            >
+              Back to login
+            </button>
+          </p>
+        </FieldGroup>
+      </form>
+    )
   }
 
   return (
     <form
-      className={cn("flex flex-col gap-6", className)}
-      onSubmit={handleSubmit}
+      className={cn("flex flex-col gap-5", className)}
+      onSubmit={handleLoginSubmit}
       {...props}
     >
       <FieldGroup>
         {/* Header */}
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Login to your account</h1>
+          <h1 className="text-xl font-bold">Welcome back</h1>
           <p className="text-muted-foreground text-sm text-balance">
-            Enter your email below to login to your account
+            Enter your credentials to sign in
           </p>
         </div>
 
@@ -100,6 +196,13 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
         {error && (
           <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md text-center">
             {error}
+          </div>
+        )}
+
+        {/* Success message (e.g. after password reset) */}
+        {success && (
+          <div className="text-sm text-green-600 bg-green-50 dark:bg-green-950/50 p-3 rounded-md text-center">
+            {success}
           </div>
         )}
 
@@ -113,6 +216,8 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
+            className="border-border bg-muted/50"
           />
         </Field>
 
@@ -120,12 +225,13 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
         <Field>
           <div className="flex items-center">
             <FieldLabel htmlFor="password">Password</FieldLabel>
-            <a
-              href="#"
+            <button
+              type="button"
+              onClick={switchToForgot}
               className="ml-auto text-sm underline-offset-4 hover:underline"
             >
               Forgot your password?
-            </a>
+            </button>
           </div>
           <Input
             id="password"
@@ -133,6 +239,8 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
+            className="border-border bg-muted/50"
           />
         </Field>
 
@@ -141,38 +249,6 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
           <Button type="submit" disabled={loading}>
             {loading ? "Logging in..." : "Login"}
           </Button>
-        </Field>
-
-        {/* Separator */}
-        <FieldSeparator>Or continue with</FieldSeparator>
-
-        {/* Google OAuth button */}
-        <Field>
-          <Button
-            variant="outline"
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={loading}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-              <path
-                d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
-                fill="currentColor"
-              />
-            </svg>
-            Login with Google
-          </Button>
-
-          {/* Sign up link */}
-          <FieldDescription className="text-center">
-            Don&apos;t have an account?{" "}
-            <Link
-              to="/signup"
-              className="underline underline-offset-4 hover:text-primary"
-            >
-              Sign up
-            </Link>
-          </FieldDescription>
         </Field>
       </FieldGroup>
     </form>

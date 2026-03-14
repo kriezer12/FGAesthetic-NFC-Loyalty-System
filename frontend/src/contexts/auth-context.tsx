@@ -14,11 +14,28 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { supabase } from "@/lib/supabase"
 import type { User, Session } from "@supabase/supabase-js"
 
+type UserRole = "super_admin" | "branch_admin" | "staff"
+
+interface UserProfile {
+  id: string
+  role: UserRole
+  email: string
+  full_name?: string
+  branch_id?: string
+  branch_name?: string
+  avatar_url?: string
+  created_at?: string
+  first_login?: boolean
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
+  userProfile: UserProfile | null
   loading: boolean
   signOut: () => Promise<void>
+  refreshUser: () => Promise<void>
+  hasRole: (roles: UserRole[]) => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -30,7 +47,52 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Fetch user profile with role information and branch details
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*, branches(name)")
+        .eq("id", userId)
+        .single()
+
+      if (error) {
+        console.error("Error fetching user profile:", error)
+        console.log("Attempted to fetch with userId:", userId)
+        setUserProfile(null)
+      } else {
+        // if branch relation included, normalize to branch_name field
+        if (data && (data as any).branches) {
+          const rel = (data as any).branches
+          // supabase may return array or object
+          if (Array.isArray(rel) && rel.length > 0) {
+            ;(data as any).branch_name = rel[0].name
+          } else if (rel && typeof rel === "object" && "name" in rel) {
+            ;(data as any).branch_name = rel.name
+          }
+          delete (data as any).branches
+        }
+        // Fallback to auth metadata avatar_url if not in profile
+        if (data && !data.avatar_url) {
+          const authAvatarUrl = (user?.user_metadata?.avatar_url as string) || null
+          if (authAvatarUrl) {
+            data.avatar_url = authAvatarUrl
+          }
+        }
+        // fallback to branch_id if no name provided
+        if (data && !(data as any).branch_name && (data as any).branch_id) {
+          (data as any).branch_name = `(branch ${ (data as any).branch_id })`
+        }
+        setUserProfile(data as UserProfile)
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error)
+      setUserProfile(null)
+    }
+  }
 
   useEffect(() => {
     // Get initial session
@@ -39,6 +101,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const { data: { session } } = await supabase.auth.getSession()
         setSession(session)
         setUser(session?.user ?? null)
+        
+        if (session?.user?.id) {
+          fetchUserProfile(session.user.id)
+        }
       } catch (error) {
         console.error("Error getting session:", error)
       } finally {
@@ -53,6 +119,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       (_event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
+        
+        if (session?.user?.id) {
+          // Don't await - fetch in background
+          fetchUserProfile(session.user.id)
+        } else {
+          setUserProfile(null)
+        }
         setLoading(false)
       }
     )
@@ -67,11 +140,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await supabase.auth.signOut()
   }
 
+  const refreshUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    setUser(user)
+    
+    if (user?.id) {
+      await fetchUserProfile(user.id)
+    }
+  }
+
+  const hasRole = (roles: UserRole[]) => {
+    return userProfile ? roles.includes(userProfile.role) : false
+  }
+
   const value: AuthContextType = {
     user,
     session,
+    userProfile,
     loading,
     signOut,
+    refreshUser,
+    hasRole,
   }
 
   return (

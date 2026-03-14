@@ -2,12 +2,13 @@
  * Login Page
  * ==========
  *
- * Two-column layout with cover image (login-02 style)
+ * Centered card layout (login-04 style) with animated Plasma background
  */
 
 import { useEffect } from "react"
-import { GalleryVerticalEnd } from "lucide-react"
 import { LoginForm } from "@/components/auth"
+import { Card, CardContent } from "@/components/ui/card"
+import { Plasma } from "@/components/ui/plasma"
 
 export default function LoginPage() {
   useEffect(() => {
@@ -15,26 +16,37 @@ export default function LoginPage() {
   }, [])
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <div className="flex flex-col gap-4 p-6 md:p-10">
-        <div className="flex justify-center gap-2 md:justify-start">
-          <a href="#" className="flex items-center gap-2 font-medium">
-            <img src="/logo/logo-black.png" alt="FG Aesthetic Centre Logo" className="h-6" />
-            FG Aesthetic Centre
-          </a>
-        </div>
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-xs">
-            <LoginForm />
-          </div>
-        </div>
-      </div>
-      <div className="bg-muted relative hidden lg:block">
-        <img
-          src="https://images.unsplash.com/photo-1629909613654-28e377c37b09?q=80&w=2068&auto=format&fit=crop"
-          alt="Beauty aesthetic clinic interior"
-          className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
+    <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-black p-6 md:p-10">
+      {/* Animated Plasma Background */}
+      <div className="absolute inset-0 z-0">
+        <Plasma
+          color="#808080"
+          speed={0.6}
+          direction="forward"
+          scale={1.1}
+          opacity={0.8}
+          mouseInteractive={false}
         />
+      </div>
+
+      {/* Login Card */}
+      <div className="relative z-10 flex w-full max-w-sm flex-col gap-6">
+        <Card className="overflow-hidden p-0 border-border/40 bg-background/85 backdrop-blur-xl shadow-2xl">
+          <CardContent className="grid p-0 md:grid-cols-1">
+            <div className="p-6 md:p-8">
+              {/* Company Logo & Name */}
+              <div className="flex justify-center gap-3 mb-8">
+                <a href="#" className="flex items-center gap-3">
+                  <img src="/logo/logo-orig.svg" alt="FG Aesthetic Centre Logo" className="h-10 w-auto" />
+                  <span className="font-manrope font-medium text-lg tracking-wide">FG AESTHETIC CENTRE</span>
+                </a>
+              </div>
+
+              {/* Login Form */}
+              <LoginForm />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
