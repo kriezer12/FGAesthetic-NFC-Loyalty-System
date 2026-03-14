@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import { Outlet } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
+import { NotificationSettingsProvider } from "@/contexts/notification-settings-context"
 import { AppNavbar } from "./app-navbar"
 import { FirstLoginModal } from "../auth/first-login-modal"
 import { AppointmentNotifier } from "../features/appointments/appointment-notifier"
@@ -71,6 +72,7 @@ export function DashboardLayout() {
   }
 
   return (
+    <NotificationSettingsProvider>
     <div className="min-h-screen flex flex-col bg-background">
       <GlobalNFCListener />
       <AppointmentNotifier />
@@ -86,5 +88,6 @@ export function DashboardLayout() {
         onComplete={handleFirstLoginComplete}
       />
     </div>
+    </NotificationSettingsProvider>
   )
 }
