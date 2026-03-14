@@ -6,6 +6,7 @@ import { AddAccountModal } from "@/components/features/accounts"
 import { NavbarLogo } from "./navbar/navbar-logo"
 import { NavbarLinks } from "./navbar/navbar-links"
 import { NavbarAdminDropdown } from "./navbar/navbar-admin-dropdown"
+import { NavbarNotificationBell } from "./navbar/navbar-notification-bell"
 import { NavbarProfileMenu } from "./navbar/navbar-profile-menu"
 
 export function AppNavbar() {
@@ -108,6 +109,7 @@ export function AppNavbar() {
                 </button>
               </div>
             )}
+            <NavbarNotificationBell />
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary">
               <Clock className="h-3.5 w-3.5 shrink-0" />
               <div className="flex flex-col leading-none">

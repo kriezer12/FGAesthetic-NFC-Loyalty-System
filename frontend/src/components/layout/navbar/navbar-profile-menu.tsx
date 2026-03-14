@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { LogOut, Settings, User, Sun, Moon } from "lucide-react"
+import { LogOut, Settings, User, Sun, Moon, Bell } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { getAvatarSignedUrl } from "@/lib/supabase-storage"
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { AccountSettingsModal } from "./account-settings-modal"
+import { NotificationSettingsModal } from "./notification-settings-modal"
 
 type NavbarProfileMenuProps = {
   userEmail: string
@@ -23,6 +24,7 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
   const displayName = userProfile?.full_name || userEmail.split("@")[0]
   const userInitial = (userProfile?.full_name || userEmail).charAt(0).toUpperCase()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notifSettingsOpen, setNotifSettingsOpen] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   // Convert public avatar URL to signed URL immediately for faster display
@@ -99,6 +101,10 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
           <Settings className="mr-2 h-4 w-4" />
           <span>Account Settings</span>
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setNotifSettingsOpen(true)} className="cursor-pointer">
+          <Bell className="mr-2 h-4 w-4" />
+          <span>Notifications</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setIsDark(!isDark)} className="cursor-pointer" onSelect={(e) => e.preventDefault()}>
           <div className="flex items-center justify-between w-full">
@@ -130,6 +136,7 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
     </DropdownMenu>
 
     <AccountSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+    <NotificationSettingsModal open={notifSettingsOpen} onOpenChange={setNotifSettingsOpen} />
     </>
   )
 }
