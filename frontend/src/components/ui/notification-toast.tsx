@@ -8,6 +8,7 @@ export interface NotificationToastProps {
   title: string
   message: string
   onClose: (id: string) => void
+  onAutoDismiss?: (id: string) => void
   type?: "info" | "warning" | "success"
 }
 
@@ -16,6 +17,7 @@ export function NotificationToast({
   title,
   message,
   onClose,
+  onAutoDismiss,
   type = "info",
 }: NotificationToastProps) {
   const [isVisible, setIsVisible] = React.useState(false)
@@ -41,14 +43,25 @@ export function NotificationToast({
     setTimeout(() => onClose(id), 300) // Wait for animation out
   }, [id, onClose])
 
+  const handleAutoDismiss = React.useCallback(() => {
+    setIsVisible(false)
+    setTimeout(() => {
+      if (onAutoDismiss) {
+        onAutoDismiss(id)
+      } else {
+        onClose(id)
+      }
+    }, 300)
+  }, [id, onClose, onAutoDismiss])
+
   React.useEffect(() => {
-    // Auto-dismiss after 1 minute
+    // Auto-dismiss after 20 seconds
     const timer = setTimeout(() => {
-      handleClose()
-    }, 60000)
+      handleAutoDismiss()
+    }, 20000)
 
     return () => clearTimeout(timer)
-  }, [handleClose])
+  }, [handleAutoDismiss])
 
   return (
     <div

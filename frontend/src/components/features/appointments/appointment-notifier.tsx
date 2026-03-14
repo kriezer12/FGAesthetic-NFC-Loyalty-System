@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useAppointments } from "@/hooks/use-appointments"
 import { useNotificationSettings } from "@/contexts/notification-settings-context"
+import { useMissedNotifications } from "@/contexts/missed-notifications-context"
 import { NotificationToast } from "@/components/ui/notification-toast"
 import { differenceInMinutes, parseISO, isAfter } from "date-fns"
 
@@ -16,6 +17,7 @@ interface AppointmentNotification {
 export function AppointmentNotifier() {
   const { appointments } = useAppointments()
   const { settings } = useNotificationSettings()
+  const { addMissedNotification } = useMissedNotifications()
   const [notifications, setNotifications] = useState<AppointmentNotification[]>([])
   const notifiedRef = useRef<Record<string, Set<string>>>({
     first: new Set<string>(),
@@ -25,6 +27,23 @@ export function AppointmentNotifier() {
   const removeNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id))
   }, [])
+
+  const handleAutoDismiss = useCallback((id: string) => {
+    // Find the notification data before removing it
+    setNotifications((prev) => {
+      const notification = prev.find((n) => n.id === id)
+      if (notification) {
+        addMissedNotification({
+          id: notification.id,
+          title: notification.title,
+          message: notification.message,
+          timestamp: notification.timestamp,
+          type: notification.type === "second" ? "warning" : "info",
+        })
+      }
+      return prev.filter((n) => n.id !== id)
+    })
+  }, [addMissedNotification])
 
   useEffect(() => {
     // Expose a test function to window for console testing
@@ -127,9 +146,11 @@ export function AppointmentNotifier() {
           title={notification.title}
           message={notification.message}
           onClose={removeNotification}
+          onAutoDismiss={handleAutoDismiss}
           type={notification.type === "second" ? "warning" : "info"}
         />
       ))}
     </div>
   )
 }
+
