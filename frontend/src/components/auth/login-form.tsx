@@ -115,15 +115,15 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
   if (mode === "forgot") {
     return (
       <form
-        className={cn("flex flex-col gap-8", className)}
+        className={cn("flex flex-col gap-5", className)}
         onSubmit={handleForgotSubmit}
         {...props}
       >
         <FieldGroup>
           {/* Header */}
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="text-4xl font-bold">Reset your password</h1>
-            <p className="text-muted-foreground text-base text-balance">
+          <div className="flex flex-col items-center gap-1 text-center">
+            <h1 className="text-xl font-bold">Reset your password</h1>
+            <p className="text-muted-foreground text-sm text-balance">
               Enter your email and we'll send you a reset link
             </p>
           </div>
@@ -150,6 +150,8 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
+              className="border-border bg-muted/50"
             />
           </Field>
 
@@ -177,16 +179,16 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
 
   return (
     <form
-      className={cn("flex flex-col gap-8", className)}
+      className={cn("flex flex-col gap-5", className)}
       onSubmit={handleLoginSubmit}
       {...props}
     >
       <FieldGroup>
         {/* Header */}
-        <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="text-4xl font-bold">Login to your account</h1>
-          <p className="text-muted-foreground text-base text-balance">
-            Enter your email below to login to your account
+        <div className="flex flex-col items-center gap-1 text-center">
+          <h1 className="text-xl font-bold">Welcome back</h1>
+          <p className="text-muted-foreground text-sm text-balance">
+            Enter your credentials to sign in
           </p>
         </div>
 
@@ -214,6 +216,8 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
+            className="border-border bg-muted/50"
           />
         </Field>
 
@@ -235,6 +239,8 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
+            className="border-border bg-muted/50"
           />
         </Field>
 
