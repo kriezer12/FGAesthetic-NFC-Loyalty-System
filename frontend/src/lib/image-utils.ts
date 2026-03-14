@@ -157,3 +157,58 @@ export function formatFileSize(bytes: number): string {
 export function calculateCompressionRatio(originalSize: number, compressedSize: number): number {
   return Math.round(((originalSize - compressedSize) / originalSize) * 100)
 }
+
+/**
+ * Download image as JPEG
+ */
+export async function downloadImageAsJpeg(imageUrl: string, filename: string): Promise<void> {
+  try {
+    const response = await fetch(imageUrl)
+    const blob = await response.blob()
+
+    // Create an image from the blob
+    const img = new Image()
+    img.onload = () => {
+      // Create canvas and draw image
+      const canvas = document.createElement("canvas")
+      canvas.width = img.width
+      canvas.height = img.height
+
+      const ctx = canvas.getContext("2d")
+      if (!ctx) {
+        throw new Error("Failed to get canvas context")
+      }
+
+      ctx.drawImage(img, 0, 0)
+
+      // Convert to JPEG and download
+      canvas.toBlob(
+        (jpegBlob) => {
+          if (!jpegBlob) {
+            throw new Error("Failed to convert to JPEG")
+          }
+
+          const link = document.createElement("a")
+          const url = URL.createObjectURL(jpegBlob)
+          link.href = url
+          link.download = `${filename}.jpeg`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+        },
+        "image/jpeg",
+        0.95
+      )
+    }
+
+    img.onerror = () => {
+      throw new Error("Failed to load image")
+    }
+
+    img.src = URL.createObjectURL(blob)
+  } catch (error) {
+    console.error("Error downloading image as JPEG:", error)
+    throw error
+  }
+}

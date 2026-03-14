@@ -24,6 +24,9 @@ To persist appointments in the database, you need to create the `appointments` t
 4. Paste it into the SQL editor
 5. Click **Run** to execute the migration
 
+> **Note:** Later phases add new columns to `appointments` (treatment_id/name) and build a
+> service catalog; the SQL below shows the full schema including those extensions.
+
 ### 2. Update the Appointments Table (if previously created)
 
 If you created the appointments table before, run the update migration:
@@ -43,6 +46,8 @@ The `appointments` table has the following columns:
 |--------|------|----------|-------------|
 | **id** | TEXT (PK) | Yes | Unique appointment identifier |
 | **title** | TEXT | Yes | Appointment label (e.g. "Facial Treatment") |
+| **treatment_id** | TEXT | No | Optional reference to a specific treatment package |
+| **treatment_name** | TEXT | No | Denormalized name of treatment for display |
 | **customer_id** | TEXT | No | Foreign key to customers table (nullable for walk-ins) |
 | **customer_name** | TEXT | No | Denormalized customer name for display |
 | **staff_id** | TEXT | Yes | Foreign key to user_profiles table |

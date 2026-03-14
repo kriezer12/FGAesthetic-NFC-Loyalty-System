@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { supabase } from "@/lib/supabase"
+import { applyAutomatedPoints } from "@/lib/loyalty-utils"
 import { validatePhilippinePhone } from "./register-card-parts/phone-utils"
 import { RegisterCardContactSection } from "./register-card-parts/register-card-contact-section"
 import { RegisterCardError } from "./register-card-parts/register-card-error"
@@ -8,6 +9,7 @@ import { RegisterCardHeader } from "./register-card-parts/register-card-header"
 import { RegisterCardMedicalSection } from "./register-card-parts/register-card-medical-section"
 import { RegisterCardPersonalSection } from "./register-card-parts/register-card-personal-section"
 import { initialRegisterCardFormData } from "./register-card-parts/register-card.types"
+import { logUserAction } from "@/lib/user-log"
 
 import type { Customer } from "@/types/customer"
 
@@ -94,6 +96,8 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           points: 0,
           visits: 1,
           last_visit: new Date().toISOString(),
+          archived_at: null, // default active
+          last_inactive: null,
         })
         .select()
         .single()
@@ -102,6 +106,38 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
         setError(insertError.message)
         return
       }
+
+      // Automatically apply points for first visit
+      const newCustomer = data as Customer
+      await applyAutomatedPoints(newCustomer.id)
+      
+      // Fetch updated customer data
+      const { data: updatedCustomer } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", newCustomer.id)
+        .single()
+
+      onSuccess((updatedCustomer as Customer) || newCustomer)
+      await logUserAction({
+        actionType: "registered_new_client",
+        entityType: "customer",
+        entityId: (data as Customer).id,
+        entityName: (data as Customer).name || `${(data as Customer).first_name || ""} ${(data as Customer).last_name || ""}`.trim() || "Customer",
+        changes: {
+          before: null,
+          after: {
+            id: (data as Customer).id,
+            nfc_uid: (data as Customer).nfc_uid,
+            name: (data as Customer).name,
+            email: (data as Customer).email,
+            phone: (data as Customer).phone,
+          },
+        },
+        metadata: {
+          source: "nfc_register_card",
+        },
+      })
 
       onSuccess(data as Customer)
     } catch (err) {

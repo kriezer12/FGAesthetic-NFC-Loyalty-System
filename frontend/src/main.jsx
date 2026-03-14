@@ -25,13 +25,17 @@ import { DashboardLayout } from "./components/layout"
 // Lazy load all page components for code splitting
 const Dashboard = lazy(() => import("./pages/dashboard.tsx"))
 const CheckinLogsPage = lazy(() => import("./pages/checkin-logs.tsx"))
+const UserLogsPage = lazy(() => import("./pages/user-logs.tsx"))
 const CustomersPage = lazy(() => import("./pages/customers.tsx"))
 const NFCScanPage = lazy(() => import("./pages/nfc-scan.tsx"))
 const LoginPage = lazy(() => import("./pages/login.tsx"))
 const AppointmentsPage = lazy(() => import("./pages/appointments.tsx"))
 const UploadPage = lazy(() => import("./pages/upload.tsx"))
 const AccountsPage = lazy(() => import("./pages/accounts.tsx"))
+const TreatmentsPage = lazy(() => import("./pages/treatments.tsx"))
+const ReportsPage = lazy(() => import("./pages/reports.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/reset-password.tsx"))
+const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
 
 // Loading fallback component
 function PageLoader() {
@@ -70,42 +74,19 @@ createRoot(document.getElementById('root')).render(
         } />
         
         {/* Protected routes - shared navbar layout */}
+        {/* Suspense is handled inside DashboardLayout so the navbar stays visible */}
         <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-          <Route path="/dashboard" element={
-            <Suspense fallback={<PageLoader />}>
-              <Dashboard />
-            </Suspense>
-          } />
-          <Route path="/dashboard/scan" element={
-            <Suspense fallback={<PageLoader />}>
-              <NFCScanPage />
-            </Suspense>
-          } />
-          <Route path="/dashboard/customers" element={
-            <Suspense fallback={<PageLoader />}>
-              <CustomersPage />
-            </Suspense>
-          } />
-          <Route path="/dashboard/checkin-logs" element={
-            <Suspense fallback={<PageLoader />}>
-              <CheckinLogsPage />
-            </Suspense>
-          } />
-          <Route path="/dashboard/appointments" element={
-            <Suspense fallback={<PageLoader />}>
-              <AppointmentsPage />
-            </Suspense>
-          } />
-          <Route path="/dashboard/upload" element={
-            <Suspense fallback={<PageLoader />}>
-              <UploadPage />
-            </Suspense>
-          } />
-          <Route path="/dashboard/accounts" element={
-            <Suspense fallback={<PageLoader />}>
-              <AccountsPage />
-            </Suspense>
-          } />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/scan" element={<NFCScanPage />} />
+          <Route path="/dashboard/customers" element={<CustomersPage />} />
+          <Route path="/dashboard/checkin-logs" element={<CheckinLogsPage />} />
+          <Route path="/dashboard/user-logs" element={<UserLogsPage />} />
+          <Route path="/dashboard/appointments" element={<AppointmentsPage />} />
+          <Route path="/dashboard/treatments" element={<TreatmentsPage />} />
+          <Route path="/dashboard/loyalty" element={<LoyaltyAdminPage />} />
+          <Route path="/dashboard/upload" element={<UploadPage />} />
+          <Route path="/dashboard/accounts" element={<AccountsPage />} />
+          <Route path="/dashboard/reports" element={<ReportsPage />} />
         </Route>
       </Routes>
     </AuthProvider>

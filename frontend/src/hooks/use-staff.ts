@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import type { StaffMember } from "@/types/appointment"
 import { STAFF_COLORS } from "@/components/features/calendar/calendar-parts/calendar-config"
@@ -30,6 +31,7 @@ interface UseStaffReturn {
 }
 
 export function useStaff(): UseStaffReturn {
+  const { userProfile } = useAuth()
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,11 +41,18 @@ export function useStaff(): UseStaffReturn {
     setError(null)
 
     try {
-      const { data, error: queryError } = await supabase
+      let query = supabase
         .from("user_profiles")
         .select("id, full_name, role, avatar_url")
         .in("role", CALENDAR_ROLES)
         .order("full_name", { ascending: true })
+
+      // Filter by branch if user is branch_admin
+      if (userProfile?.role === "branch_admin" && userProfile.branch_id) {
+        query = query.eq("branch_id", userProfile.branch_id)
+      }
+
+      const { data, error: queryError } = await query
 
       if (queryError) throw queryError
 
@@ -66,8 +75,10 @@ export function useStaff(): UseStaffReturn {
   }
 
   useEffect(() => {
-    fetchStaff()
-  }, [])
+    if (userProfile) {
+      fetchStaff()
+    }
+  }, [userProfile])
 
   return { staff, loading, error, refetch: fetchStaff }
 }

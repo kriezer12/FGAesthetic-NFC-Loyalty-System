@@ -1,6 +1,85 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@theme {
+  --animate-in: enter 200ms ease-out;
+  --animate-out: exit 200ms ease-in;
+  --animate-fade-in: fade-in 200ms ease-out;
+  --animate-fade-out: fade-out 200ms ease-in;
+  --animate-zoom-in: zoom-in 200ms ease-out;
+  --animate-zoom-out: zoom-out 200ms ease-in;
+  --animate-slide-in-from-top: slide-in-from-top 200ms ease-out;
+  --animate-slide-in-from-bottom: slide-in-from-bottom 200ms ease-out;
+  --animate-slide-in-from-left: slide-in-from-left 200ms ease-out;
+  --animate-slide-in-from-right: slide-in-from-right 200ms ease-out;
+  --animate-slide-out-to-top: slide-out-to-top 200ms ease-in;
+  --animate-slide-out-to-bottom: slide-out-to-bottom 200ms ease-in;
+  --animate-slide-out-to-left: slide-out-to-left 200ms ease-in;
+  --animate-slide-out-to-right: slide-out-to-right 200ms ease-in;
+
+  @keyframes enter {
+    from {
+      opacity: var(--tw-enter-opacity, 1);
+      transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1)) rotate(var(--tw-enter-rotate, 0));
+    }
+  }
+
+  @keyframes exit {
+    to {
+      opacity: var(--tw-exit-opacity, 1);
+      transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0));
+    }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+  }
+
+  @keyframes fade-out {
+    to { opacity: 0; }
+  }
+
+  @keyframes zoom-in {
+    from { transform: scale(0.95); opacity: 0; }
+  }
+
+  @keyframes zoom-out {
+    to { transform: scale(0.95); opacity: 0; }
+  }
+
+  @keyframes slide-in-from-top {
+    from { transform: translateY(-100%); }
+  }
+
+  @keyframes slide-in-from-bottom {
+    from { transform: translateY(100%); }
+  }
+
+  @keyframes slide-in-from-left {
+    from { transform: translateX(-100%); }
+  }
+
+  @keyframes slide-in-from-right {
+    from { transform: translateX(100%); }
+  }
+
+  @keyframes slide-out-to-top {
+    to { transform: translateY(-100%); }
+  }
+
+  @keyframes slide-out-to-bottom {
+    to { transform: translateY(100%); }
+  }
+
+  @keyframes slide-out-to-left {
+    to { transform: translateX(-100%); }
+  }
+
+  @keyframes slide-out-to-right {
+    to { transform: translateX(100%); }
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -121,5 +200,12 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Manrope', sans-serif;
+  }
+  /* Reset inherited Tailwind v4 variable-based font-size/letter-spacing
+     on SVG text elements (Recharts) which can't parse CSS variable expressions */
+  .recharts-wrapper text,
+  .recharts-wrapper .recharts-text {
+    font-size: 12px;
+    letter-spacing: normal;
   }
 }

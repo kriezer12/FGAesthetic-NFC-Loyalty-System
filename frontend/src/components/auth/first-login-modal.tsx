@@ -126,7 +126,7 @@ export function FirstLoginModal({
 
   return (
     <Dialog open={isOpen}>
-      <DialogContent overlayBlur="glass" className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent overlayBlur="glass" className="max-w-md max-h-[90vh]" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Welcome! Complete Your Profile</DialogTitle>
           <DialogDescription>
@@ -134,7 +134,7 @@ export function FirstLoginModal({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[calc(100vh-12rem)]">
+        <ScrollArea className="max-h-[calc(100vh-12rem)]">
         <form onSubmit={handleSubmit} className="space-y-4 pr-4">
           {error && (
             <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md">

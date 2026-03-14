@@ -7,6 +7,8 @@ Full-stack loyalty card system with NFC integration for beauty clinics. Features
 - 🎫 **NFC Card Scanning** - Tap-to-identify using USB NFC readers (keyboard HID)
 - 👥 **Customer Management** - Full customer database with search, filters, and pagination
 - ⭐ **Points & Rewards** - Track loyalty points and visit history
+- 🩺 **Treatment Progress** - Record remaining/used sessions per package with validation and audit logging (see issue #19); also view/update from customer modal.
+- 💼 **Service Catalog** - Admin page to define available services by category, including equipment/product flags, price, and loyalty points; used by appointments and future inventory integration.
 - 📋 **Beauty Clinic Fields** - Skin type, allergies, emergency contacts
 - 🔐 **Secure Auth** - Supabase authentication with email/password
 - 📱 **Responsive Design** - Works on desktop and mobile devices
@@ -54,6 +56,48 @@ docker-compose up --build
 5. **Access the app:**
 - **Frontend:** http://localhost:5173
 - **Backend API:** http://localhost:5000
+
+**Database note:** before using the treatment UI you must create the
+additional JSON column and log table in your Supabase project.  Run the
+following SQL from the Supabase SQL editor or via your preferred migration
+tool.  (The leading `>` characters shown below are just Markdown quoting;
+copy the lines starting with keywords such as `create` or `alter` when you
+paste into the editor.)
+
+```sql
+-- store package/session state on the customer row
+alter table customers add column if not exists treatments jsonb;
+
+-- audit history for any treatment updates
+create table if not exists treatment_logs (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid references customers(id),
+  changes jsonb not null,
+  created_at timestamptz default now()
+);
+
+-- add treatment pointer to appointments (optional, used by calendar)
+alter table appointments add column if not exists treatment_id text;
+alter table appointments add column if not exists treatment_name text;
+
+-- service catalog tables for available treatments
+create table if not exists service_categories (
+  id text primary key,
+  name text not null
+);
+
+create table if not exists services (
+  id text primary key,
+  category_id text references service_categories(id) on delete cascade,
+  name text not null,
+  uses_equipment boolean default false,
+  equipment text,
+  uses_product boolean default false,
+  product text,
+  price numeric not null default 0,
+  points_value integer not null default 0
+);
+```
 
 6. **Default Routes:**
 - `/login` - Login page
@@ -142,34 +186,17 @@ This system works with any USB NFC reader that operates in **keyboard HID mode**
 
 ---
 
-## Customer Database Schema
-
-The `customers` table in Supabase requires these columns:
-
-```sql
-CREATE TABLE customers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nfc_uid VARCHAR(50) UNIQUE NOT NULL,
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  name VARCHAR(200),
-  email VARCHAR(255),
-  phone VARCHAR(50) NOT NULL,
-  date_of_birth DATE,
-  gender VARCHAR(20),
-  address TEXT,
-  emergency_contact VARCHAR(200),
-  skin_type VARCHAR(50),
-  allergies TEXT,
-  notes TEXT,
-  points INTEGER DEFAULT 0,
-  visits INTEGER DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  last_visit TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
 ---
+
+
+**Status flags**
+
+A few concepts are used in the UI for filtering clients:
+
+* **Active** – not archived and not flagged as inactive (see below).
+* **Inactive** – last visit is more than ~60 days old (or never visited) and not archived.
+* **Archived** – `archived_at` is non‑null (soft deleted). Archived clients are hidden unless the
+ filter is explicitly set.
 
 ## API Endpoints
 

@@ -16,8 +16,8 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (regenerate lock file if out of sync)
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -46,8 +46,8 @@ ENV VITE_JWT_SECRET=$VITE_JWT_SECRET
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (regenerate lock file if out of sync)
+RUN npm install
 
 # Copy source code
 COPY . .

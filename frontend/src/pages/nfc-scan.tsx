@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { NFCScanner, RegisterCard } from "@/components/features/nfc"
 import { supabase } from "@/lib/supabase"
+import { applyAutomatedPoints } from "@/lib/loyalty-utils"
 
 import type { Customer } from "@/types/customer"
 
@@ -13,9 +14,25 @@ export default function NFCScanPage() {
   const [pendingNfcUid, setPendingNfcUid] = useState<string | null>(null)
   const location = useLocation()
 
-  const handleCustomerFound = (customer: Customer) => {
-    // navigate to the customers list and open the details modal
-    navigate("/dashboard/customers", { state: { customer, fromNfc: true } })
+  const handleCustomerFound = async (customer: Customer) => {
+    // 1. Automatically apply points for this visit
+    const result = await applyAutomatedPoints(customer.id)
+    
+    // 2. Fetch updated customer data after point addition
+    const { data: updatedCustomer } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("id", customer.id)
+      .single()
+
+    // 3. navigate to the customers list and open the details modal
+    navigate("/dashboard/customers", { 
+      state: { 
+        customer: updatedCustomer || customer, 
+        fromNfc: true,
+        pointsAdded: result.success ? result.pointsAdded : null
+      } 
+    })
   }
 
   const handleNewCard = (nfcUid: string) => {
@@ -48,7 +65,7 @@ export default function NFCScanPage() {
 
     // mimic what NFCScanner does when it reads a card
     async function check() {
-      const { data: customer, error } = await supabase
+      const { data: customer } = await supabase
         .from("customers")
         .select("*")
         .eq("nfc_uid", uid)

@@ -21,7 +21,9 @@ interface UserProfile {
   role: UserRole
   email: string
   full_name?: string
-  branch?: string
+  branch_id?: string
+  branch_name?: string
+  avatar_url?: string
   created_at?: string
   first_login?: boolean
 }
@@ -48,12 +50,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch user profile with role information
+  // Fetch user profile with role information and branch details
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("*, branches(name)")
         .eq("id", userId)
         .single()
 
@@ -62,7 +64,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
         console.log("Attempted to fetch with userId:", userId)
         setUserProfile(null)
       } else {
-        console.log("User profile fetched:", data)
+        // if branch relation included, normalize to branch_name field
+        if (data && (data as any).branches) {
+          const rel = (data as any).branches
+          // supabase may return array or object
+          if (Array.isArray(rel) && rel.length > 0) {
+            ;(data as any).branch_name = rel[0].name
+          } else if (rel && typeof rel === "object" && "name" in rel) {
+            ;(data as any).branch_name = rel.name
+          }
+          delete (data as any).branches
+        }
+        // Fallback to auth metadata avatar_url if not in profile
+        if (data && !data.avatar_url) {
+          const authAvatarUrl = (user?.user_metadata?.avatar_url as string) || null
+          if (authAvatarUrl) {
+            data.avatar_url = authAvatarUrl
+          }
+        }
+        // fallback to branch_id if no name provided
+        if (data && !(data as any).branch_name && (data as any).branch_id) {
+          (data as any).branch_name = `(branch ${ (data as any).branch_id })`
+        }
         setUserProfile(data as UserProfile)
       }
     } catch (error) {

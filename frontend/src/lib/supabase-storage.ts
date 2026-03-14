@@ -191,3 +191,60 @@ export async function fileExists(
     return false
   }
 }
+/**
+ * Get a signed URL for an avatar image (bypasses CORS issues)
+ */
+export async function getAvatarSignedUrl(
+  bucket: string,
+  path: string,
+  expirationSeconds: number = 3600
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(path, expirationSeconds)
+
+    if (error || !data?.signedUrl) {
+      console.error("Error creating signed URL:", error)
+      return null
+    }
+
+    return data.signedUrl
+  } catch (error) {
+    console.error("Error getting signed URL:", error)
+    return null
+  }
+}
+
+/**
+ * Generate signed URL for a file (works for both public and private buckets)
+ */
+export async function getSignedUrl(
+  bucket: string,
+  path: string,
+  expiresIn: number = 3600 // 1 hour default
+): Promise<string> {
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(path, expiresIn)
+
+    if (error) {
+      console.warn("Failed to create signed URL, falling back to public URL:", error)
+      // Fallback to public URL
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(path)
+      return urlData.publicUrl
+    }
+
+    return data.signedUrl
+  } catch (err) {
+    console.warn("Error generating signed URL:", err)
+    // Fallback to public URL
+    const { data: urlData } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path)
+    return urlData.publicUrl
+  }
+}
