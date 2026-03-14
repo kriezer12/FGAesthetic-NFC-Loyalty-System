@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { supabase } from "@/lib/supabase"
 import {
   MAX_AVG_KEYSTROKE_INTERVAL,
@@ -9,7 +8,6 @@ import {
 import { NFCScannerHeader } from "./nfc-scanner-parts/nfc-scanner-header"
 import { NFCScannerInput } from "./nfc-scanner-parts/nfc-scanner-input"
 import { getAverageKeystrokeInterval } from "./nfc-scanner-parts/nfc-scanner-timing"
-// import { handleMockNFCScan } from "../../../../../../utils/mock-nfc-scanner"
 
 import type { Customer } from "@/types/customer"
 
@@ -182,29 +180,46 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
     }
   }
 
-  // const handleMockScan = async () => {
-  //   await handleMockNFCScan(onCustomerFound, onNewCard, setIsLoading, setLastScanned)
-  // }
-
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <NFCScannerHeader isLoading={isLoading} />
-      <CardContent>
-        <NFCScannerInput
-          inputRef={inputRef}
-          isValidInput={isValidInput}
-          showWarning={showWarning}
-          onKeyDown={handleKeyDown}
+    <div className="w-full max-w-md mx-auto">
+      {/* Inline keyframes for NFC animations */}
+      <style>{`
+        @keyframes nfcPing {
+          0% { transform: scale(0.8); opacity: 1; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+        @keyframes nfcGlow {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.1); }
+        }
+      `}</style>
+
+      {/* Glass card container */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
+        {/* Subtle top accent line */}
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+
+        {/* Decorative background pattern */}
+        <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
+            backgroundSize: '24px 24px',
+          }}
         />
-        {/* <Button
-          onClick={handleMockScan}
-          disabled={isLoading}
-          className="w-full mt-4"
-          variant="outline"
-        >
-          {isLoading ? "Scanning..." : "Mock Scan (Test)"}
-        </Button> */}
-      </CardContent>
-    </Card>
+
+        <div className="relative z-10 p-8 flex flex-col gap-6">
+          <NFCScannerHeader isLoading={isLoading} />
+          <NFCScannerInput
+            inputRef={inputRef}
+            isValidInput={isValidInput}
+            showWarning={showWarning}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+
+        {/* Bottom accent */}
+        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-border/50 to-transparent" />
+      </div>
+    </div>
   )
 }

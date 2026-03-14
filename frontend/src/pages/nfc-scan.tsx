@@ -52,8 +52,6 @@ export default function NFCScanPage() {
     setViewState("scanning")
   }
 
-  // no longer track customer locally; navigation handles viewing/updating
-
   useEffect(() => {
     document.title = "NFC Scanner - FG Aesthetic Centre"
   }, [])
@@ -84,14 +82,22 @@ export default function NFCScanPage() {
   }, [location.state])
 
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
-            {viewState === "scanning" && (
-              <NFCScanner onCustomerFound={handleCustomerFound} onNewCard={handleNewCard} />
-            )}
+    <div className="relative flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
+      {/* Subtle radial gradient backdrop */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-primary/[0.03] blur-3xl" />
+        <div className="absolute left-1/3 bottom-1/4 h-[300px] w-[300px] rounded-full bg-primary/[0.02] blur-3xl" />
+      </div>
 
-            {viewState === "register" && pendingNfcUid && (
-              <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
-            )}
+      <div className="relative z-10 w-full">
+        {viewState === "scanning" && (
+          <NFCScanner onCustomerFound={handleCustomerFound} onNewCard={handleNewCard} />
+        )}
+
+        {viewState === "register" && pendingNfcUid && (
+          <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
+        )}
+      </div>
     </div>
   )
 }
