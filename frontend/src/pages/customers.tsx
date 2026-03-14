@@ -106,6 +106,7 @@ export default function CustomersPage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [showPointsHistory, setShowPointsHistory] = useState(false)
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
 
   const [skinTypeFilter, setSkinTypeFilter] = useState("")
   const [genderFilter, setGenderFilter] = useState("")
@@ -325,6 +326,7 @@ export default function CustomersPage() {
         
         setCustomers(prev => prev.map(c => c.id === data.id ? data : c))
         setSelectedCustomer(data)
+        setHistoryRefreshKey(k => k + 1)
       }
     } catch (err) {
       console.error("Error redeeming reward:", err)
@@ -362,6 +364,7 @@ export default function CustomersPage() {
         
         setCustomers(prev => prev.map(c => c.id === data.id ? data : c))
         setSelectedCustomer(data)
+        setHistoryRefreshKey(k => k + 1)
       }
     } catch (err) {
       console.error("Error earning points:", err)
@@ -516,7 +519,7 @@ export default function CustomersPage() {
 
       const photos = (data || [])
         .filter(f => !f.name.includes('_consent_'))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 
       const paths = photos.map(f => `customer-gallery/${customerId}/appointment-${appointmentId}/${f.name}`)
       const { data: signedData } = await supabase.storage
@@ -563,7 +566,7 @@ export default function CustomersPage() {
 
       const consentFiles = (data || [])
         .filter(f => f.name.includes('_consent_'))
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 
       if (consentFiles.length > 0) {
         const mostRecentFile = consentFiles[0]
@@ -1321,6 +1324,7 @@ export default function CustomersPage() {
 
                     <div className="space-y-4">
                       <CustomerPointsDashboard
+                        customerId={selectedCustomer?.id || ''}
                         isUpdating={isUpdating}
                         currentPoints={selectedCustomer?.points || 0}
                         showHistory={showPointsHistory}
@@ -1335,7 +1339,7 @@ export default function CustomersPage() {
                              <Clock className="h-4 w-4" />
                              Transaction History
                           </h5>
-                          <PointsHistory customerId={selectedCustomer.id} />
+                          <PointsHistory customerId={selectedCustomer.id} refreshKey={historyRefreshKey} />
                         </div>
                       )}
                     </div>
