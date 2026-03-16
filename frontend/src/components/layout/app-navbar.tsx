@@ -8,12 +8,15 @@ import { NavbarLinks } from "./navbar/navbar-links"
 import { NavbarAdminDropdown } from "./navbar/navbar-admin-dropdown"
 import { NavbarNotificationBell } from "./navbar/navbar-notification-bell"
 import { NavbarProfileMenu } from "./navbar/navbar-profile-menu"
+import { AnnouncementCreatorModal } from "@/components/features/admin/announcement-creator"
+import { Megaphone } from "lucide-react"
 
 export function AppNavbar() {
   const { user, userProfile, signOut } = useAuth()
   const navigate = useNavigate()
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [isAddButtonHovered, setIsAddButtonHovered] = useState(false)
+  const [announcementModalOpen, setAnnouncementModalOpen] = useState(false)
 
   const handleLogout = async () => {
     await signOut()
@@ -89,6 +92,15 @@ export function AppNavbar() {
           <div className="flex items-center gap-4 ml-auto">
             {userProfile && ["super_admin", "branch_admin"].includes(userProfile.role) && (
               <div className="flex items-center gap-1">
+                {userProfile.role === "super_admin" && (
+                  <button
+                    onClick={() => setAnnouncementModalOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                    title="Broadcast Announcement"
+                  >
+                    <Megaphone className="h-5 w-5" />
+                  </button>
+                )}
                 <NavbarAdminDropdown />
                 <button
                   onClick={() => setAddAccountOpen(true)}
@@ -122,6 +134,7 @@ export function AppNavbar() {
         </div>
       </header>
       <AddAccountModal open={addAccountOpen} onOpenChange={setAddAccountOpen} />
+      <AnnouncementCreatorModal open={announcementModalOpen} onOpenChange={setAnnouncementModalOpen} />
     </>
   )
 }

@@ -29,7 +29,7 @@ export function NotificationToast({
     // Play sound
     try {
       const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3")
-      audio.volume = 0.5
+      audio.volume = 0.3
       audio.play().catch(err => console.warn("Audio playback blocked by browser:", err))
     } catch (err) {
       console.error("Failed to play notification sound:", err)
@@ -40,7 +40,7 @@ export function NotificationToast({
 
   const handleClose = React.useCallback(() => {
     setIsVisible(false)
-    setTimeout(() => onClose(id), 300) // Wait for animation out
+    setTimeout(() => onClose(id), 300)
   }, [id, onClose])
 
   const handleAutoDismiss = React.useCallback(() => {
@@ -55,10 +55,9 @@ export function NotificationToast({
   }, [id, onClose, onAutoDismiss])
 
   React.useEffect(() => {
-    // Auto-dismiss after 20 seconds
     const timer = setTimeout(() => {
       handleAutoDismiss()
-    }, 20000)
+    }, 15000) // 15 seconds
 
     return () => clearTimeout(timer)
   }, [handleAutoDismiss])
@@ -66,33 +65,39 @@ export function NotificationToast({
   return (
     <div
       className={cn(
-        "pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 transition-all duration-300 ease-in-out transform",
-        isVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
+        "pointer-events-auto w-[380px] overflow-hidden rounded-xl bg-background/95 backdrop-blur-md shadow-2xl ring-1 ring-border transition-all duration-300 ease-in-out transform",
+        isVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 scale-95",
         type === "warning" ? "border-l-4 border-yellow-500" : "border-l-4 border-primary"
       )}
     >
       <div className="p-4">
-        <div className="flex items-start">
-          <div className="flex-shrink-0">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 mt-0.5">
             {type === "warning" ? (
-              <Clock className="h-6 w-6 text-yellow-500" aria-hidden="true" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
+                <Clock className="h-5 w-5 text-yellow-600" aria-hidden="true" />
+              </div>
             ) : (
-              <Calendar className="h-6 w-6 text-primary" aria-hidden="true" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Calendar className="h-5 w-5 text-primary" aria-hidden="true" />
+              </div>
             )}
           </div>
-          <div className="ml-3 w-0 flex-1 pt-0.5">
-            <p className="text-sm font-medium text-gray-900">{title}</p>
-            <p className="mt-1 text-sm text-gray-500">{message}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-foreground truncate">{title}</p>
+            <p className="mt-1 text-xs text-muted-foreground leading-relaxed line-clamp-3">
+              {message}
+            </p>
           </div>
-          <div className="ml-4 flex flex-shrink-0">
+          <div className="flex-shrink-0">
             <Button
               variant="ghost"
-              size="icon-xs"
-              className="inline-flex text-gray-400 hover:text-gray-500"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
               onClick={handleClose}
             >
               <span className="sr-only">Close</span>
-              <X className="h-5 w-5" aria-hidden="true" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
