@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react"
-import { Camera, Loader2, AlertCircle, CheckCircle } from "lucide-react"
+import { Camera, Loader2, AlertCircle, CheckCircle, User, Shield, Key, Mail, BadgeCheck } from "lucide-react"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -16,6 +15,7 @@ import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getAvatarSignedUrl } from "@/lib/supabase-storage"
 import { validateFile } from "@/lib/file-validation"
 import { convertToWebP, generateFileName } from "@/lib/image-utils"
+import { cn } from "@/lib/utils"
 
 interface AccountSettingsModalProps {
   open: boolean
@@ -26,8 +26,11 @@ const NAME_CHANGE_LIMIT = 5
 const AVATAR_BUCKET = "user-pictures"
 const currentMonth = () => new Date().toISOString().slice(0, 7) // "YYYY-MM"
 
+type Tab = "general" | "security"
+
 export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModalProps) {
   const { user, refreshUser, userProfile } = useAuth()
+  const [activeTab, setActiveTab] = useState<Tab>("general")
 
   const [fullName, setFullName] = useState("")
   
@@ -76,7 +79,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       
       // Get avatar from profile, or fallback to auth metadata
       const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
-      setAvatarPreview(null)
+      setAvatarPreview(null) // Only used for local file selection
       
       // Generate signed URL immediately for faster display
       if (avatarUrl && avatarUrl.includes("user-pictures")) {
@@ -110,6 +113,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       setConfirmPassword("")
       setProfileMsg(null)
       setPasswordMsg(null)
+      setActiveTab("general")
     }
     
     return () => {
@@ -180,14 +184,11 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
 
       if (updateError) throw updateError
 
-      // Also try to update user_profiles if RLS allows it
       await supabase
         .from("user_profiles")
         .update({ avatar_url: result.url })
         .eq("id", user.id)
       
-      // Silently ignore RLS errors - avatar is stored in auth metadata
-
       await refreshUser()
       setAvatarFile(null)
       setAvatarMsg({ type: "success", text: "Avatar updated successfully!" })
@@ -295,257 +296,319 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const tabs = [
+    { id: "general", label: "General", icon: User },
+    { id: "security", label: "Security", icon: Shield },
+  ]
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent overlayBlur="subtle" className="max-w-md w-full">
-        <DialogHeader>
-          <DialogTitle>Account Settings</DialogTitle>
-          <DialogDescription>
-            Manage your profile and password.
-          </DialogDescription>
-        </DialogHeader>
-
-        <ScrollArea className="h-[calc(100vh-12rem)]">
-          <div className="flex flex-col gap-8 pr-4">
-
-          {/* ── Profile ─────────────────────────────────────────── */}
-          <section className="flex flex-col gap-5">
-            <h3 className="text-sm font-semibold">Profile</h3>
-
-            {/* Avatar */}
-            <div className="flex items-center gap-4">
-              <div className="relative group w-16 h-16 shrink-0">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt="Avatar"
-                    className="h-16 w-16 rounded-full object-cover border border-border"
-                  />
-                ) : displayAvatarUrl ? (
-                  <img
-                    src={displayAvatarUrl}
-                    alt="Avatar"
-                    className="h-16 w-16 rounded-full object-cover border border-border"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold select-none">
-                    {userInitial}
-                  </div>
-                )}
-                {/* Change overlay */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={avatarUploading || avatarProcessing}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {avatarProcessing || avatarUploading ? (
-                    <Loader2 className="w-5 h-5 text-white animate-spin" />
-                  ) : (
-                    <Camera className="w-5 h-5 text-white" />
-                  )}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarFileSelect}
-                  className="hidden"
-                  disabled={avatarUploading || avatarProcessing}
-                />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <p className="text-sm font-medium leading-none">{fullName || "—"}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
-              </div>
+      <DialogContent overlayBlur="subtle" className="max-w-3xl w-full p-0 overflow-hidden border-none shadow-2xl">
+        <div className="flex h-[600px]">
+          {/* Sidebar */}
+          <aside className="w-64 bg-muted/30 border-r border-border p-6 flex flex-col gap-6">
+            <div>
+              <DialogTitle className="text-xl font-bold tracking-tight">Settings</DialogTitle>
+              <DialogDescription className="text-xs mt-1">Manage your account preferences</DialogDescription>
             </div>
 
-            {/* Avatar Upload Actions */}
-            {avatarFile && (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleAvatarUpload}
-                  disabled={avatarUploading || avatarProcessing}
-                  className="gap-2 flex-1"
-                >
-                  {avatarProcessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : avatarUploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    "Upload Photo"
+            <nav className="flex flex-col gap-1 flex-1">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as Tab)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    activeTab === tab.id 
+                      ? "bg-primary text-primary-foreground shadow-sm" 
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAvatarCancel}
-                  disabled={avatarUploading || avatarProcessing}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="mt-auto pt-6 border-t border-border/50">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <BadgeCheck className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold leading-none">Status</p>
+                  <p className="text-xs font-semibold text-foreground">Active Account</p>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Content Area */}
+          <main className="flex-1 flex flex-col min-w-0 bg-background/50 backdrop-blur-xl">
+            <ScrollArea className="flex-1">
+              <div className="p-8">
+                {activeTab === "general" ? (
+                  <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <section>
+                      <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                         Personal Information
+                      </h3>
+
+                      <div className="flex flex-col gap-8">
+                        {/* Avatar Section */}
+                        <div className="flex items-center gap-6 p-4 rounded-xl border border-border/50 bg-muted/20">
+                          <div className="relative group">
+                            <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-primary/20 shadow-inner bg-muted flex items-center justify-center">
+                              {avatarPreview || displayAvatarUrl ? (
+                                <img
+                                  src={avatarPreview || displayAvatarUrl || ""}
+                                  alt="Avatar"
+                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                />
+                              ) : (
+                                <span className="text-3xl font-bold text-primary/40">{userInitial}</span>
+                              )}
+                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={avatarUploading || avatarProcessing}
+                              className="absolute -bottom-2 -right-2 p-2 rounded-xl bg-primary text-primary-foreground shadow-lg hover:scale-110 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group-hover:rotate-6"
+                            >
+                              {avatarProcessing || avatarUploading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Camera className="w-4 h-4" />
+                              )}
+                            </button>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={handleAvatarFileSelect}
+                              className="hidden"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <h4 className="font-bold text-foreground truncate max-w-[200px]">{fullName || "Unnamed User"}</h4>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                              <Mail className="w-3 h-3" /> {user?.email}
+                            </p>
+                            <div className="mt-2 flex gap-2">
+                              {avatarFile ? (
+                                <>
+                                  <Button 
+                                    size="sm" 
+                                    variant="default" 
+                                    className="h-8 rounded-lg shadow-sm"
+                                    onClick={handleAvatarUpload}
+                                    disabled={avatarUploading || avatarProcessing}
+                                  >
+                                    Save Photo
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="h-8 rounded-lg"
+                                    onClick={handleAvatarCancel}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  variant="secondary" 
+                                  className="h-8 rounded-lg font-medium"
+                                  onClick={() => fileInputRef.current?.click()}
+                                >
+                                  Change Photo
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {avatarMsg && (
+                          <div className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg text-sm font-medium border animate-in fade-in zoom-in duration-300",
+                            avatarMsg.type === "success" 
+                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                              : "bg-destructive/10 text-destructive border-destructive/20"
+                          )}>
+                            {avatarMsg.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                            {avatarMsg.text}
+                          </div>
+                        )}
+
+                        {/* Fields */}
+                        <div className="grid gap-6">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center px-1">
+                              <Label htmlFor="acc-name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Full Name</Label>
+                              <span className={cn(
+                                "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                                nameChangeLimitReached 
+                                  ? "bg-destructive/10 text-destructive border-destructive/20" 
+                                  : "bg-primary/10 text-primary border-primary/20"
+                              )}>
+                                {nameChangeLimitReached ? "LIMIT REACHED" : `${nameChangesLeft} CHANGES LEFT`}
+                              </span>
+                            </div>
+                            <div className="relative group">
+                              <Input
+                                id="acc-name"
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                readOnly={nameChangeLimitReached}
+                                className={cn(
+                                  "h-11 rounded-xl bg-muted/30 focus:bg-background transition-all duration-300",
+                                  nameChangeLimitReached && "opacity-60 cursor-not-allowed"
+                                )}
+                              />
+                              <User className="absolute right-3 top-3 w-4 h-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Email Address</Label>
+                              <Input value={user?.email ?? ""} readOnly className="h-11 rounded-xl bg-muted/60 text-muted-foreground/70 border-dashed cursor-not-allowed select-none" />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">User Role</Label>
+                              <div className="h-11 rounded-xl bg-muted/60 flex items-center px-3 border border-dashed text-sm font-medium text-muted-foreground/70">
+                                {formatRole(userProfile?.role)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                ) : (
+                  <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <section>
+                      <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                        Password & Authentication
+                      </h3>
+
+                      <div className="space-y-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="cur-pw" className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Current Password</Label>
+                          <div className="relative group">
+                            <Input
+                              id="cur-pw"
+                              type="password"
+                              placeholder="••••••••"
+                              value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)}
+                              className="h-11 rounded-xl bg-muted/30 focus:bg-background transition-all duration-300"
+                            />
+                            <Key className="absolute right-3 top-3 w-4 h-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="new-pw" className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">New Password</Label>
+                            <Input
+                              id="new-pw"
+                              type="password"
+                              placeholder="••••••••"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="h-11 rounded-xl bg-muted/30 focus:bg-background transition-all duration-300"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="confirm-pw" className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Confirm New Password</Label>
+                            <Input
+                              id="confirm-pw"
+                              type="password"
+                              placeholder="••••••••"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className={cn(
+                                "h-11 rounded-xl bg-muted/30 focus:bg-background transition-all duration-300",
+                                passwordMismatch && "border-destructive focus-visible:ring-destructive"
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        {passwordMismatch && (
+                          <div className="flex items-center gap-2 text-xs font-bold text-destructive bg-destructive/10 p-2 rounded-lg border border-destructive/20 animate-in fade-in zoom-in duration-200">
+                            <AlertCircle className="w-3 h-3" /> Passwords do not match
+                          </div>
+                        )}
+                        
+                        {passwordMsg && (
+                          <div className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg text-sm font-medium border animate-in fade-in zoom-in duration-300",
+                            passwordMsg.type === "success" 
+                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                              : "bg-destructive/10 text-destructive border-destructive/20"
+                          )}>
+                            {passwordMsg.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                            {passwordMsg.text}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Sticky Action Footer */}
+            <footer className="p-6 bg-muted/10 border-t border-border/50 backdrop-blur-md flex items-center justify-between">
+              <div className="flex-1 mr-4">
+                {activeTab === "general" && profileMsg && (
+                  <p className={cn(
+                    "text-xs font-bold transition-all duration-300",
+                    profileMsg.type === "success" ? "text-emerald-500" : "text-destructive"
+                  )}>
+                    {profileMsg.text}
+                  </p>
+                )}
+              </div>
+              
+              <div className="flex gap-3">
+                <Button 
+                  variant="ghost" 
+                  className="rounded-lg h-10 font-bold"
+                  onClick={() => onOpenChange(false)}
                 >
                   Cancel
                 </Button>
-              </div>
-            )}
-
-            {/* Avatar Messages */}
-            {avatarMsg && (
-              <div
-                className={`flex gap-2 p-3 rounded-md text-xs ${
-                  avatarMsg.type === "success"
-                    ? "bg-green-50 text-green-800 border border-green-200"
-                    : "bg-red-50 text-red-800 border border-red-200"
-                }`}
-              >
-                {avatarMsg.type === "success" ? (
-                  <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                {activeTab === "general" ? (
+                  <Button
+                    className="h-10 px-8 rounded-lg font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300 active:scale-95"
+                    onClick={handleUpdateProfile}
+                    disabled={saving || !fullName.trim() || nameChangeLimitReached}
+                  >
+                    {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                    Save Changes
+                  </Button>
                 ) : (
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                )}
-                <p>{avatarMsg.text}</p>
-              </div>
-            )}
-
-            {/* Fields */}
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="acc-name">Full Name</Label>
-                  <span className={`text-xs ${
-                    nameChangeLimitReached
-                      ? "text-destructive"
-                      : nameChangesLeft === 1
-                      ? "text-amber-500"
-                      : "text-muted-foreground"
-                  }`}>
-                    {nameChangeLimitReached
-                      ? "No changes remaining"
-                      : `${nameChangesLeft} change${nameChangesLeft === 1 ? "" : "s"} remaining`}
-                  </span>
-                </div>
-                <Input
-                  id="acc-name"
-                  placeholder="Your name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  readOnly={nameChangeLimitReached}
-                  className={nameChangeLimitReached ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="acc-email">Email Address</Label>
-                <Input
-                  id="acc-email"
-                  type="email"
-                  value={user?.email ?? ""}
-                  readOnly
-                  className="bg-muted text-muted-foreground cursor-not-allowed select-none"
-                />
-                <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="acc-role">Role</Label>
-                <Input
-                  id="acc-role"
-                  value={formatRole(userProfile?.role)}
-                  readOnly
-                  className="bg-muted text-muted-foreground cursor-not-allowed select-none"
-                />
-              </div>
-            </div>
-
-            {profileMsg && (
-              <p className={`text-xs ${profileMsg.type === "success" ? "text-green-600" : "text-destructive"}`}>
-                {profileMsg.text}
-              </p>
-            )}
-
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={handleUpdateProfile}
-                disabled={saving || !fullName.trim() || nameChangeLimitReached}
-              >
-                {saving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                Save Changes
-              </Button>
-            </div>
-          </section>
-
-          <div className="border-t" />
-
-          {/* ── Change Password ──────────────────────────────────── */}
-          <section className="flex flex-col gap-4">
-            <h3 className="text-sm font-semibold">Change Password</h3>
-
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cur-pw">Current Password</Label>
-                <Input
-                  id="cur-pw"
-                  type="password"
-                  placeholder="••••••••"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-pw">New Password</Label>
-                <Input
-                  id="new-pw"
-                  type="password"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="confirm-pw">Confirm New Password</Label>
-                <Input
-                  id="confirm-pw"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={passwordMismatch ? "border-destructive focus-visible:ring-destructive" : ""}
-                />
-                {passwordMismatch && (
-                  <p className="text-xs text-destructive">Passwords do not match.</p>
+                  <Button
+                    className="h-10 px-8 rounded-lg font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300 active:scale-95"
+                    onClick={handleChangePassword}
+                    disabled={saving || !currentPassword || !newPassword || !confirmPassword || passwordMismatch}
+                  >
+                    {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Shield className="w-4 h-4 mr-2" />}
+                    Update Security
+                  </Button>
                 )}
               </div>
-            </div>
-
-            {passwordMsg && (
-              <p className={`text-xs ${passwordMsg.type === "success" ? "text-green-600" : "text-destructive"}`}>
-                {passwordMsg.text}
-              </p>
-            )}
-
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={handleChangePassword}
-                disabled={saving || !currentPassword || !newPassword || !confirmPassword || passwordMismatch}
-              >
-                {saving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                Update Password
-              </Button>
-            </div>
-          </section>
-
-          </div>
-        </ScrollArea>
+            </footer>
+          </main>
+        </div>
       </DialogContent>
     </Dialog>
   )
 }
+
