@@ -47,8 +47,11 @@ export function useStaff(): UseStaffReturn {
         .in("role", CALENDAR_ROLES)
         .order("full_name", { ascending: true })
 
-      // Filter by branch if user is branch_admin
-      if (userProfile?.role === "branch_admin" && userProfile.branch_id) {
+      // Filter by branch if user is branch_admin or staff
+      if (
+        (userProfile?.role === "branch_admin" || userProfile?.role === "staff") &&
+        userProfile.branch_id
+      ) {
         query = query.eq("branch_id", userProfile.branch_id)
       }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useStaff } from "@/hooks/use-staff"
 import { useNotificationSettings } from "@/contexts/notification-settings-context"
 import { useMissedNotifications } from "@/contexts/missed-notifications-context"
 import { NotificationToast } from "@/components/ui/notification-toast"
@@ -16,6 +17,7 @@ interface AppointmentNotification {
 
 export function AppointmentNotifier() {
   const { appointments } = useAppointments()
+  const { staff, loading: staffLoading } = useStaff()
   const { settings } = useNotificationSettings()
   const { addMissedNotification } = useMissedNotifications()
   const [notifications, setNotifications] = useState<AppointmentNotification[]>([])
@@ -70,9 +72,19 @@ export function AppointmentNotifier() {
       const now = new Date()
       const newNotifications: AppointmentNotification[] = []
 
+      // If staff is still loading, wait. If staff is empty (and not loading),
+      // it means there are no staff in this branch, so no notifications to show.
+      if (staffLoading) return
+
+      // Create a set of staff IDs belonging to this branch for efficient lookup
+      const branchStaffIds = new Set(staff.map(s => s.id))
+
       appointments.forEach((appt) => {
         // Only notify for scheduled or confirmed appointments
         if (appt.status !== "scheduled" && appt.status !== "confirmed") return
+
+        // FILTER: Only notify if the appointment is for a staff member in our branch
+        if (!branchStaffIds.has(appt.staff_id)) return
 
         const startTime = parseISO(appt.start_time)
 
@@ -130,7 +142,7 @@ export function AppointmentNotifier() {
     checkAppointments()
 
     return () => clearInterval(interval)
-  }, [appointments, settings])
+  }, [appointments, settings, staff, staffLoading])
 
   if (notifications.length === 0) return null
 
