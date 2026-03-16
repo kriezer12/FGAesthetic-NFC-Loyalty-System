@@ -34,7 +34,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
   // Avatar upload state
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [_avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarProcessing, setAvatarProcessing] = useState(false)
   const [avatarMsg, setAvatarMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -70,9 +70,13 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
           user?.email?.split("@")[0] ??
           ""
       )
+      if (avatarPreview && avatarPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreview)
+      }
+      
       // Get avatar from profile, or fallback to auth metadata
       const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
-      setAvatarPreview(avatarUrl)
+      setAvatarPreview(null)
       
       // Generate signed URL immediately for faster display
       if (avatarUrl && avatarUrl.includes("user-pictures")) {
@@ -107,6 +111,12 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       setProfileMsg(null)
       setPasswordMsg(null)
     }
+    
+    return () => {
+      if (avatarPreview && avatarPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreview)
+      }
+    }
   }, [open, user, userProfile])
 
   const userInitial = (
@@ -130,6 +140,9 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
     }
 
     setAvatarFile(file)
+    if (avatarPreview && avatarPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(avatarPreview)
+    }
     const url = URL.createObjectURL(file)
     setAvatarPreview(url)
   }
@@ -188,9 +201,11 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
   }
 
   const handleAvatarCancel = () => {
+    if (avatarPreview && avatarPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(avatarPreview)
+    }
     setAvatarFile(null)
-    const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
-    setAvatarPreview(avatarUrl)
+    setAvatarPreview(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -300,7 +315,13 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             {/* Avatar */}
             <div className="flex items-center gap-4">
               <div className="relative group w-16 h-16 shrink-0">
-                {displayAvatarUrl ? (
+                {avatarPreview ? (
+                  <img
+                    src={avatarPreview}
+                    alt="Avatar"
+                    className="h-16 w-16 rounded-full object-cover border border-border"
+                  />
+                ) : displayAvatarUrl ? (
                   <img
                     src={displayAvatarUrl}
                     alt="Avatar"
