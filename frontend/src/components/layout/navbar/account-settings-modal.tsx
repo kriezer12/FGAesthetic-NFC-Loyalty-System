@@ -73,6 +73,10 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
           user?.email?.split("@")[0] ??
           ""
       )
+      if (avatarPreview && avatarPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreview)
+      }
+      
       // Get avatar from profile, or fallback to auth metadata
       const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
       setAvatarPreview(null) // Only used for local file selection
@@ -111,6 +115,12 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
       setPasswordMsg(null)
       setActiveTab("general")
     }
+    
+    return () => {
+      if (avatarPreview && avatarPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreview)
+      }
+    }
   }, [open, user, userProfile])
 
   const userInitial = (
@@ -134,6 +144,9 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
     }
 
     setAvatarFile(file)
+    if (avatarPreview && avatarPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(avatarPreview)
+    }
     const url = URL.createObjectURL(file)
     setAvatarPreview(url)
   }
@@ -189,9 +202,11 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
   }
 
   const handleAvatarCancel = () => {
+    if (avatarPreview && avatarPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(avatarPreview)
+    }
     setAvatarFile(null)
-    const avatarUrl = userProfile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null
-    setAvatarPreview(avatarUrl)
+    setAvatarPreview(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
