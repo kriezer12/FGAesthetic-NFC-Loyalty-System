@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { Calendar, ChevronLeft, ChevronRight, Filter, Search, User } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,14 @@ import { supabase } from "@/lib/supabase"
 const PAGE_SIZE = 10
 
 interface BranchLookup { [id: string]: string }
-interface UserProfileLookup { [userId: string]: { role: string; branch_id: string | null } }
+interface UserProfileLookup {
+  [userId: string]: {
+    role: string
+    branch_id: string | null
+    full_name?: string | null
+    email?: string | null
+  }
+}
 
 type CanonicalAction =
   | "edited_client_data"
@@ -95,7 +102,7 @@ export default function UserLogsPage() {
     const fetchMeta = async () => {
       const [{ data: branches }, { data: profiles }] = await Promise.all([
         supabase.from("branches").select("id, name"),
-        supabase.from("user_profiles").select("id, role, branch_id"),
+        supabase.from("user_profiles").select("id, role, branch_id, full_name, email"),
       ])
       const bMap: BranchLookup = {}
       for (const b of branches || []) bMap[b.id] = b.name
@@ -213,10 +220,13 @@ export default function UserLogsPage() {
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE))
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
-  const getRoleBadge = (userId: string) => {
-    const profile = userProfileMap[userId]
-    if (!profile) return null
-    const { role } = profile
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
+
+  const getRoleBadge = (log: UserLogRow) => {
+    const snapshot = (log.metadata as any)?.userSnapshot
+    const role = snapshot?.role || userProfileMap[log.user_id]?.role
+
+    if (!role) return null
     if (role === "super_admin")
       return <Badge variant="outline" className="text-[10px] px-1 py-0 border-purple-400 text-purple-600">Super Admin</Badge>
     if (role === "branch_admin")
@@ -224,8 +234,27 @@ export default function UserLogsPage() {
     return <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground">Staff</Badge>
   }
 
+  const getDisplayName = (log: UserLogRow) => {
+    const snapshot = (log.metadata as any)?.userSnapshot
+
+    if (log.user_name) return log.user_name
+    if (snapshot?.name) return snapshot.name
+    if (log.user_email) return log.user_email
+    if (snapshot?.email) return snapshot.email
+
+    const profile = userProfileMap[log.user_id]
+    if (profile) {
+      if (profile.full_name) return profile.full_name
+      if (profile.email) return profile.email
+      return `${profile.role.replace(/_/g, " ")} (${log.user_id.slice(0, 8)})`
+    }
+
+    return "Unknown User"
+  }
+
   const getBranchName = (log: UserLogRow) => {
-    const branchId = log.branch_id || userProfileMap[log.user_id]?.branch_id || null
+    const snapshot = (log.metadata as any)?.userSnapshot
+    const branchId = log.branch_id || snapshot?.branch_id || userProfileMap[log.user_id]?.branch_id || null
     if (!branchId) return null
     return branchMap[branchId] || null
   }
@@ -250,6 +279,63 @@ export default function UserLogsPage() {
     }
 
     return details.join(" • ")
+  }
+
+  const formatChanges = (changes: Record<string, unknown> | null | undefined) => {
+    if (!changes || Object.keys(changes).length === 0) return null
+    try {
+      return JSON.stringify(changes, null, 2)
+    } catch {
+      return String(changes)
+    }
+  }
+
+  const renderChangeDiff = (changes: any) => {
+    if (!changes) return null
+
+    const before = changes?.before ?? null
+    const after = changes?.after ?? null
+
+    // If it looks like a before/after diff, show a readable table
+    if (before && after && typeof before === "object" && typeof after === "object") {
+      const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+      return (
+        <table className="w-full text-xs border border-muted/30 rounded-md">
+          <thead>
+            <tr className="bg-muted/20">
+              <th className="p-2 text-left">Field</th>
+              <th className="p-2 text-left">Before</th>
+              <th className="p-2 text-left">After</th>
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map((key) => {
+              const beforeValue = (before as any)[key]
+              const afterValue = (after as any)[key]
+              if (beforeValue === afterValue) return null
+              return (
+                <tr key={key} className="border-t border-muted/20">
+                  <td className="p-2 align-top font-medium">{key}</td>
+                  <td className="p-2 align-top text-muted-foreground">
+                    {typeof beforeValue === "object" ? JSON.stringify(beforeValue) : String(beforeValue)}
+                  </td>
+                  <td className="p-2 align-top">
+                    {typeof afterValue === "object" ? JSON.stringify(afterValue) : String(afterValue)}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )
+    }
+
+    // For create/delete or other arbitrary shapes, just show JSON
+    return (
+      <pre className="whitespace-pre-wrap break-words rounded-md border border-muted/40 bg-muted/30 p-3 text-xs">
+        {formatChanges(changes)}
+      </pre>
+    )
   }
 
   return (
@@ -355,6 +441,7 @@ export default function UserLogsPage() {
               <table className="w-full min-w-[760px]">
                 <thead>
                   <tr className="border-b bg-muted/50">
+                    <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">#</th>
                     <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">Who / Branch</th>
                     <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">Action</th>
                     <th className="p-3 text-left text-xs font-medium uppercase text-muted-foreground">When</th>
@@ -362,34 +449,71 @@ export default function UserLogsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedLogs.map((log) => (
-                    <tr key={log.id} className="border-b last:border-b-0 hover:bg-muted/20">
-                      <td className="p-3 align-top">
-                        <div className="flex items-start gap-2">
-                          <User className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="text-sm font-medium">{log.user_name || log.user_email || "Unknown User"}</p>
-                              {getRoleBadge(log.user_id)}
+                  {paginatedLogs.map((log, index) => (
+                    <React.Fragment key={log.id}>
+                      <tr
+                        className={`border-b last:border-b-0 hover:bg-muted/20 ${
+                          expandedLogId === log.id ? "bg-muted/30" : ""
+                        }`}
+                        onClick={() => setExpandedLogId((prev) => (prev === log.id ? null : log.id))}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <td className="p-3 align-top text-xs text-muted-foreground">
+                          {(currentPage - 1) * PAGE_SIZE + index + 1}
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="flex items-start gap-2">
+                            <User className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-sm font-medium">{getDisplayName(log)}</p>
+                                {getRoleBadge(log)}
+                              </div>
+                              {log.user_name && log.user_email && (
+                                <p className="text-xs text-muted-foreground">{log.user_email}</p>
+                              )}
+                              {getBranchName(log) && (
+                                <p className="text-xs text-muted-foreground mt-0.5">📍 {getBranchName(log)}</p>
+                              )}
                             </div>
-                            {log.user_name && log.user_email && (
-                              <p className="text-xs text-muted-foreground">{log.user_email}</p>
-                            )}
-                            {getBranchName(log) && (
-                              <p className="text-xs text-muted-foreground mt-0.5">📍 {getBranchName(log)}</p>
-                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-sm font-medium">{getActionWithOp(log)}</td>
-                      <td className="p-3 align-middle">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          <span>{formatDateTime(log.created_at)}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 text-sm text-muted-foreground">{getDetailsText(log)}</td>
-                    </tr>
+                        </td>
+                        <td className="p-3 text-sm font-medium">{getActionWithOp(log)}</td>
+                        <td className="p-3 align-middle">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            <span>{formatDateTime(log.created_at)}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-sm text-muted-foreground">{getDetailsText(log)}</td>
+                      </tr>
+                      {expandedLogId === log.id && (
+                        <tr className="bg-muted/10">
+                          <td colSpan={5} className="p-3">
+                            <div className="space-y-3">
+                              {log.changes && (
+                                <div>
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">
+                                    Changes
+                                  </div>
+                                  {renderChangeDiff(log.changes)}
+                                </div>
+                              )}
+                              {log.metadata && (
+                                <div>
+                                  <div className="text-xs font-medium text-muted-foreground mb-1">
+                                    Metadata
+                                  </div>
+                                  <pre className="whitespace-pre-wrap break-words rounded-md border border-muted/40 bg-muted/30 p-3 text-xs">
+                                    {formatChanges(log.metadata)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
