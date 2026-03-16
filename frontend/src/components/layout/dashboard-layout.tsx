@@ -8,6 +8,7 @@ import { MissedNotificationsProvider } from "@/contexts/missed-notifications-con
 import { AppNavbar } from "./app-navbar"
 import { FirstLoginModal } from "../auth/first-login-modal"
 import { AppointmentNotifier } from "../features/appointments/appointment-notifier"
+import { AnnouncementNotifier } from "./announcement-notifier"
 import { GlobalNFCListener } from "../features/nfc/global-nfc-listener"
 
 function ContentLoader() {
@@ -78,6 +79,7 @@ export function DashboardLayout() {
     <div className="min-h-screen flex flex-col bg-background">
       <GlobalNFCListener />
       <AppointmentNotifier />
+      <AnnouncementNotifier />
       <AppNavbar />
       <main className="flex-1 p-6">
         <Suspense fallback={<ContentLoader />}>
