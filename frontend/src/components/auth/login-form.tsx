@@ -30,6 +30,12 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
   // Message passed via router state (e.g. after a successful password reset)
   const stateMessage: string | undefined = location.state?.message
 
+  type LoginLocationState = {
+    gotoForgot?: boolean
+    message?: string
+  }
+  const locationState = (location.state as LoginLocationState) || {}
+
   // Form state
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -37,6 +43,19 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
   const [success, setSuccess] = useState<string | null>(stateMessage ?? null)
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<"login" | "forgot">("login")
+
+  // If we land here with a request to show the forgot-password flow, do so once.
+  useEffect(() => {
+    const gotoForgot = locationState.gotoForgot
+    if (gotoForgot) {
+      setMode("forgot")
+      navigate(location.pathname, {
+        replace: true,
+        state: { ...locationState, gotoForgot: undefined },
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Listen for PASSWORD_RECOVERY event — redirect to the dedicated page
   useEffect(() => {

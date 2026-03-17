@@ -55,15 +55,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*, branches(name)")
+        .select("id, role, email, full_name, branch_id, avatar_url")
         .eq("id", userId)
         .single()
 
+      console.log("raw profile data response:", data, "error", error)
       if (error) {
         console.error("Error fetching user profile:", error)
         console.log("Attempted to fetch with userId:", userId)
         setUserProfile(null)
       } else {
+        console.log("User profile fetched:", data)
         // if branch relation included, normalize to branch_name field
         if (data && (data as any).branches) {
           const rel = (data as any).branches
