@@ -81,12 +81,20 @@ export async function applyAutomatedPoints(customerId: string, treatmentId?: str
     if (updateError) throw updateError
 
     // 4. Log the transaction and check-in
+    let expiresAt: string | null = null
+    if (selectedRule.expiration_days) {
+      const date = new Date()
+      date.setDate(date.getDate() + selectedRule.expiration_days)
+      expiresAt = date.toISOString()
+    }
+
     await Promise.all([
       supabase.from("points_transactions").insert({
         customer_id: customerId,
         points_change: selectedRule.points_earned,
         reason: selectedRule.description || "Automated Visit Points",
-        type: "earn"
+        type: "earn",
+        expires_at: expiresAt
       }),
       supabase.from("checkin_logs").insert({
         customer_id: customerId,

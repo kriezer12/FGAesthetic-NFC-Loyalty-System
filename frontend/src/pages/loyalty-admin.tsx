@@ -72,7 +72,6 @@ export default function LoyaltyAdminPage() {
     expiryDate.setDate(createdAt.getDate() + rule.expiration_days)
     
     const now = new Date()
-    now.setDate(now.getDate() + 10) // MOCK: Pretend today is 10 days in the future for verification
     const diffMs = expiryDate.getTime() - now.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
     return diffDays
