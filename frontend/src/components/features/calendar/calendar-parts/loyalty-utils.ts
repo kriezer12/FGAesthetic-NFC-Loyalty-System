@@ -31,8 +31,17 @@ export async function awardPointsForAppointment(appt: Appointment) {
       supabase.from('services').select('id, name').in('id', serviceIds)
     ])
 
-    const rules = rulesRes.data || []
+    const allRules = rulesRes.data || []
     const services = servicesRes.data || []
+
+    // Filter out expired rules
+    const rules = allRules.filter(r => {
+      if (!r.expiration_days || !r.created_at) return true
+      const createdAt = new Date(r.created_at)
+      const expiryDate = new Date(createdAt)
+      expiryDate.setDate(createdAt.getDate() + r.expiration_days)
+      return expiryDate.getTime() > Date.now()
+    })
 
     let totalPoints = 0
     const reasons: string[] = []

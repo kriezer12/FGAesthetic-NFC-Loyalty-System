@@ -96,7 +96,6 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
             customer_id: customer.id,
             checked_in_at: new Date().toISOString(),
             points_added: rule.points_earned,
-            points_added: amount,
             processed_by: user?.id || null,
             branch_id: userProfile?.branch_id || null,
           })

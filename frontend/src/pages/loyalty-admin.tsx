@@ -30,6 +30,7 @@ export interface EarningRule {
   is_active: boolean
   expiration_days?: number
   description?: string
+  created_at?: string
 }
 
 export default function LoyaltyAdminPage() {
@@ -64,6 +65,19 @@ export default function LoyaltyAdminPage() {
     fetchServices()
   }, [])
 
+  const calculateRemainingDays = (rule: EarningRule) => {
+    if (!rule.expiration_days || !rule.created_at) return null
+    const createdAt = new Date(rule.created_at)
+    const expiryDate = new Date(createdAt)
+    expiryDate.setDate(createdAt.getDate() + rule.expiration_days)
+    
+    const now = new Date()
+    now.setDate(now.getDate() + 10) // MOCK: Pretend today is 10 days in the future for verification
+    const diffMs = expiryDate.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
   const saveReward = async (reward: LoyaltyReward) => {
     if (reward.id) {
       await supabase.from("loyalty_rewards").update(reward).eq("id", reward.id)
@@ -83,10 +97,12 @@ export default function LoyaltyAdminPage() {
 
   const saveRule = async (rule: EarningRule) => {
     if (rule.id) {
-      await supabase.from("earning_rules").update(rule).eq("id", rule.id)
+      // Don't send created_at on update
+      const { created_at, ...updateData } = rule
+      await supabase.from("earning_rules").update(updateData).eq("id", rule.id)
     } else {
       const id = generateId()
-      await supabase.from("earning_rules").insert({ ...rule, id })
+      await supabase.from("earning_rules").insert({ ...rule, id, created_at: new Date().toISOString() })
     }
     fetchRules()
     setRuleModalOpen(false)
@@ -205,44 +221,55 @@ export default function LoyaltyAdminPage() {
                       <TableHead>Description</TableHead>
                       <TableHead>Linked Treatment</TableHead>
                       <TableHead>Points Earned</TableHead>
-                      <TableHead>Expires In (Days)</TableHead>
+                      <TableHead>Expires In</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rules.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-medium">{r.description || "—"}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {services.find(s => s.id === r.treatment_id)?.name || "All / None"}
-                        </TableCell>
-                        <TableCell>+{r.points_earned}</TableCell>
-                        <TableCell className="text-muted-foreground">{r.expiration_days ? `${r.expiration_days} days` : "Never"}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${r.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
-                            {r.is_active ? "Active" : "Inactive"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="icon" variant="ghost" className="size-8">
-                                <MoreHorizontal className="size-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => { setEditingRule(r); setRuleModalOpen(true) }}>
-                                <Pencil className="size-4 mr-2" />Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem variant="destructive" onClick={() => deleteRule(r.id)}>
-                                <Trash2 className="size-4 mr-2" />Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {rules.map((r) => {
+                      const daysLeft = calculateRemainingDays(r)
+                      const isExpired = daysLeft !== null && daysLeft <= 0
+
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell className="font-medium">{r.description || "—"}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {services.find(s => s.id === r.treatment_id)?.name || "All / None"}
+                          </TableCell>
+                          <TableCell>+{r.points_earned}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {daysLeft !== null ? (
+                              <span className={daysLeft <= 1 ? "text-destructive font-medium" : ""}>
+                                {daysLeft > 0 ? `${daysLeft} days left` : "Expired"}
+                              </span>
+                            ) : "Never"}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs ${r.is_active && !isExpired ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                              {isExpired ? "Expired" : r.is_active ? "Active" : "Inactive"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="icon" variant="ghost" className="size-8">
+                                  <MoreHorizontal className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => { setEditingRule(r); setRuleModalOpen(true) }}>
+                                  <Pencil className="size-4 mr-2" />Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem variant="destructive" onClick={() => deleteRule(r.id)}>
+                                  <Trash2 className="size-4 mr-2" />Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               )}
