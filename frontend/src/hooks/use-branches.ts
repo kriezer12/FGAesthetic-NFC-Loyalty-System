@@ -15,6 +15,9 @@ interface UseBranchesReturn {
   loading: boolean
   error: string | null
   fetchAll: () => Promise<void>
+  createBranch: (branch: Omit<Branch, "id">) => Promise<{ data: any; error: any }>
+  updateBranch: (id: string, branch: Partial<Omit<Branch, "id">>) => Promise<{ data: any; error: any }>
+  deleteBranch: (id: string) => Promise<{ error: any }>
 }
 
 export function useBranches(): UseBranchesReturn {
@@ -28,7 +31,7 @@ export function useBranches(): UseBranchesReturn {
     try {
       const { data, error: queryError } = await supabase
         .from("branches")
-        .select("id,name")
+        .select("*")
         .order("name", { ascending: true })
       if (queryError) throw queryError
       setBranches(data || [])
@@ -40,9 +43,61 @@ export function useBranches(): UseBranchesReturn {
     }
   }, [])
 
+  const createBranch = async (branch: Omit<Branch, "id">) => {
+    try {
+      const { data, error: insertError } = await supabase
+        .from("branches")
+        .insert([branch])
+        .select()
+      
+      if (insertError) throw insertError
+      
+      await fetchAll()
+      return { data, error: null }
+    } catch (err) {
+      console.error("Error creating branch:", err)
+      return { data: null, error: err }
+    }
+  }
+
+  const deleteBranch = async (id: string) => {
+    try {
+      const { error: deleteError } = await supabase
+        .from("branches")
+        .delete()
+        .eq("id", id)
+
+      if (deleteError) throw deleteError
+
+      await fetchAll()
+      return { error: null }
+    } catch (err) {
+      console.error("Error deleting branch:", err)
+      return { error: err }
+    }
+  }
+
+  const updateBranch = async (id: string, branchUpdates: Partial<Omit<Branch, "id">>) => {
+    try {
+      const { data, error: updateError } = await supabase
+        .from("branches")
+        .update(branchUpdates)
+        .eq("id", id)
+        .select()
+      
+      if (updateError) throw updateError
+      
+      await fetchAll()
+      return { data, error: null }
+    } catch (err) {
+      console.error("Error updating branch:", err)
+      return { data: null, error: err }
+    }
+  }
+
   useEffect(() => {
     fetchAll()
   }, [fetchAll])
 
-  return { branches, loading, error, fetchAll }
+  return { branches, loading, error, fetchAll, createBranch, updateBranch, deleteBranch }
 }
