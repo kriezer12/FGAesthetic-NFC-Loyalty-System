@@ -3,12 +3,14 @@
 export interface ServiceCategory {
   id: string
   name: string
+  sort_order?: number | null
 }
 
 export interface Service {
   id: string
-  category_id: string
+  category_id: string | null
   name: string
+  sort_order?: number | null
   // whether the service requires specialised equipment
   uses_equipment: boolean
   // selected equipment id/name (populated once equipment catalog exists)
