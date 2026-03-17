@@ -10,11 +10,11 @@ export function CustomerAllergiesAlert({ allergies }: CustomerAllergiesAlertProp
   }
 
   return (
-    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-      <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+    <div className="flex items-start gap-2 p-3 rounded-lg border bg-destructive/10 border-destructive/30 dark:bg-destructive/20 dark:border-destructive/40">
+      <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
       <div>
-        <p className="text-sm font-medium text-red-800">Allergies</p>
-        <p className="text-sm text-red-600">{allergies}</p>
+        <p className="text-sm font-medium text-destructive">Allergies</p>
+        <p className="text-sm text-destructive/80 whitespace-pre-wrap">{allergies}</p>
       </div>
     </div>
   )

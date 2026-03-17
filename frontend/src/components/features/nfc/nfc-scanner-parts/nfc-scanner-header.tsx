@@ -2,9 +2,10 @@ import { CreditCard, Loader2 } from "lucide-react"
 
 type NFCScannerHeaderProps = {
   isLoading: boolean
+  mode?: "scan" | "register"
 }
 
-export function NFCScannerHeader({ isLoading }: NFCScannerHeaderProps) {
+export function NFCScannerHeader({ isLoading, mode = "scan" }: NFCScannerHeaderProps) {
   return (
     <div className="flex flex-col items-center gap-6 pt-2 pb-4">
       {/* Animated NFC icon with pulse rings */}
@@ -30,11 +31,17 @@ export function NFCScannerHeader({ isLoading }: NFCScannerHeaderProps) {
       {/* Status text */}
       <div className="flex flex-col items-center gap-2 text-center">
         <h2 className="text-xl font-bold tracking-tight text-foreground">
-          {isLoading ? "Reading Card..." : "Ready to Scan"}
+          {isLoading
+            ? "Reading Card..."
+            : mode === "register"
+            ? "Scan to register"
+            : "Ready to Scan"}
         </h2>
         <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
           {isLoading
             ? "Processing NFC card data"
+            : mode === "register"
+            ? "Place a new NFC card on the reader to register a new customer"
             : "Place the NFC card on the reader to identify the customer"}
         </p>
       </div>

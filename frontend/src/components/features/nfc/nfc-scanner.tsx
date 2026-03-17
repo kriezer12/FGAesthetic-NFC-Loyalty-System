@@ -14,9 +14,10 @@ import type { Customer } from "@/types/customer"
 interface NFCScannerProps {
   onCustomerFound: (customer: Customer) => void
   onNewCard: (nfcUid: string) => void
+  mode?: "scan" | "register"
 }
 
-export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
+export function NFCScanner({ onCustomerFound, onNewCard, mode = "scan" }: NFCScannerProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [lastScanned, setLastScanned] = useState<string | null>(null)
   const [isValidInput, setIsValidInput] = useState(true)
@@ -208,7 +209,7 @@ export function NFCScanner({ onCustomerFound, onNewCard }: NFCScannerProps) {
         />
 
         <div className="relative z-10 p-8 flex flex-col gap-6">
-          <NFCScannerHeader isLoading={isLoading} />
+          <NFCScannerHeader isLoading={isLoading} mode={mode} />
           <NFCScannerInput
             inputRef={inputRef}
             isValidInput={isValidInput}
