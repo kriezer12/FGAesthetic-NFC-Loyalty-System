@@ -48,7 +48,9 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
+import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
 import { LoyaltyReward } from "./loyalty-admin"
@@ -105,6 +107,104 @@ export default function CustomersPage() {
   })
   const [savingProfile, setSavingProfile] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+
+  const [assignNfcModalOpen, setAssignNfcModalOpen] = useState(false)
+  const [isAssigningNfc, setIsAssigningNfc] = useState(false)
+  const [scanMessage, setScanMessage] = useState<string | null>(null)
+  const [assignSuccessMessage, setAssignSuccessMessage] = useState<string | null>(null)
+  const [reassignPrompt, setReassignPrompt] = useState<
+    | {
+        nfcUid: string
+        ownerName: string
+        ownerId: string
+      }
+    | null
+  >(null)
+
+  const handleAssignNfcCard = async (nfcUid: string) => {
+    if (!selectedCustomer) return
+    if (reassignPrompt) return // already prompting
+
+    setIsAssigningNfc(true)
+    setAssignSuccessMessage(null)
+
+    try {
+      const selectedName =
+        selectedCustomer.name ||
+        `${selectedCustomer.first_name || ""} ${selectedCustomer.last_name || ""}`.trim() ||
+        "Customer"
+
+      const { data: existingOwner } = await supabase
+        .from("customers")
+        .select("id, name, first_name, last_name")
+        .eq("nfc_uid", nfcUid)
+        .single()
+
+      if (existingOwner && existingOwner.id !== selectedCustomer.id) {
+        const ownerName =
+          existingOwner.name ||
+          `${existingOwner.first_name || ""} ${existingOwner.last_name || ""}`.trim() ||
+          "Another customer"
+
+        setReassignPrompt({ nfcUid, ownerName, ownerId: existingOwner.id })
+        return
+      }
+
+      if (existingOwner && existingOwner.id === selectedCustomer.id) {
+        setScanMessage("This card is already assigned to the selected customer. Please scan a different card.")
+        return
+      }
+
+      const { data: updated, error } = await supabase
+        .from("customers")
+        .update({ nfc_uid: nfcUid })
+        .eq("id", selectedCustomer.id)
+        .select()
+        .single()
+
+      if (!error && updated) {
+        setSelectedCustomer(updated)
+        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+        setAssignSuccessMessage(`Assigned card ${nfcUid} to ${selectedCustomer.name || selectedName}.`)
+      }
+    } catch (err) {
+      console.error("Failed to assign NFC card:", err)
+    } finally {
+      setIsAssigningNfc(false)
+    }
+  }
+
+  const handleConfirmReassign = async () => {
+    if (!reassignPrompt || !selectedCustomer) return
+
+    setIsAssigningNfc(true)
+    try {
+      const { data: updated, error } = await supabase
+        .from("customers")
+        .update({ nfc_uid: reassignPrompt.nfcUid })
+        .eq("id", selectedCustomer.id)
+        .select()
+        .single()
+
+      if (!error && updated) {
+        setSelectedCustomer(updated)
+        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      }
+    } catch (err) {
+      console.error("Failed to reassign NFC card:", err)
+    } finally {
+      setIsAssigningNfc(false)
+      setAssignNfcModalOpen(false)
+      setReassignPrompt(null)
+
+    }
+  }
+
+  const handleCancelReassign = () => {
+    setReassignPrompt(null)
+    setIsAssigningNfc(false)
+  }
+
   const [showPointsHistory, setShowPointsHistory] = useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
 
@@ -932,8 +1032,15 @@ export default function CustomersPage() {
             </div>
           )}
 
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {paginatedCustomers.length} of {filteredCustomers.length} clients
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-muted-foreground">
+            <div>Showing {paginatedCustomers.length} of {filteredCustomers.length} clients</div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/dashboard/scan", { state: { mode: "register" } })}
+            >
+              Add New Customer
+            </Button>
           </div>
 
           <div className="rounded-lg border bg-card">
@@ -1270,9 +1377,11 @@ export default function CustomersPage() {
                   {/* Allergies */}
                   {selectedCustomer?.allergies && (
                     <div className="space-y-3">
-                      <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
-                      <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-                        <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
+                      <h4 className="text-base font-semibold text-destructive">Allergies</h4>
+                      <div className="rounded-lg border bg-destructive/10 border-destructive/30 dark:bg-destructive/20 dark:border-destructive/40 p-4">
+                        <p className="text-sm text-destructive/80 font-medium whitespace-pre-wrap">
+                          {selectedCustomer.allergies}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1629,6 +1738,13 @@ export default function CustomersPage() {
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">NFC Card</label>
+              <Input
+                value={selectedCustomer?.nfc_uid || ""}
+                readOnly
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">Allergies</label>
               <Textarea
                 rows={3}
@@ -1647,15 +1763,133 @@ export default function CustomersPage() {
           </div>
         </ScrollArea>
 
-        <div className="mt-2 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
-            Cancel
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setScanMessage(null)
+              setReassignPrompt(null)
+              setAssignNfcModalOpen(true)
+            }}
+            disabled={savingProfile}
+          >
+            Tag New Card
           </Button>
-          <Button onClick={handleSaveProfile} disabled={savingProfile}>
-            {savingProfile ? "Saving..." : "Save Changes"}
-          </Button>
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
+      </Dialog>
+
+      <Dialog open={assignNfcModalOpen} onOpenChange={setAssignNfcModalOpen}>
+        <DialogContent className="max-w-2xl h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle>Tag New NFC Card</DialogTitle>
+                <DialogDescription>
+                  Scan a new NFC card to assign it to this customer.
+                </DialogDescription>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssignNfcModalOpen(false)
+                  setReassignPrompt(null)
+                  setIsAssigningNfc(false)
+                  if (shouldReopenProfileEditor) {
+                    setProfileEditorOpen(true)
+                    setShouldReopenProfileEditor(false)
+                  }
+                }}
+                className="rounded-full p-2 text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+                aria-label="Close"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto p-6">
+            {scanMessage && (
+              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+                <p className="font-medium text-destructive">Card already assigned</p>
+                <p className="text-sm text-destructive/80 mt-2">{scanMessage}</p>
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setScanMessage(null)}
+                    disabled={isAssigningNfc}
+                  >
+                    Scan another card
+                  </Button>
+                </div>
+              </div>
+            )}
+            {assignSuccessMessage && (
+              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="font-medium text-emerald-700">Card assigned</p>
+                <p className="text-sm text-emerald-700 mt-2">{assignSuccessMessage}</p>
+              </div>
+            )}
+
+            <div className="w-full max-w-md">
+              <NFCScanner
+                onCustomerFound={(cardCustomer) => {
+                  if (!selectedCustomer) return
+                  handleAssignNfcCard(cardCustomer.nfc_uid)
+                }}
+                onNewCard={(uid) => handleAssignNfcCard(uid)}
+              />
+            </div>
+
+            {isAssigningNfc && (
+              <p className="mt-4 text-sm text-muted-foreground">Assigning card…</p>
+            )}
+            {reassignPrompt && (
+              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+                <p className="font-medium text-destructive">Card already assigned</p>
+                <p className="text-sm text-destructive/80 mt-2">
+                  This card is currently assigned to <span className="font-semibold">{reassignPrompt.ownerName}</span>.
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleCancelReassign}
+                    disabled={isAssigningNfc}
+                  >
+                    Scan another card
+                  </Button>
+                  <Button
+                    onClick={handleConfirmReassign}
+                    disabled={isAssigningNfc}
+                  >
+                    Reassign to this customer
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
       </Dialog>
 
       {/* Treatment Documentation Modal */}
