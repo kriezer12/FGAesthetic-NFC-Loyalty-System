@@ -174,16 +174,16 @@ export function CalendarSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 h-[90vh] max-h-[860px]">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0 bg-background">
           <DialogTitle>Calendar Settings</DialogTitle>
           <DialogDescription>
             Configure work hours, lunch breaks, display preferences and staff schedules.
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[60vh] -mx-6 px-6">
-          <div className="space-y-6 py-4 pr-4">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="space-y-6 px-5 py-4 pb-8">
             {/* -------- Work Hours Settings -------- */}
             <div className="space-y-3 border-b pb-6">
             <h3 className="text-sm font-semibold">Work Hours</h3>
@@ -276,7 +276,7 @@ export function CalendarSettingsDialog({
               />
             </div>
 
-            <ScrollArea className="h-[250px]">
+            <ScrollArea className="h-[250px] rounded-md border bg-muted/20 p-2">
               <div className="space-y-3 pr-4">
                 {filteredStaff.length > 0 ? (
                 filteredStaff.map((member) => (
@@ -345,7 +345,7 @@ export function CalendarSettingsDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 border-t px-5 py-3 shrink-0 bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

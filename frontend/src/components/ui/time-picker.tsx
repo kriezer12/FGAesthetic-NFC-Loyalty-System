@@ -13,9 +13,9 @@ import { Clock, Check } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
+  PopoverAnchor,
   Popover,
   PopoverContent,
-  PopoverTrigger,
 } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -129,7 +129,10 @@ export function TimePicker({
 }: TimePickerProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
+  const [contentWidth, setContentWidth] = React.useState<number | undefined>(undefined)
   const activeRef = React.useRef<HTMLButtonElement | null>(null)
+  const anchorRef = React.useRef<HTMLDivElement | null>(null)
+  const inputRef = React.useRef<HTMLInputElement | null>(null)
 
   const slots = React.useMemo(() => generateSlots(minuteStep, minTime, maxTime), [minuteStep, minTime, maxTime])
 
@@ -150,6 +153,23 @@ export function TimePicker({
       return () => clearTimeout(t)
     }
   }, [open])
+
+  React.useEffect(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+
+    const syncWidth = () => {
+      const width = anchor.offsetWidth
+      setContentWidth(width > 0 ? width : undefined)
+    }
+
+    syncWidth()
+
+    const observer = new ResizeObserver(syncWidth)
+    observer.observe(anchor)
+
+    return () => observer.disconnect()
+  }, [])
 
   const handleSelect = (slot: string) => {
     onChange?.(slot)
@@ -186,17 +206,28 @@ export function TimePicker({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+      <PopoverAnchor asChild>
         <div
+          ref={anchorRef}
           className={cn(
             "flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-transparent px-3 text-sm shadow-xs",
             "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
             disabled && "cursor-not-allowed opacity-50",
             className,
           )}
+          onMouseDown={(e) => {
+            if (disabled) return
+            // Keep focus on the input when clicking the wrapper/icon area.
+            if (e.target !== inputRef.current) {
+              e.preventDefault()
+              inputRef.current?.focus()
+            }
+            setOpen(true)
+          }}
         >
           <Clock className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
           <input
+            ref={inputRef}
             type="text"
             disabled={disabled}
             placeholder="e.g. 2:30 PM"
@@ -209,12 +240,19 @@ export function TimePicker({
             className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
           />
         </div>
-      </PopoverTrigger>
+      </PopoverAnchor>
 
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0"
+        className="min-w-[12rem] p-0"
+        style={contentWidth ? { width: `${contentWidth}px` } : undefined}
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          const target = e.target as Node | null
+          if (target && anchorRef.current?.contains(target)) {
+            e.preventDefault()
+          }
+        }}
       >
         <ScrollArea className="h-56">
           <div className="py-1">

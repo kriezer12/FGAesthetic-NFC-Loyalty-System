@@ -6,17 +6,62 @@ import { cn } from "@/lib/utils"
 function ScrollArea({
   className,
   children,
+  onWheel,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+  const rootRef = React.useRef<HTMLDivElement>(null)
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    onWheel?.(event)
+    if (event.defaultPrevented) return
+
+    const target = event.target as HTMLElement | null
+    const nearestScrollArea = target?.closest('[data-slot="scroll-area"]')
+    if (!nearestScrollArea || nearestScrollArea !== rootRef.current) {
+      return
+    }
+
+    const viewport = rootRef.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    )
+    if (!viewport) return
+
+    const canScrollY = viewport.scrollHeight > viewport.clientHeight
+    const canScrollX = viewport.scrollWidth > viewport.clientWidth
+    if (!canScrollY && !canScrollX) return
+
+    const preferVertical = Math.abs(event.deltaY) >= Math.abs(event.deltaX)
+
+    if (canScrollY && (preferVertical || !canScrollX)) {
+      const previousTop = viewport.scrollTop
+      viewport.scrollTop += event.deltaY
+      if (viewport.scrollTop !== previousTop) {
+        event.preventDefault()
+      }
+      return
+    }
+
+    if (canScrollX) {
+      const previousLeft = viewport.scrollLeft
+      const delta = event.deltaX || event.deltaY
+      viewport.scrollLeft += delta
+      if (viewport.scrollLeft !== previousLeft) {
+        event.preventDefault()
+      }
+    }
+  }
+
   return (
     <ScrollAreaPrimitive.Root
+      ref={rootRef}
       data-slot="scroll-area"
       className={cn("relative", className)}
+      onWheel={handleWheel}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        className="size-full rounded-[inherit] overscroll-contain transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
