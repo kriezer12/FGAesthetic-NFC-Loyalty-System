@@ -32,16 +32,17 @@ export function TreatmentStatusManager({
     return valid
   }, [local])
 
-  const handleRemainingChange = (id: string, value: number) => {
+  const handleRemainingChange = (id: string, value: number | "") => {
     setLocal((prev) =>
       prev.map((t) => {
         if (t.id !== id) return t
-        const remaining = Math.max(0, Math.min(value, t.total_sessions))
+        const numValue = value === "" ? 0 : value
+        const remaining = Math.max(0, Math.min(numValue, t.total_sessions))
         return {
           ...t,
-          remaining_sessions: remaining,
+          remaining_sessions: value === "" ? "" : remaining,
           used_sessions: t.total_sessions - remaining,
-        }
+        } as any
       }),
     )
   }
@@ -60,11 +61,14 @@ export function TreatmentStatusManager({
           <span className="flex-1">{t.name}</span>
           <Input
             type="number"
-            value={t.remaining_sessions}
+            value={t.remaining_sessions ?? ""}
             min={0}
             max={t.total_sessions}
             className="w-20"
-            onChange={(e) => handleRemainingChange(t.id, parseInt(e.target.value, 10) || 0)}
+            onChange={(e) => {
+              const val = e.target.value;
+              handleRemainingChange(t.id, val === "" ? "" : (parseInt(val, 10) || 0))
+            }}
             disabled={isUpdating}
           />
           <span className="text-xs text-muted-foreground">/ {t.total_sessions}</span>

@@ -511,8 +511,11 @@ export default function TreatmentsPage() {
               <Input
                 type="number"
                 min={0}
-                value={editingService?.price ?? 0}
-                onChange={(e) => setEditingService((es) => ({ ...es!, price: parseFloat(e.target.value) || 0 }))}
+                value={editingService?.price ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditingService((es) => ({ ...es!, price: val === "" ? "" : (parseFloat(val) || 0) } as any))
+                }}
                 placeholder="0.00"
               />
             </div>
@@ -539,7 +542,10 @@ export default function TreatmentsPage() {
                       type="number"
                       min={1}
                       value={editingService?.session_count ?? ""}
-                      onChange={(e) => setEditingService((es) => ({ ...es!, session_count: parseInt(e.target.value, 10) || undefined }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingService((es) => ({ ...es!, session_count: val === "" ? "" : (parseInt(val, 10) || undefined) } as any))
+                      }}
                       placeholder="e.g. 15"
                     />
                   </div>
@@ -549,7 +555,10 @@ export default function TreatmentsPage() {
                       type="number"
                       min={1}
                       value={editingService?.recurrence_days ?? ""}
-                      onChange={(e) => setEditingService((es) => ({ ...es!, recurrence_days: parseInt(e.target.value, 10) || undefined }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingService((es) => ({ ...es!, recurrence_days: val === "" ? "" : (parseInt(val, 10) || undefined) } as any))
+                      }}
                       placeholder="7 (weekly)"
                     />
                   </div>

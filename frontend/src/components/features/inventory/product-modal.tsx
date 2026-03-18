@@ -105,8 +105,11 @@ export function ProductModal({ open, onOpenChange, product, onSave }: ProductMod
               <Input
                 id="unit_price"
                 type="number"
-                value={formData.unit_price}
-                onChange={(e) => setFormData({ ...formData, unit_price: parseFloat(e.target.value) })}
+                value={formData.unit_price ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData({ ...formData, unit_price: val === "" ? "" : (parseFloat(val) || 0) } as any)
+                }}
                 required
               />
             </div>

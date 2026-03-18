@@ -313,8 +313,11 @@ export default function LoyaltyAdminPage() {
               <Input
                 type="number"
                 min={1}
-                value={editingReward?.points_required || 0}
-                onChange={(e) => setEditingReward(prev => prev ? { ...prev, points_required: parseInt(e.target.value, 10) || 0 } : null)}
+                value={editingReward?.points_required ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditingReward(prev => prev ? { ...prev, points_required: val === "" ? "" : (parseInt(val, 10) || 0) } : null)
+                }}
               />
             </div>
             <div className="grid gap-2">
@@ -383,8 +386,11 @@ export default function LoyaltyAdminPage() {
               <Input
                 type="number"
                 min={1}
-                value={editingRule?.points_earned || 0}
-                onChange={(e) => setEditingRule(prev => prev ? { ...prev, points_earned: parseInt(e.target.value, 10) || 0 } : null)}
+                value={editingRule?.points_earned ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditingRule(prev => prev ? { ...prev, points_earned: val === "" ? "" : (parseInt(val, 10) || 0) } : null)
+                }}
               />
             </div>
             <div className="grid gap-2">
@@ -392,8 +398,11 @@ export default function LoyaltyAdminPage() {
               <Input
                 type="number"
                 min={1}
-                value={editingRule?.expiration_days || ""}
-                onChange={(e) => setEditingRule(prev => prev ? { ...prev, expiration_days: parseInt(e.target.value, 10) || undefined } : null)}
+                value={editingRule?.expiration_days ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditingRule(prev => prev ? { ...prev, expiration_days: val === "" ? "" : (parseInt(val, 10) || undefined) } : null)
+                }}
                 placeholder="Leave blank for no expiration"
               />
             </div>
