@@ -31,8 +31,17 @@ export async function awardPointsForAppointment(appt: Appointment) {
       supabase.from('services').select('id, name').in('id', serviceIds)
     ])
 
-    const rules = rulesRes.data || []
+    const allRules = rulesRes.data || []
     const services = servicesRes.data || []
+
+    // Filter out expired rules
+    const rules = allRules.filter(r => {
+      if (!r.expiration_days || !r.created_at) return true
+      const createdAt = new Date(r.created_at)
+      const expiryDate = new Date(createdAt)
+      expiryDate.setDate(createdAt.getDate() + r.expiration_days)
+      return expiryDate.getTime() > Date.now()
+    })
 
     let totalPoints = 0
     const reasons: string[] = []
@@ -65,6 +74,21 @@ export async function awardPointsForAppointment(appt: Appointment) {
         .eq('id', appt.customer_id)
       
       // 4. Record the transaction
+      let maxExpirationDays = 0
+      for (const svcId of serviceIds) {
+        const rule = rules.find(r => r.treatment_id === svcId)
+        if (rule?.expiration_days && rule.expiration_days > maxExpirationDays) {
+          maxExpirationDays = rule.expiration_days
+        }
+      }
+
+      let expiresAt: string | null = null
+      if (maxExpirationDays > 0) {
+        const date = new Date()
+        date.setDate(date.getDate() + maxExpirationDays)
+        expiresAt = date.toISOString()
+      }
+
       await supabase
         .from('points_transactions')
         .insert({
@@ -72,7 +96,8 @@ export async function awardPointsForAppointment(appt: Appointment) {
           appointment_id: appt.id,
           points_change: totalPoints,
           reason: `Completed Appointment: ${reasons.join(', ')}`,
-          type: 'earn'
+          type: 'earn',
+          expires_at: expiresAt
         })
       
       console.log(`Awarded ${totalPoints} points to customer ${appt.customer_id} for appointment ${appt.id}`)
