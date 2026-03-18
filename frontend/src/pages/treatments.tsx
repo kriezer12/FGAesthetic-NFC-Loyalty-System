@@ -16,6 +16,7 @@ import type { ServiceCategory, Service } from "@/types/service"
 export default function TreatmentsPage() {
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [inventoryProducts, setInventoryProducts] = useState<{id: string, name: string, sku: string}[]>([])
 
   const [catModalOpen, setCatModalOpen] = useState(false)
   const [svcModalOpen, setSvcModalOpen] = useState(false)
@@ -31,10 +32,15 @@ export default function TreatmentsPage() {
     const { data } = await supabase.from("services").select("*")
     setServices((data || []) as Service[])
   }
+  const fetchInventoryProducts = async () => {
+    const { data } = await supabase.from("inventory_products").select("id, name, sku").order("name")
+    setInventoryProducts((data || []) as {id: string, name: string, sku: string}[])
+  }
 
   useEffect(() => {
     fetchCategories()
     fetchServices()
+    fetchInventoryProducts()
   }, [])
 
   const saveCategory = async (cat: ServiceCategory) => {
@@ -249,19 +255,31 @@ export default function TreatmentsPage() {
                   onCheckedChange={(v) => setEditingService((es) => ({
                     ...es!,
                     uses_product: !!v,
-                    ...(!v && { product: undefined }),
+                    ...(!v && { product: undefined, inventory_product_id: undefined }),
                   }))}
                 />
                 <Label htmlFor="uses-product">Uses Product</Label>
               </div>
               {editingService?.uses_product && (
-                <Combobox
-                  options={[]}
-                  value={editingService?.product || ""}
-                  onValueChange={(v) => setEditingService((es) => ({ ...es!, product: v }))}
-                  placeholder="Select product…"
-                  emptyMessage="No products available yet"
-                />
+                <div className="grid gap-2">
+                  <Combobox
+                    options={inventoryProducts.map(p => ({ label: `${p.name} (${p.sku})`, value: p.id }))}
+                    value={editingService?.inventory_product_id || ""}
+                    onValueChange={(v) => {
+                      const p = inventoryProducts.find(item => item.id === v)
+                      setEditingService((es) => ({ 
+                        ...es!, 
+                        inventory_product_id: v,
+                        product: p?.name 
+                      }))
+                    }}
+                    placeholder="Select inventory product…"
+                    emptyMessage="No products found in inventory"
+                  />
+                  <p className="text-[10px] text-muted-foreground ml-1">
+                    Linked to: {editingService?.product || "None"}
+                  </p>
+                </div>
               )}
             </div>
 

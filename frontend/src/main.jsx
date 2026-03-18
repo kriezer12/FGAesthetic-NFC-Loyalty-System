@@ -34,6 +34,7 @@ const UploadPage = lazy(() => import("./pages/upload.tsx"))
 const AccountsPage = lazy(() => import("./pages/accounts.tsx"))
 const TreatmentsPage = lazy(() => import("./pages/treatments.tsx"))
 const ReportsPage = lazy(() => import("./pages/reports.tsx"))
+const InventoryPage = lazy(() => import("./pages/inventory.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/reset-password.tsx"))
 const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
 
@@ -87,6 +88,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/upload" element={<UploadPage />} />
           <Route path="/dashboard/accounts" element={<AccountsPage />} />
           <Route path="/dashboard/reports" element={<ReportsPage />} />
+          <Route path="/dashboard/inventory" element={<InventoryPage />} />
         </Route>
       </Routes>
     </AuthProvider>

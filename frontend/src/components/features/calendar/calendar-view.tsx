@@ -29,6 +29,7 @@ import {
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
 import { awardPointsForAppointment } from "./calendar-parts/loyalty-utils"
+import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
 
 // ---- localStorage key ----
 const SETTINGS_STORAGE_KEY = "calendar-settings"
@@ -208,7 +209,10 @@ export function CalendarView() {
         // If status changed to completed, award points
         if (updates.status === "completed" && oldAppt?.status !== "completed") {
           const updatedAppt = { ...oldAppt, ...updates } as Appointment
-          await awardPointsForAppointment(updatedAppt)
+          await Promise.all([
+            awardPointsForAppointment(updatedAppt),
+            deductInventoryForAppointment(updatedAppt)
+          ])
         }
       } catch (err) {
         console.error("Failed to update appointment:", err)
@@ -260,9 +264,12 @@ export function CalendarView() {
     } else {
       await updateAppointment(appt.id, appt)
       
-      // If status changed to completed, award points
+      // If status changed to completed, award points and deduct inventory
       if (appt.status === "completed" && oldAppt?.status !== "completed") {
-        await awardPointsForAppointment(appt)
+        await Promise.all([
+          awardPointsForAppointment(appt),
+          deductInventoryForAppointment(appt)
+        ])
       }
     }
     // Dialog closes itself on success; errors propagate back to the dialog
