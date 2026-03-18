@@ -7,7 +7,8 @@
  * header, grid and dialog sub-components together.
  */
 
-import { useCallback, useState, useEffect, useMemo } from "react"
+import { useCallback, useState, useEffect, useMemo, useRef } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { supabase } from "@/lib/supabase"
 import type { Appointment, IntervalMinutes, StaffMember, ViewMode } from "@/types/appointment"
@@ -87,7 +88,7 @@ export function CalendarView() {
   const [viewMode, setViewMode]         = useState<ViewMode>("day")
   
   // Fetch appointments from Supabase
-  const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
@@ -192,6 +193,50 @@ export function CalendarView() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
   const [prefillStaffId, setPrefillStaffId]     = useState<string | undefined>()
   const [prefillStartMin, setPrefillStartMin]   = useState<number | undefined>()
+
+  const location = useLocation()
+  const navigate = useNavigate()
+  const processedAppointmentIdRef = useRef<string | null>(null)
+  const [requestedAppointmentId, setRequestedAppointmentId] = useState<string | null>(null)
+
+  const cleanupRadixOverlays = () => {
+    if (typeof document === "undefined") return
+    const selectors = [
+      "[data-radix-dialog-overlay]",
+      "[data-radix-context-menu-overlay]",
+      "[data-radix-popover-overlay]",
+      "[data-radix-dropdown-menu-overlay]",
+    ]
+    selectors.forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el) => el.remove())
+    })
+    document.body.style.pointerEvents = ""
+    document.body.style.overflow = ""
+  }
+
+  useEffect(() => {
+    const appointmentId = (location.state as any)?.appointmentId
+    if (!appointmentId) return
+
+    setRequestedAppointmentId((prev) => (prev === appointmentId ? prev : appointmentId))
+  }, [location.state])
+
+  useEffect(() => {
+    if (appointmentsLoading || !requestedAppointmentId) return
+    if (processedAppointmentIdRef.current === requestedAppointmentId) return
+
+    const match = appointments.find((a) => a.id === requestedAppointmentId)
+    if (!match) return
+
+    setSelectedDate(new Date(match.start_time))
+    setEditingAppointment(match)
+    setDialogOpen(true)
+    processedAppointmentIdRef.current = requestedAppointmentId
+    setRequestedAppointmentId(null)
+
+    // Clear navigation state so closing the dialog doesn't re-open it.
+    navigate(location.pathname, { replace: true, state: null })
+  }, [appointmentsLoading, requestedAppointmentId, appointments, navigate, location.pathname])
 
   // ---- recurrence action dialog state ----
   const [recurrenceDialogOpen, setRecurrenceDialogOpen] = useState(false)
@@ -465,7 +510,19 @@ export function CalendarView() {
 
       <AppointmentDialog
         open={dialogOpen}
-        onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingAppointment(null) }}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) {
+            setEditingAppointment(null)
+            setRequestedAppointmentId(null)
+            // Clear any navigation state that would re-open the dialog
+            navigate(location.pathname, { replace: true, state: null })
+            processedAppointmentIdRef.current = null
+
+            // Safety cleanup: remove any lingering Radix overlay elements (prevents UI freeze)
+            cleanupRadixOverlays()
+          }
+        }}
         appointment={editingAppointment}
         prefillStaffId={prefillStaffId}
         prefillStartMinutes={prefillStartMin}
