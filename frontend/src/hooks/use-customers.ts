@@ -43,12 +43,16 @@ export function useCustomers(options: UseCustomersOptions = {}): UseCustomersRet
     try {
       const { data, error: queryError } = await supabase
         .from("customers")
-        .select("*")
+        .select("*, branches(id, name)")
         .order("name", { ascending: true })
         .limit(limit)
 
       if (queryError) throw queryError
-      setCustomers(data || [])
+      const customers = (data || []).map((customer: any) => ({
+        ...customer,
+        branch_name: customer.branches?.name,
+      }))
+      setCustomers(customers)
     } catch (err) {
       console.error("Error fetching customers:", err)
       setError(err instanceof Error ? err.message : "Failed to fetch customers")
@@ -71,7 +75,7 @@ export function useCustomers(options: UseCustomersOptions = {}): UseCustomersRet
 
       const { data, error: queryError } = await supabase
         .from("customers")
-        .select("*")
+        .select("*, branches(id, name)")
         .or(
           `name.ilike.${searchTerm},first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},email.ilike.${searchTerm},phone.ilike.${searchTerm}`
         )
@@ -79,7 +83,11 @@ export function useCustomers(options: UseCustomersOptions = {}): UseCustomersRet
         .limit(limit)
 
       if (queryError) throw queryError
-      setCustomers(data || [])
+      const customers = (data || []).map((customer: any) => ({
+        ...customer,
+        branch_name: customer.branches?.name,
+      }))
+      setCustomers(customers)
     } catch (err) {
       console.error("Error searching customers:", err)
       setError(err instanceof Error ? err.message : "Failed to search customers")
@@ -92,12 +100,16 @@ export function useCustomers(options: UseCustomersOptions = {}): UseCustomersRet
     try {
       const { data, error: queryError } = await supabase
         .from("customers")
-        .select("*")
+        .select("*, branches(id, name)")
         .eq("id", id)
         .single()
 
       if (queryError) throw queryError
-      return data
+      if (!data) return null
+      return {
+        ...data,
+        branch_name: (data as any).branches?.name,
+      }
     } catch (err) {
       console.error("Error fetching customer by ID:", err)
       return null

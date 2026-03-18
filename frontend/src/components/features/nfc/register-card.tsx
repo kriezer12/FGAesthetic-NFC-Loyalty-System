@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
 import { applyAutomatedPoints } from "@/lib/loyalty-utils"
 import { validatePhilippinePhone } from "./register-card-parts/phone-utils"
 import { RegisterCardContactSection } from "./register-card-parts/register-card-contact-section"
@@ -20,6 +21,7 @@ interface RegisterCardProps {
 }
 
 export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps) {
+  const { userProfile } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState(initialRegisterCardFormData)
@@ -98,6 +100,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           last_visit: new Date().toISOString(),
           archived_at: null, // default active
           last_inactive: null,
+          branch_id: userProfile?.branch_id || null, // Add branch from logged-in user
         })
         .select()
         .single()
