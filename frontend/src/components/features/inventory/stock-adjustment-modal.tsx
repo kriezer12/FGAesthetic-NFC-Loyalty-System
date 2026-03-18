@@ -29,12 +29,13 @@ interface StockAdjustmentModalProps {
 export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: StockAdjustmentModalProps) {
   const [loading, setLoading] = useState(false)
   const [adjustmentType, setAdjustmentType] = useState<'in' | 'out' | 'adjustment'>('adjustment')
-  const [quantity, setQuantity] = useState(0)
+  const [quantity, setQuantity] = useState<number | "">(0)
   const [reason, setReason] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!stock) return
+    const numQuantity = Number(quantity) || 0
     setLoading(true)
     try {
       let actualQuantity = 0
@@ -42,10 +43,10 @@ export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: St
       if (adjustmentType === 'adjustment') {
         // Manual Adjustment: quantity is the target final value
         // We calculate the delta to store in the transaction
-        actualQuantity = quantity - stock.quantity
+        actualQuantity = numQuantity - stock.quantity
       } else {
         // Restock/Usage: quantity is the delta
-        actualQuantity = adjustmentType === 'out' ? -Math.abs(quantity) : Math.abs(quantity)
+        actualQuantity = adjustmentType === 'out' ? -Math.abs(numQuantity) : Math.abs(numQuantity)
       }
       
       await onAdjust({
@@ -102,7 +103,10 @@ export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: St
                 type="number"
                 min={adjustmentType === 'adjustment' ? "0" : "1"}
                 value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setQuantity(val === "" ? "" : parseInt(val) || 0);
+                }}
                 required
               />
               <p className="text-[10px] text-muted-foreground">

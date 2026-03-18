@@ -608,7 +608,10 @@ export function AppointmentDialog({
                       type="number"
                       min={1}
                       value={recurrenceInterval ?? ""}
-                      onChange={(e) => setRecurrenceInterval(parseInt(e.target.value, 10) || undefined)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRecurrenceInterval(val === "" ? "" : (parseInt(val, 10) || undefined) as any)
+                      }}
                       placeholder="7 (weekly)"
                     />
                   </div>
@@ -617,8 +620,11 @@ export function AppointmentDialog({
                     <Input
                       type="number"
                       min={1}
-                      value={recurrenceCount}
-                      onChange={(e) => setRecurrenceCount(parseInt(e.target.value, 10) || 1)}
+                      value={recurrenceCount ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRecurrenceCount(val === "" ? "" : (parseInt(val, 10) || 1) as any)
+                      }}
                     />
                   </div>
                 </div>
