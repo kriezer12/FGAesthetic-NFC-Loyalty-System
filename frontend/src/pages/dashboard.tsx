@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check } from "lucide-react"
+import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check, Calendar, Package, ClipboardList, UserPlus } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -404,30 +404,41 @@ export default function Dashboard() {
           <p className="text-xs text-muted-foreground">Jump to common tasks</p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 pb-4 px-5">
-          {[
-            { href: "/dashboard/scan", icon: CreditCard, label: "Scan NFC Card", desc: "Register or look up a customer" },
-            { href: "/dashboard/customers", icon: Users, label: "Customer Directory", desc: "Browse and manage profiles" },
-            { href: "/dashboard/checkin-logs", icon: Activity, label: "Check-in Logs", desc: "View full visit history" },
-            { href: "/dashboard/scan", icon: TrendingUp, label: "Register New Card", desc: "Link a card to a customer" },
-          ].map(({ href, icon: Icon, label, desc }) => (
-            <Link
-              key={label}
-              to={href}
-              className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
-            >
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium leading-tight">{label}</p>
-                <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
-              </div>
-            </Link>
-          ))}
+          {(() => {
+            const isPrivileged = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+            const actions = [
+              { href: "/dashboard/scan", icon: CreditCard, label: "Check-in Member", desc: "Lookup and auto-apply points" },
+              { href: "/dashboard/scan", icon: UserPlus, label: "New Registration", desc: "Link a new card to a member", state: { mode: "register" } },
+              { href: "/dashboard/customers", icon: Users, label: "Member Directory", desc: "Manage clinic profiles" },
+              { href: "/dashboard/appointments", icon: Calendar, label: "Appointments", desc: "View and book sessions" },
+            ]
+            
+            if (isPrivileged) {
+              actions.push({ href: "/dashboard/inventory", icon: Package, label: "Inventory", desc: "Manage stock and items" })
+              actions.push({ href: "/dashboard/reports", icon: ClipboardList, label: "Reports", desc: "View clinic analytics" })
+            }
+            
+            return actions.map(({ href, icon: Icon, label, desc, state }) => (
+              <Link
+                key={label}
+                to={href}
+                state={state}
+                className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
+              >
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">{label}</p>
+                  <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
+                </div>
+              </Link>
+            ))
+          })()}
         </CardContent>
       </Card>
     ),
-  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth])
+  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth, userProfile])
 
   return (
     <div className="space-y-6 pb-6">
