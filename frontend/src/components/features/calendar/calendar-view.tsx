@@ -9,7 +9,9 @@
 
 import { useCallback, useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
+import { supabase } from "@/lib/supabase"
 import type { Appointment, IntervalMinutes, StaffMember, ViewMode } from "@/types/appointment"
+import type { Service } from "@/types/service"
 import {
   DEFAULT_INTERVAL,
 } from "./calendar-parts/calendar-config"
@@ -85,6 +87,20 @@ export function CalendarView() {
   
   // Fetch appointments from Supabase
   const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+
+  // Load services so we can derive titles for follow-up appointments
+  const [services, setServices] = useState<Service[]>([])
+  const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
+
+  const loadServices = useCallback(async () => {
+    const { data } = await supabase.from("services").select("*")
+    setServices((data || []) as Service[])
+    return (data || []) as Service[]
+  }, [])
+
+  useEffect(() => {
+    loadServices()
+  }, [loadServices])
   
   // Load settings from localStorage (or defaults)
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(() => loadSettings())
@@ -232,6 +248,22 @@ export function CalendarView() {
       // if recurrence requested, add sequence
       if (appt.recurrence_days && appt.recurrence_count && appt.recurrence_count > 1) {
         const groupId = appt.recurrence_group_id || generateId()
+
+        // Ensure we have service metadata to generate follow-up titles, otherwise fall back safely
+        let localServiceMap = serviceMap
+        if (localServiceMap.size === 0) {
+          const loaded = await loadServices()
+          localServiceMap = new Map((loaded || []).map((s) => [s.id, s]))
+        }
+
+        const packageServiceIds = (appt.service_ids || []).filter((id) =>
+          localServiceMap.get(id)?.is_package,
+        )
+        const packageTitle = packageServiceIds
+          .map((id) => localServiceMap.get(id)?.name)
+          .filter(Boolean)
+          .join(", ")
+
         let current: Appointment = { ...appt, recurrence_group_id: groupId }
         // first appointment uses whatever type user chose
         await addAppointment(current)
@@ -243,6 +275,8 @@ export function CalendarView() {
             start_time: addDaysToIso(current.start_time, appt.recurrence_days),
             end_time: addDaysToIso(current.end_time, appt.recurrence_days),
             appointment_type: "followup", // force followups after the first session
+            title: packageTitle || current.title,
+            service_ids: packageServiceIds.length > 0 ? packageServiceIds : undefined,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }
