@@ -29,6 +29,7 @@ import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useBranches } from "@/hooks/use-branches"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -75,6 +76,7 @@ export default function CustomersPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { userProfile } = useAuth()
+  const { branches } = useBranches()
 
   const [cameFromNfc, setCameFromNfc] = useState(false)
 
@@ -215,6 +217,7 @@ export default function CustomersPage() {
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "archived">("")
   const [sortMetric, setSortMetric] = useState<"" | "points" | "visits">("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [branchFilter, setBranchFilter] = useState("")
   const [showFilters, setShowFilters] = useState(false)
 
   // number of days without a visit before a client is considered inactive
@@ -353,11 +356,15 @@ export default function CustomersPage() {
     try {
       const { data, error } = await supabase
         .from("customers")
-        .select("*")
+        .select("*, branches(id, name)")
         .order("created_at", { ascending: false })
 
       if (error) throw error
-      const list: Customer[] = data || []
+      const list: Customer[] = (data || []).map((customer: any) => ({
+        ...customer,
+        branch_name: customer.branches?.name,
+        // Keep branch_id that's already in the customer record
+      }))
       setCustomers(list)
 
       // persist inactive timestamp for newly-inactive clients
@@ -807,6 +814,9 @@ export default function CustomersPage() {
     if (genderFilter) {
       filtered = filtered.filter((c) => c.gender === genderFilter)
     }
+    if (branchFilter) {
+      filtered = filtered.filter((c) => c.branch_id === branchFilter)
+    }
 
     // status filter (active / inactive / archived)
     if (statusFilter) {
@@ -843,9 +853,9 @@ export default function CustomersPage() {
     }
 
     setFilteredCustomers(filtered)
-  }, [searchQuery, skinTypeFilter, genderFilter, statusFilter, sortMetric, sortOrder, customers])
+  }, [searchQuery, skinTypeFilter, genderFilter, statusFilter, sortMetric, sortOrder, branchFilter, customers])
 
-  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric)
+  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric || branchFilter)
 
   const clearFilters = () => {
     setSearchQuery("")
@@ -854,6 +864,7 @@ export default function CustomersPage() {
     setStatusFilter("")
     setSortMetric("")
     setSortOrder("desc")
+    setBranchFilter("")
   }
 
   // Filter customers whenever state changes
@@ -1005,6 +1016,20 @@ export default function CustomersPage() {
               </div>
               <div>
                 {renderFilter(
+                  "Branch",
+                  branchFilter,
+                  setBranchFilter,
+                  [
+                    { label: "All Branches", value: "" },
+                    ...branches.map((branch) => ({
+                      label: branch.name,
+                      value: branch.id,
+                    })),
+                  ],
+                )}
+              </div>
+              <div>
+                {renderFilter(
                   "Sort Metric",
                   sortMetric,
                   setSortMetric as any,
@@ -1057,6 +1082,7 @@ export default function CustomersPage() {
                     <th className="p-4 text-left font-medium">Client</th>
                     <th className="p-4 text-left font-medium">Contact</th>
                     <th className="p-4 text-left font-medium">NFC Card</th>
+                    <th className="p-4 text-left font-medium">Branch</th>
                     <th className="p-4 text-left font-medium">Points</th>
                     <th className="p-4 text-left font-medium">Visits</th>
                     <th className="p-4 text-left font-medium">Last Visit</th>
@@ -1065,13 +1091,13 @@ export default function CustomersPage() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
                         Loading clients...
                       </td>
                     </tr>
                   ) : paginatedCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
                         No clients found
                       </td>
                     </tr>
@@ -1138,6 +1164,16 @@ export default function CustomersPage() {
                             </td>
                             <td className="p-4">
                               <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                            </td>
+                            <td className="p-4">
+                              {customer.branch_name ? (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-sm">{customer.branch_name}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              )}
                             </td>
                             <td className="p-4">
                               <span className="font-semibold text-primary">{customer.points || 0}</span>
