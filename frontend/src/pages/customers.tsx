@@ -23,6 +23,7 @@ import {
   FileText,
   Trash2,
   Download,
+  Plus,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -48,7 +49,6 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
 import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
@@ -110,6 +110,7 @@ export default function CustomersPage() {
 
   const [assignNfcModalOpen, setAssignNfcModalOpen] = useState(false)
   const [isAssigningNfc, setIsAssigningNfc] = useState(false)
+  const [shouldReopenProfileEditor, setShouldReopenProfileEditor] = useState(false)
   const [scanMessage, setScanMessage] = useState<string | null>(null)
   const [assignSuccessMessage, setAssignSuccessMessage] = useState<string | null>(null)
   const [reassignPrompt, setReassignPrompt] = useState<
@@ -294,7 +295,7 @@ export default function CustomersPage() {
   // Treatment documentation state
   const [treatmentDocModalOpen, setTreatmentDocModalOpen] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null)
-  const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' }>>([])
+  const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' | 'other' }>>([])
   const [treatmentConsentPath, setTreatmentConsentPath] = useState<string>("")
   const [treatmentConsentUrl, setTreatmentConsentUrl] = useState<string>("")
   const [treatmentConsentUploaded, setTreatmentConsentUploaded] = useState(false)
@@ -635,11 +636,16 @@ export default function CustomersPage() {
         const { data: urlData } = supabase.storage
           .from("customer-picture")
           .getPublicUrl(path)
+        
+        let type: 'before' | 'after' | 'other' = 'other'
+        if (f.name.includes('_before_')) type = 'before'
+        else if (f.name.includes('_after_')) type = 'after'
+
         return {
           id: f.name,
           path,
           url: signedMap.get(path) ?? urlData.publicUrl,
-          type: f.name.includes('_before_') ? 'before' as const : 'after' as const
+          type
         }
       })
 
@@ -688,7 +694,7 @@ export default function CustomersPage() {
     }
   }
 
-  const handleTreatmentPhotoUpload = async (file: File, photoType: 'before' | 'after') => {
+  const handleTreatmentPhotoUpload = async (file: File, photoType: 'before' | 'after' | 'other') => {
     if (!selectedAppointment) return
     
     setTreatmentGalleryError("")
@@ -741,7 +747,7 @@ export default function CustomersPage() {
     }
   }
 
-  const handleDeleteTreatmentPhoto = async (photo: { id: string; path: string; url: string; type: 'before' | 'after' }) => {
+  const handleDeleteTreatmentPhoto = async (photo: { id: string; path: string; url: string; type: 'before' | 'after' | 'other' }) => {
     try {
       const { error } = await supabase.storage
         .from("customer-picture")
@@ -1770,6 +1776,8 @@ export default function CustomersPage() {
               setScanMessage(null)
               setReassignPrompt(null)
               setAssignNfcModalOpen(true)
+              setProfileEditorOpen(false)
+              setShouldReopenProfileEditor(true)
             }}
             disabled={savingProfile}
           >
@@ -1945,6 +1953,22 @@ export default function CustomersPage() {
                 }}
               />
               <input
+                id="treatment-other-input"
+                type="file"
+                accept="image/*"
+                title="Upload other photo"
+                aria-label="Upload other photo"
+                className="hidden"
+                disabled={treatmentGalleryUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleTreatmentPhotoUpload(file, 'other')
+                  }
+                  e.currentTarget.value = ''
+                }}
+              />
+              <input
                 id="treatment-consent-form-input"
                 type="file"
                 accept="image/*"
@@ -2078,6 +2102,57 @@ export default function CustomersPage() {
                       <p className="text-xs font-semibold">Upload After</p>
                     </button>
                   )}
+                </div>
+              </div>
+
+              {/* Other Photos Section */}
+              <div className="space-y-3">
+                <h6 className="text-sm font-semibold text-muted-foreground">Other Photos</h6>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {treatmentPhotos.filter(p => p.type === 'other').map((photo) => (
+                    <div key={photo.id} className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
+                      <div className="bg-muted aspect-square flex items-center justify-center relative cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(photo.url)}>
+                        <img 
+                          src={photo.url} 
+                          alt={photo.type}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
+                      </div>
+                      <div className="p-2 bg-background flex items-center justify-between border-t">
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
+                            onClick={() => downloadImageAsJpeg(photo.url, `other-photo-${photo.id}`)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
+                            onClick={() => handleDeleteTreatmentPhoto(photo)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    className="aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={treatmentGalleryUploading}
+                    onClick={() => document.getElementById('treatment-other-input')?.click()}
+                  >
+                    <div className="bg-primary/10 p-2 rounded-lg">
+                      <Plus className="h-5 w-5 text-primary" />
+                    </div>
+                    <p className="text-xs font-semibold">Add Photo</p>
+                  </button>
                 </div>
               </div>
             </div>
