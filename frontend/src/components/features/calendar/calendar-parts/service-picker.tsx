@@ -28,13 +28,23 @@ interface ServicePickerProps {
   /** Called when user confirms selection */
   onChange: (serviceIds: string[]) => void
   disabled?: boolean
+  /** Show selected badges under the input (default: true) */
+  showSelectedBadges?: boolean
+  /** Use a compact single-row preview that doesn't expand form height (default: false) */
+  compactSelectedPreview?: boolean
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function ServicePicker({ value, onChange, disabled }: ServicePickerProps) {
+export function ServicePicker({
+  value,
+  onChange,
+  disabled,
+  showSelectedBadges = true,
+  compactSelectedPreview = false,
+}: ServicePickerProps) {
   const [open, setOpen] = useState(false)
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [services, setServices] = useState<Service[]>([])
@@ -115,14 +125,17 @@ export function ServicePicker({ value, onChange, disabled }: ServicePickerProps)
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent className="w-[320px] p-0" align="start">
+        <PopoverContent
+          className="w-[360px] max-w-[calc(100vw-2rem)] p-0 overflow-hidden"
+          align="start"
+        >
           {/* ------- category list (step 1) ------- */}
           {activeCategoryId === null ? (
-            <div>
+            <div className="flex flex-col">
               <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
                 Select a category
               </div>
-              <ScrollArea className="max-h-60">
+              <ScrollArea className="h-72">
                 {categories.length === 0 ? (
                   <p className="px-3 py-4 text-sm text-muted-foreground text-center">
                     No categories available.
@@ -160,7 +173,7 @@ export function ServicePicker({ value, onChange, disabled }: ServicePickerProps)
               </ScrollArea>
 
               {/* Confirm bar */}
-              <div className="border-t px-3 py-2 flex items-center justify-between">
+              <div className="border-t px-3 py-2 flex items-center justify-between shrink-0 bg-popover">
                 <span className="text-xs text-muted-foreground">
                   {pending.length} selected
                 </span>
@@ -171,7 +184,7 @@ export function ServicePicker({ value, onChange, disabled }: ServicePickerProps)
             </div>
           ) : (
             /* ------- services in category (step 2) ------- */
-            <div>
+            <div className="flex flex-col">
               <button
                 type="button"
                 onClick={() => setActiveCategoryId(null)}
@@ -181,7 +194,7 @@ export function ServicePicker({ value, onChange, disabled }: ServicePickerProps)
                 {categories.find((c) => c.id === activeCategoryId)?.name ?? "Back"}
               </button>
 
-              <ScrollArea className="max-h-60">
+              <ScrollArea className="h-72">
                 {categoryServices.length === 0 ? (
                   <p className="px-3 py-4 text-sm text-muted-foreground text-center">
                     No services in this category.
@@ -229,7 +242,7 @@ export function ServicePicker({ value, onChange, disabled }: ServicePickerProps)
               </ScrollArea>
 
               {/* Confirm bar */}
-              <div className="border-t px-3 py-2 flex items-center justify-between">
+              <div className="border-t px-3 py-2 flex items-center justify-between shrink-0 bg-popover">
                 <span className="text-xs text-muted-foreground">
                   {pending.length} selected
                 </span>
@@ -243,26 +256,54 @@ export function ServicePicker({ value, onChange, disabled }: ServicePickerProps)
       </Popover>
 
       {/* Selected service badges */}
-      {selectedLabels.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {value.map((id) => {
-            const svc = serviceMap.get(id)
-            if (!svc) return null
-            return (
-              <Badge key={id} variant="secondary" className="gap-1 pr-1">
-                {svc.name}
-                <button
-                  type="button"
-                  onClick={() => removeService(id)}
-                  className="ml-0.5 rounded-full hover:bg-foreground/10 p-0.5"
-                  title={`Remove ${svc.name}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            )
-          })}
-        </div>
+      {showSelectedBadges && selectedLabels.length > 0 && (
+        compactSelectedPreview ? (
+          <div className="rounded-md border bg-muted/20 px-2 py-1.5">
+            <ScrollArea className="h-20 w-full">
+              <div className="flex flex-wrap gap-1.5 pr-2">
+                {value.map((id) => {
+                  const svc = serviceMap.get(id)
+                  if (!svc) return null
+                  return (
+                    <Badge key={id} variant="secondary" className="max-w-[240px] gap-1 pr-1">
+                      <span className="truncate" title={svc.name}>{svc.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeService(id)}
+                        className="ml-0.5 rounded-full hover:bg-foreground/10 p-0.5"
+                        title={`Remove ${svc.name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+          </div>
+        ) : (
+          <ScrollArea className="h-24 rounded-md border bg-muted/20 px-2 py-2">
+            <div className="flex flex-wrap gap-1.5">
+              {value.map((id) => {
+                const svc = serviceMap.get(id)
+                if (!svc) return null
+                return (
+                  <Badge key={id} variant="secondary" className="max-w-full gap-1 pr-1">
+                    <span className="truncate" title={svc.name}>{svc.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeService(id)}
+                      className="ml-0.5 rounded-full hover:bg-foreground/10 p-0.5"
+                      title={`Remove ${svc.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )
+              })}
+            </div>
+          </ScrollArea>
+        )
       )}
     </div>
   )
