@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import type {
   Appointment,
   BlockedTime,
@@ -103,6 +104,7 @@ export function CalendarGrid({
   onEditAppointment,
   onDeleteAppointment,
 }: CalendarGridProps) {
+  const navigate = useNavigate()
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragInfo | null>(null)
   const lastPreviewRef = useRef<DragPreview | null>(null)
@@ -594,6 +596,18 @@ export function CalendarGrid({
                     onEdit={() => onEditAppointment(appt)}
                     onDelete={() => onDeleteAppointment(appt.id)}
                     onStatusChange={(status) => onAppointmentUpdate(appt.id, { status })}
+                    onGoToProfile={() => {
+                      if (!appt.customer_id) return
+                      navigate("/dashboard/customers", {
+                        state: {
+                          customer: {
+                            id: appt.customer_id,
+                            name: appt.customer_name,
+                          },
+                          fromAppointment: true,
+                        },
+                      })
+                    }}
                   />
                 )
               })}

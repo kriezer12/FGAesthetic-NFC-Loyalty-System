@@ -32,7 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useState } from "react"
-import { Pencil, Trash2, Repeat, TriangleAlert, Home } from "lucide-react"
+import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -62,6 +62,8 @@ interface AppointmentCardProps {
   onDelete: () => void
   /** Callback for changing status via context menu */
   onStatusChange?: (status: AppointmentStatus) => void
+  /** Navigate to customer profile */
+  onGoToProfile?: () => void
 }
 
 export function AppointmentCard({
@@ -75,6 +77,7 @@ export function AppointmentCard({
   onEdit,
   onDelete,
   onStatusChange,
+  onGoToProfile,
 }: AppointmentCardProps) {
   const startLabel = formatTime(minutesSinceMidnight(appointment.start_time))
   const endLabel   = formatTime(minutesSinceMidnight(appointment.end_time))
@@ -82,9 +85,51 @@ export function AppointmentCard({
   const renderHeight = Math.max(height - 2, 22)
 
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false)
+  const [cancelAlertOpen, setCancelAlertOpen] = useState(false)
 
   return (
     <>
+      <AlertDialog open={cancelAlertOpen} onOpenChange={setCancelAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-4 w-4 text-destructive" />
+              Cancel this appointment?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">
+                {appointment.title}
+                {appointment.customer_name ? ` — ${appointment.customer_name}` : ""}
+              </span>
+              <br />
+              Cancelling will remove this appointment. You can also reschedule it instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            Once cancelled, this appointment cannot be recovered.
+          </div>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <button
+              onClick={() => {
+                setCancelAlertOpen(false)
+                onEdit()
+              }}
+              className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Repeat className="h-3.5 w-3.5" />
+              Reschedule instead
+            </button>
+            <AlertDialogCancel>Keep appointment</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => onStatusChange?.("cancelled")}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, cancel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={deleteAlertOpen} onOpenChange={setDeleteAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -192,14 +237,33 @@ export function AppointmentCard({
               Status
             </ContextMenuSubTrigger>
             <ContextMenuSubContent className="w-40">
-              <ContextMenuItem onClick={() => onStatusChange!("confirmed")}>Confirmed</ContextMenuItem>
-              <ContextMenuItem onClick={() => onStatusChange!("in-progress")}>In Progress</ContextMenuItem>
-              <ContextMenuItem onClick={() => onStatusChange!("completed")}>Completed</ContextMenuItem>
-              <ContextMenuItem onClick={() => onStatusChange!("cancelled")} className="text-destructive">
+              <ContextMenuItem onClick={() => onStatusChange!("confirmed")}> 
+                <CheckCircle className="h-4 w-4" />
+                Confirmed
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onStatusChange!("in-progress")}> 
+                <Play className="h-4 w-4" />
+                In Progress
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onStatusChange!("completed")}> 
+                <Check className="h-4 w-4" />
+                Completed
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => setCancelAlertOpen(true)}
+                className="text-destructive"
+              >
+                <X className="h-4 w-4" />
                 Cancelled
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
+        )}
+        {onGoToProfile && (
+          <ContextMenuItem onClick={onGoToProfile} className="gap-2">
+            <Home className="h-4 w-4" />
+            Go to profile
+          </ContextMenuItem>
         )}
         <ContextMenuItem onClick={onEdit} className="gap-2">
           <Pencil className="h-4 w-4" />
