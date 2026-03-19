@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import { Clock, Plus } from "lucide-react"
+import { Clock, Plus, ShoppingCart } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { AddAccountModal } from "@/components/features/accounts"
 import { NavbarLogo } from "./navbar/navbar-logo"
@@ -122,6 +122,14 @@ export function AppNavbar() {
               </div>
             )}
             <NavbarNotificationBell />
+            <button
+              onClick={() => navigate("/dashboard/checkout")}
+              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+              title="Checkout"
+              aria-label="Go to checkout"
+            >
+              <ShoppingCart className="h-5 w-5" />
+            </button>
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary">
               <Clock className="h-3.5 w-3.5 shrink-0" />
               <div className="flex flex-col leading-none">
