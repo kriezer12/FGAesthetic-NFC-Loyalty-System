@@ -58,14 +58,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .select("id, role, email, full_name, branch_id, avatar_url, branches(name)")
         .eq("id", userId)
         .single()
-
-      console.log("raw profile data response:", data, "error", error)
       if (error) {
         console.error("Error fetching user profile:", error)
         console.log("Attempted to fetch with userId:", userId)
         setUserProfile(null)
       } else {
-        console.log("User profile fetched:", data)
         // if branch relation included, normalize to branch_name field
         if (data && (data as any).branches) {
           const rel = (data as any).branches

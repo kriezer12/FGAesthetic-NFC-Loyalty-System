@@ -20,6 +20,7 @@ import {
   subMonths,
   format,
 } from "date-fns"
+import { useAuth } from "@/contexts/auth-context"
 
 interface CalendarHeaderProps {
   selectedDate: Date
@@ -49,6 +50,8 @@ export function CalendarHeader({
   onNewAppointment,
   onOpenSettings,
 }: CalendarHeaderProps) {
+  const { userProfile } = useAuth()
+  
   const prev = () => {
     if (viewMode === "day") {
       onDateChange(addDays(selectedDate, -1))
@@ -139,15 +142,17 @@ export function CalendarHeader({
         )}
 
         {/* settings button */}
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={onOpenSettings}
-          title="Calendar settings"
-          aria-label="Open calendar settings"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
+        {userProfile?.role !== "staff" && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={onOpenSettings}
+            title="Calendar settings"
+            aria-label="Open calendar settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        )}
 
         <Button size="sm" onClick={onNewAppointment}>
           <CalendarPlus className="mr-1.5 h-4 w-4" />
