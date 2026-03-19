@@ -11,6 +11,7 @@ const adminLinks: { title: string; url: string }[] = [
   { title: "User Logs", url: "/dashboard/user-logs" },
   { title: "Treatments", url: "/dashboard/treatments" },
   { title: "Loyalty Admin", url: "/dashboard/loyalty" },
+  { title: "Equipment", url: "/dashboard/equipment" },
   { title: "Inventory", url: "/dashboard/inventory" },
   { title: "Reports", url: "/dashboard/reports" },
 ]
