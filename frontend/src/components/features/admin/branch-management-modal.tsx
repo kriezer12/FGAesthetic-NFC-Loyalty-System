@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { useBranches, type Branch } from "@/hooks/use-branches"
-import { Building2, Plus, ArrowLeft, Loader2, Mail, Phone, MapPin, Trash2, Pencil } from "lucide-react"
+import { Building2, Plus, ArrowLeft, Loader2, Mail, Phone, MapPin, Trash2, Pencil, RotateCcw, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import { formatPhilippinePhone, formatPhoneLiveInput, validatePhilippinePhone, isAllowedPhoneKey } from "@/components/features/nfc/register-card-parts/phone-utils"
 interface BranchManagementModalProps {
   open: boolean
@@ -19,7 +21,17 @@ interface BranchManagementModalProps {
 }
 
 export function BranchManagementModal({ open, onOpenChange }: BranchManagementModalProps) {
-  const { branches, loading, createBranch, deleteBranch, updateBranch } = useBranches()
+  const { 
+    branches, 
+    deletedBranches, 
+    loading, 
+    createBranch, 
+    deleteBranch, 
+    updateBranch, 
+    restoreBranch,
+    permanentlyDeleteBranch 
+  } = useBranches()
+  const [showDeleted, setShowDeleted] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null)
@@ -109,10 +121,17 @@ export function BranchManagementModal({ open, onOpenChange }: BranchManagementMo
   }
 
   const handleDelete = async () => {
-    if (!branchToDelete || deleteConfirmText !== branchToDelete.name) return
+    if (!branchToDelete || (deleteConfirmText !== branchToDelete.name && !branchToDelete.deleted_at)) return
 
     setIsDeleting(true)
-    const { error } = await deleteBranch(branchToDelete.id)
+    let error;
+    if (branchToDelete.deleted_at) {
+      const { error: permError } = await permanentlyDeleteBranch(branchToDelete.id)
+      error = permError
+    } else {
+      const { error: softError } = await deleteBranch(branchToDelete.id)
+      error = softError
+    }
     setIsDeleting(false)
 
     if (!error) {
@@ -122,6 +141,22 @@ export function BranchManagementModal({ open, onOpenChange }: BranchManagementMo
       console.error("Failed to delete branch:", error)
       alert("Failed to delete branch. Please try again.")
     }
+  }
+
+  const handleRestore = async (id: string) => {
+    const { error } = await restoreBranch(id)
+    if (error) {
+      console.error("Failed to restore branch:", error)
+      alert("Failed to restore branch. Please try again.")
+    }
+  }
+
+  const getDaysRemaining = (deletedAt: string) => {
+    const deletedDate = new Date(deletedAt)
+    const now = new Date()
+    const diffTime = now.getTime() - deletedDate.getTime()
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    return Math.max(0, 7 - diffDays)
   }
 
   return (
@@ -165,19 +200,23 @@ export function BranchManagementModal({ open, onOpenChange }: BranchManagementMo
               <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
                 <Trash2 className="h-6 w-6 text-destructive" />
               </div>
-              <h3 className="text-lg font-bold">Delete Branch</h3>
+              <h3 className="text-lg font-bold">{branchToDelete.deleted_at ? "Permanently Delete" : "Delete Branch"}</h3>
               <p className="text-sm text-muted-foreground max-w-[300px] mx-auto">
-                Are you sure you want to delete <strong className="text-foreground">{branchToDelete.name}</strong>? 
-                This action cannot be undone. Please type the branch name below to confirm.
+                {branchToDelete.deleted_at 
+                  ? <>This will <strong>permanently</strong> delete <strong className="text-foreground">{branchToDelete.name}</strong>. This action is irreversible.</>
+                  : <>Are you sure you want to delete <strong className="text-foreground">{branchToDelete.name}</strong>? It will be moved to the trash and can be restored within 7 days.</>
+                }
               </p>
-              <div className="max-w-[280px] mx-auto mt-4">
-                <Input 
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder={branchToDelete.name}
-                  className="text-center"
-                />
-              </div>
+              {!branchToDelete.deleted_at && (
+                <div className="max-w-[280px] mx-auto mt-4">
+                  <Input 
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder={branchToDelete.name}
+                    className="text-center"
+                  />
+                </div>
+              )}
               <div className="flex justify-center gap-3 mt-6">
                 <Button 
                   variant="outline" 
@@ -188,16 +227,16 @@ export function BranchManagementModal({ open, onOpenChange }: BranchManagementMo
                 </Button>
                 <Button 
                   variant="destructive" 
-                  disabled={deleteConfirmText !== branchToDelete.name || isDeleting} 
+                  disabled={(!branchToDelete.deleted_at && deleteConfirmText !== branchToDelete.name) || isDeleting} 
                   onClick={handleDelete}
                   className="min-w-[120px]"
                 >
                   {isDeleting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Deleting...
+                      {branchToDelete.deleted_at ? "Deleting..." : "Moving to Trash..."}
                     </>
-                  ) : "Confirm Delete"}
+                  ) : branchToDelete.deleted_at ? "Permanently Delete" : "Move to Trash"}
                 </Button>
               </div>
             </div>
@@ -355,6 +394,71 @@ export function BranchManagementModal({ open, onOpenChange }: BranchManagementMo
                         </div>
                       </div>
                     ))}
+
+                    {deletedBranches.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-dashed">
+                        <button 
+                          onClick={() => setShowDeleted(!showDeleted)}
+                          className="flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors mb-3"
+                        >
+                          {showDeleted ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          Recently Deleted Branches ({deletedBranches.length})
+                        </button>
+                        
+                        {showDeleted && (
+                          <div className="grid gap-3 opacity-70 grayscale-[0.5]">
+                            {deletedBranches.map((branch) => {
+                              const daysLeft = getDaysRemaining(branch.deleted_at!)
+                              return (
+                                <div
+                                  key={branch.id}
+                                  className="group relative flex flex-col p-4 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-all duration-300"
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="p-2 rounded-lg bg-muted text-muted-foreground">
+                                        <Building2 className="h-4 w-4" />
+                                      </div>
+                                      <h4 className="font-bold text-lg leading-none line-through decoration-muted-foreground/50">{branch.name}</h4>
+                                    </div>
+                                    <div className="flex -mr-2 -mt-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-primary hover:bg-primary/10"
+                                        onClick={() => handleRestore(branch.id)}
+                                        title="Restore Branch"
+                                      >
+                                        <RotateCcw className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                        onClick={() => { setBranchToDelete(branch); setDeleteConfirmText(""); }}
+                                        title="Permanently Delete"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="mt-2 flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-destructive">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Deletes in {daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>
+                                    </div>
+                                    <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-bold h-5 px-1.5 opacity-60">
+                                      Archive
+                                    </Badge>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-[200px] text-center p-6 bg-muted/20 rounded-2xl border border-dashed">
