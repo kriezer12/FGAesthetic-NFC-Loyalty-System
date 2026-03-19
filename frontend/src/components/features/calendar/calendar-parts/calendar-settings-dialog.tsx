@@ -76,11 +76,6 @@ export function CalendarSettingsDialog({
   settings,
   onSave,
 }: CalendarSettingsDialogProps) {
-  const staffOnly = useMemo(
-    () => staff.filter((member) => member.role?.toLowerCase() === "staff"),
-    [staff]
-  )
-
   const [workStart, setWorkStart] = useState(settings?.workHoursStart || "09:00")
   const [workEnd, setWorkEnd] = useState(settings?.workHoursEnd || "18:00")
   const [lunchStart, setLunchStart] = useState(settings?.lunchBreakStart || "12:00")
@@ -90,7 +85,7 @@ export function CalendarSettingsDialog({
     settings?.staffSchedules || initializeStaffDays()
   )
   const [selectedStaff, setSelectedStaff] = useState<string[]>(
-    settings?.selectedStaff || staffOnly.map((s) => s.id)
+    settings?.selectedStaff || staff.map((s) => s.id)
   )
   const [staffSearch, setStaffSearch] = useState("")
 
@@ -109,7 +104,7 @@ export function CalendarSettingsDialog({
 
   function initializeStaffDays(): Record<string, DayOfWeek[]> {
     const result: Record<string, DayOfWeek[]> = {}
-    staffOnly.forEach((s) => {
+    staff.forEach((s) => {
       // Default: all staff work all days
       result[s.id] = ["MON", "TUE", "WED", "THU", "FRI"]
     })
@@ -117,7 +112,7 @@ export function CalendarSettingsDialog({
   }
 
   // Filter staff based on search
-  const filteredStaff = staffOnly.filter(
+  const filteredStaff = staff.filter(
     (s) =>
       s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
       s.role?.toLowerCase().includes(staffSearch.toLowerCase())
@@ -154,7 +149,7 @@ export function CalendarSettingsDialog({
   }
 
   const handleSave = () => {
-    const staffIds = new Set(staffOnly.map((s) => s.id))
+    const staffIds = new Set(staff.map((s) => s.id))
     const filteredSelectedStaff = selectedStaff.filter((id) => staffIds.has(id))
     const filteredStaffDays = Object.fromEntries(
       Object.entries(staffDays).filter(([id]) => staffIds.has(id))
