@@ -8,11 +8,12 @@ import {
   ExportSection,
   ArchivedClientsTable,
   TreatmentSummaryTable,
+  StaffSalesTable,
   EmptyState,
 } from "@/components/features/reports"
-import type { ClientCounts, ArchivedClient, TreatmentSummary } from "@/components/features/reports"
+import type { ClientCounts, ArchivedClient, TreatmentSummary, TopStaffSales } from "@/components/features/reports"
 
-type ReportType = "full" | "clients" | "treatments"
+type ReportType = "full" | "clients" | "treatments" | "staff_sales"
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api"
 
@@ -47,6 +48,7 @@ export default function ReportsPage() {
   const [clientCounts, setClientCounts] = useState<ClientCounts | null>(null)
   const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>([])
   const [treatmentSummary, setTreatmentSummary] = useState<TreatmentSummary[]>([])
+  const [topStaffSales, setTopStaffSales] = useState<TopStaffSales | null>(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,17 +59,19 @@ export default function ReportsPage() {
     try {
       console.log(`[Reports] Fetching from ${API_BASE}`)
 
-      const [countsData, archivedData, treatmentData] = await Promise.all([
+      const [countsData, archivedData, treatmentData, topStaffData] = await Promise.all([
         fetchWithErrorMsg<ClientCounts>("/reports/clients/counts", "Client Counts"),
         fetchWithErrorMsg<ArchivedClient[]>("/reports/clients/archived", "Archived Clients"),
         fetchWithErrorMsg<TreatmentSummary[]>("/reports/treatments/summary", "Treatment Summary"),
+        fetchWithErrorMsg<TopStaffSales | null>("/reports/staff/top-sales", "Top Staff Sales"),
       ])
 
-      console.log("[Reports] Data fetched:", { countsData, archivedData, treatmentData })
+      console.log("[Reports] Data fetched:", { countsData, archivedData, treatmentData, topStaffData })
 
       setClientCounts(countsData)
       setArchivedClients(Array.isArray(archivedData) ? archivedData : [])
       setTreatmentSummary(Array.isArray(treatmentData) ? treatmentData : [])
+      setTopStaffSales(topStaffData)
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load reports"
       setError(message)
@@ -152,31 +156,39 @@ export default function ReportsPage() {
         {/* Key Metrics Section */}
         <section className="space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both delay-100">
           <div className="px-1">
-            <h2 className="text-xl font-bold tracking-tight text-foreground">Client Overview</h2>
-            <p className="text-sm text-muted-foreground mt-1">Current client status distribution</p>
+            <h2 className="text-xl font-bold tracking-tight text-foreground">Client Overview & Top Performance</h2>
+            <p className="text-sm text-muted-foreground mt-1">Status distribution and sales metrics</p>
           </div>
-          <ClientStatusCards clientCounts={clientCounts} loading={loading} />
+          <ClientStatusCards 
+            clientCounts={clientCounts} 
+            topStaffSales={topStaffSales}
+            loading={loading} 
+          />
         </section>
 
-        {/* Main Content - Export & Data Tables */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Export Section - Sidebar */}
-          <section className="lg:col-span-1 animate-in fade-in slide-in-from-left-8 duration-700 fill-mode-both delay-200">
-            <ExportSection exporting={exporting} loading={loading} onExport={handleExportCSV} />
-          </section>
+        {/* Export Section - Horizontal Action Bar */}
+        <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both delay-200">
+          <ExportSection exporting={exporting} loading={loading} onExport={handleExportCSV} />
+        </div>
 
-          {/* Data Tables - Main Content */}
-          <section className="lg:col-span-3 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both delay-300">
+        {/* Data Tables - Main Content */}
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-both delay-300">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {/* Treatment Summary */}
-            <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border">
+            <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border flex flex-col h-full">
               <TreatmentSummaryTable treatmentSummary={treatmentSummary} loading={loading} />
             </div>
 
-            {/* Archived Clients */}
-            <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border">
-              <ArchivedClientsTable archivedClients={archivedClients} />
+            {/* Staff Sales Table */}
+            <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border flex flex-col h-full">
+              <StaffSalesTable />
             </div>
-          </section>
+          </div>
+
+          {/* Archived Clients */}
+          <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border">
+            <ArchivedClientsTable archivedClients={archivedClients} />
+          </div>
         </div>
 
         {/* Empty State */}

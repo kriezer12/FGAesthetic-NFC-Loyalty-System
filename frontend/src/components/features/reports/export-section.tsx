@@ -1,9 +1,7 @@
 import { Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 
-type ReportType = "full" | "clients" | "treatments"
+type ReportType = "full" | "clients" | "treatments" | "staff_sales"
 
 interface ExportSectionProps {
   exporting: boolean
@@ -13,54 +11,61 @@ interface ExportSectionProps {
 
 export function ExportSection({ exporting, loading, onExport }: ExportSectionProps) {
   return (
-    <Card className="sticky top-6 h-fit bg-card/40 backdrop-blur-md border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md rounded-2xl">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base flex items-center gap-2">
+    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-card/40 backdrop-blur-md p-4 rounded-2xl border border-border/50 shadow-sm transition-all duration-300 hover:shadow-md">
+      <div className="flex items-center gap-3 px-2">
+        <div className="p-2.5 bg-primary/10 rounded-xl transition-colors group-hover:bg-primary/20">
           <Download className="h-5 w-5 text-primary" />
-          Export Data
-        </CardTitle>
-        <p className="text-xs text-muted-foreground font-medium mt-1">
-          Download reports as CSV files
-        </p>
-      </CardHeader>
-      <Separator className="mb-4 bg-border/50" />
-      <CardContent className="space-y-3">
+        </div>
+        <div>
+          <h3 className="font-bold text-foreground tracking-tight">Export Data</h3>
+          <p className="text-xs font-medium text-muted-foreground mt-0.5">
+            {exporting ? "Processing your export..." : "Download reports as CSV"}
+          </p>
+        </div>
+      </div>
+      
+      <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
         <Button
           variant="outline"
-          className="w-full justify-start text-sm transition-all duration-300 hover:bg-muted/50 hover:pl-5 border-border/50"
+          size="sm"
+          className="flex-1 md:flex-none transition-all duration-300 hover:bg-muted hover:border-primary/50"
           onClick={() => onExport("full")}
           disabled={exporting || loading}
         >
-          <Download className="h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground transition-all duration-300 group-hover:text-primary" />
-          <span className="truncate font-medium">Full Report</span>
+          <Download className="h-4 w-4 mr-2 text-muted-foreground" />
+          Full Report
         </Button>
         <Button
           variant="outline"
-          className="w-full justify-start text-sm transition-all duration-300 hover:bg-muted/50 hover:pl-5 border-border/50"
+          size="sm"
+          className="flex-1 md:flex-none transition-all duration-300 hover:bg-muted hover:border-primary/50"
           onClick={() => onExport("clients")}
           disabled={exporting || loading}
         >
-          <Download className="h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground transition-all duration-300 group-hover:text-primary" />
-          <span className="truncate font-medium">Clients Summary</span>
+          <Download className="h-4 w-4 mr-2 text-muted-foreground" />
+          Clients
         </Button>
         <Button
           variant="outline"
-          className="w-full justify-start text-sm transition-all duration-300 hover:bg-muted/50 hover:pl-5 border-border/50"
+          size="sm"
+          className="flex-1 md:flex-none transition-all duration-300 hover:bg-muted hover:border-primary/50"
           onClick={() => onExport("treatments")}
           disabled={exporting || loading}
         >
-          <Download className={`h-4 w-4 mr-2 flex-shrink-0 text-muted-foreground transition-all duration-300 group-hover:text-primary ${exporting ? "animate-bounce" : ""}`} />
-          <span className="truncate font-medium">
-            {exporting ? "Exporting..." : "Treatments"}
-          </span>
+          <Download className={`h-4 w-4 mr-2 text-muted-foreground ${exporting ? "animate-bounce text-primary" : ""}`} />
+          {exporting ? "Exporting..." : "Treatments"}
         </Button>
-        
-        <Separator className="my-3 bg-border/50" />
-        
-        <p className="text-xs text-muted-foreground text-center py-2 font-medium">
-          {exporting ? "Processing your export..." : "CSV format for easy sharing"}
-        </p>
-      </CardContent>
-    </Card>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 md:flex-none transition-all duration-300 hover:bg-muted hover:border-primary/50"
+          onClick={() => onExport("staff_sales")}
+          disabled={exporting || loading}
+        >
+          <Download className="h-4 w-4 mr-2 text-muted-foreground" />
+          Staff Sales
+        </Button>
+      </div>
+    </div>
   )
 }

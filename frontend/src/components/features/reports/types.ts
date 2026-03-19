@@ -25,3 +25,12 @@ export interface TreatmentSummary {
   remaining_sessions: number
   clients?: { id: string; name: string }[]
 }
+
+export interface TopStaffSales {
+  staff_id: string
+  staff_name: string
+  total_sales: number
+  completed_appointments: number
+}
+
+export type StaffSales = TopStaffSales
