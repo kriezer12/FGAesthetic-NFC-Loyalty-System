@@ -90,11 +90,17 @@ export default function EquipmentPage() {
 
   const statusStats = useMemo(() => {
     return {
-      active: equipment.filter(e => e.status === 'active').length,
-      maintenance: equipment.filter(e => e.status === 'maintenance').length,
-      outOfOrder: equipment.filter(e => e.status === 'out_of_order').length,
+      active: filteredEquipment.filter(e => e.status === 'active').length,
+      maintenance: filteredEquipment.filter(e => e.status === 'maintenance').length,
+      outOfOrder: filteredEquipment.filter(e => e.status === 'out_of_order').length,
     }
-  }, [equipment])
+  }, [filteredEquipment])
+
+  const selectedBranchName = useMemo(() => {
+    if (userProfile?.role !== 'super_admin') return userProfile?.branch_name || 'Main Branch'
+    if (selectedBranchId === "all") return "All Branches"
+    return branches.find(b => b.id === selectedBranchId)?.name || "Unknown Branch"
+  }, [selectedBranchId, branches, userProfile])
 
   if (authLoading) {
     return (
@@ -185,7 +191,7 @@ export default function EquipmentPage() {
             <Wrench className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{equipment.length}</div>
+            <div className="text-2xl font-bold">{filteredEquipment.length}</div>
           </CardContent>
         </Card>
         <Card className="border border-border shadow-sm">
@@ -213,7 +219,7 @@ export default function EquipmentPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold truncate">
-              {userProfile.role === 'super_admin' ? 'All Branches' : (userProfile.branch_name || 'Main Branch')}
+              {selectedBranchName}
             </div>
           </CardContent>
         </Card>
