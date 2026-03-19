@@ -73,7 +73,22 @@ export function TreatmentSummaryTable({ treatmentSummary, loading }: TreatmentSu
                     {treatmentSummary.map((treatment, idx) => (
                       <TableRow key={idx} className="hover:bg-muted/40 transition-colors group">
                         <TableCell className="font-semibold">
-                          <span className="group-hover:text-primary transition-colors">{treatment.treatment_name}</span>
+                          {treatment.treatment_name.length > 20 ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="group-hover:text-primary transition-colors cursor-help">
+                                  {treatment.treatment_name.substring(0, 20)}...
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{treatment.treatment_name}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="group-hover:text-primary transition-colors">
+                              {treatment.treatment_name}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {treatment.clients && treatment.clients.length > 0 ? (

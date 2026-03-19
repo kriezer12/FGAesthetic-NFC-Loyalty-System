@@ -574,7 +574,40 @@ def export_report_csv():
                     f'{v["used_sessions"]},'
                     f'{v["remaining_sessions"]}'
                 )
-        
+            csv_lines.append("")
+
+        if report_type in ["full", "staff_sales"]:
+            # Staff sales section - use same logic as /reports/staff/sales but for all time
+            services_resp = supabase.table("services").select("id, price").execute()
+            services_map = {s["id"]: float(s.get("price") or 0) for s in (services_resp.data or [])}
+
+            appts_resp = supabase.table("appointments").select("staff_id, staff_name, service_ids").eq("status", "completed").execute()
+            appointments = appts_resp.data or []
+
+            staff_sales = {}
+            for appt in appointments:
+                staff_id = appt.get("staff_id")
+                staff_name = appt.get("staff_name") or "Unknown Staff"
+                service_ids = appt.get("service_ids") or []
+                
+                if not staff_id: continue
+                    
+                if staff_id not in staff_sales:
+                    staff_sales[staff_id] = {"name": staff_name, "total": 0.0, "count": 0}
+                
+                appt_total = sum(services_map.get(s_id, 0.0) for s_id in service_ids)
+                staff_sales[staff_id]["total"] += appt_total
+                staff_sales[staff_id]["count"] += 1
+            
+            # Sort by total sales descending
+            sorted_staff = sorted(staff_sales.values(), key=lambda x: x["total"], reverse=True)
+
+            csv_lines.append("STAFF SALES SUMMARY")
+            csv_lines.append("Staff Name,Appointments,Total Sales")
+            for s in sorted_staff:
+                csv_lines.append(f'"{s["name"]}",{s["count"]},{s["total"]}')
+            csv_lines.append("")
+
         csv_content = "\n".join(csv_lines)
         
         filename = f"report_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -588,4 +621,146 @@ def export_report_csv():
     except Exception as e:
         print(f"[REPORTS ERROR] export_report_csv: {str(e)}", file=sys.stderr)
         return jsonify({"error": str(e), "message": "Failed to export CSV"}), 500
+
+
+@reports_bp.route('/staff/top-sales', methods=['GET'])
+def get_top_staff_sales():
+    """
+    Get the staff member with the highest sales based on completed appointments.
+    
+    Returns:
+        {
+            "staff_id": str,
+            "staff_name": str,
+            "total_sales": float,
+            "completed_appointments": int
+        }
+    """
+    try:
+        supabase = get_supabase_admin()
+        
+        # Fetch all services to get their prices
+        services_resp = supabase.table("services").select("id, price").execute()
+        services_map = {s["id"]: float(s.get("price") or 0) for s in (services_resp.data or [])}
+
+        # Fetch all completed appointments
+        appts_resp = supabase.table("appointments").select("staff_id, staff_name, service_ids").eq("status", "completed").execute()
+        appointments = appts_resp.data or []
+
+        staff_sales = {}
+        for appt in appointments:
+            staff_id = appt.get("staff_id")
+            staff_name = appt.get("staff_name") or "Unknown Staff"
+            service_ids = appt.get("service_ids") or []
+            
+            if not staff_id:
+                continue
+                
+            if staff_id not in staff_sales:
+                staff_sales[staff_id] = {
+                    "staff_id": staff_id, 
+                    "staff_name": staff_name, 
+                    "total_sales": 0.0, 
+                    "completed_appointments": 0
+                }
+            
+            appt_total = sum(services_map.get(s_id, 0.0) for s_id in service_ids)
+            staff_sales[staff_id]["total_sales"] += appt_total
+            staff_sales[staff_id]["completed_appointments"] += 1
+
+        if not staff_sales:
+            print("[REPORTS] No completed appointments found to calculate top staff sales", file=sys.stderr)
+            return jsonify(None), 200
+
+        # Find the staff member with the highest total_sales
+        top_staff = max(staff_sales.values(), key=lambda x: x["total_sales"])
+        
+        print(f"[REPORTS] Top staff sales: {top_staff['staff_name']} with {top_staff['total_sales']}", file=sys.stderr)
+        return jsonify(top_staff), 200
+        
+    except Exception as e:
+        print(f"[REPORTS ERROR] get_top_staff_sales: {str(e)}", file=sys.stderr)
+        return jsonify({"error": str(e), "message": "Failed to fetch top staff sales"}), 500
+
+
+@reports_bp.route('/staff/sales', methods=['GET'])
+def get_staff_sales_list():
+    """
+    Get all staff sales, filtered by an optional period parameter.
+    
+    Query params:
+        period: "daily" | "weekly" | "monthly" | "yearly" | "all" (default "all")
+        
+    Returns:
+        List of {
+            "staff_id": str,
+            "staff_name": str,
+            "total_sales": float,
+            "completed_appointments": int
+        }
+    """
+    try:
+        from datetime import timezone
+        supabase = get_supabase_admin()
+        period = request.args.get('period', 'all').lower()
+        
+        # Calculate date filter based on period
+        now = datetime.now(timezone.utc)
+        start_date = None
+        
+        if period == 'daily':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'weekly':
+            # Start of week (Monday)
+            start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'monthly':
+            # Start of month
+            start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'yearly':
+            # Start of year
+            start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            
+        # Fetch all services to get their prices
+        services_resp = supabase.table("services").select("id, price").execute()
+        services_map = {s["id"]: float(s.get("price") or 0) for s in (services_resp.data or [])}
+
+        # Build query for appointments
+        query = supabase.table("appointments").select("staff_id, staff_name, service_ids, end_time").eq("status", "completed")
+        
+        if start_date:
+            query = query.gte("end_time", start_date.isoformat())
+            
+        appts_resp = query.execute()
+        appointments = appts_resp.data or []
+
+        staff_sales = {}
+        for appt in appointments:
+            staff_id = appt.get("staff_id")
+            staff_name = appt.get("staff_name") or "Unknown Staff"
+            service_ids = appt.get("service_ids") or []
+            
+            if not staff_id:
+                continue
+                
+            if staff_id not in staff_sales:
+                staff_sales[staff_id] = {
+                    "staff_id": staff_id, 
+                    "staff_name": staff_name, 
+                    "total_sales": 0.0, 
+                    "completed_appointments": 0
+                }
+            
+            appt_total = sum(services_map.get(s_id, 0.0) for s_id in service_ids)
+            staff_sales[staff_id]["total_sales"] += appt_total
+            staff_sales[staff_id]["completed_appointments"] += 1
+
+        # Convert to list and sort by total_sales descending
+        result = list(staff_sales.values())
+        result.sort(key=lambda x: x["total_sales"], reverse=True)
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"[REPORTS ERROR] get_staff_sales_list: {str(e)}", file=sys.stderr)
+        return jsonify({"error": str(e), "message": "Failed to fetch staff sales array"}), 500
 
