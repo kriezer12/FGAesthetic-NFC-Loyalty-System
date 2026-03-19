@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from "@/lib/supabase"
 import { generateId } from "@/components/features/calendar/calendar-parts/calendar-utils"
 import type { ServiceCategory, Service } from "@/types/service"
+import { useEquipment } from "@/hooks/use-equipment"
 
 const ROOT_SCOPE = "__root__"
 
@@ -37,6 +38,7 @@ export default function TreatmentsPage() {
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [inventoryProducts, setInventoryProducts] = useState<{id: string, name: string, sku: string}[]>([])
+  const { equipment: equipmentList, fetchEquipment } = useEquipment()
 
   const [catModalOpen, setCatModalOpen] = useState(false)
   const [svcModalOpen, setSvcModalOpen] = useState(false)
@@ -98,6 +100,7 @@ export default function TreatmentsPage() {
     fetchCategories()
     fetchServices()
     fetchInventoryProducts()
+    fetchEquipment()
   }, [])
 
   const saveCategory = async (cat: ServiceCategory) => {
@@ -459,11 +462,11 @@ export default function TreatmentsPage() {
               </div>
               {editingService?.uses_equipment && (
                 <Combobox
-                  options={[]}
+                  options={equipmentList.map(e => ({ label: e.name, value: e.name }))}
                   value={editingService?.equipment || ""}
                   onValueChange={(v) => setEditingService((es) => ({ ...es!, equipment: v }))}
                   placeholder="Select equipment…"
-                  emptyMessage="No equipment available yet"
+                  emptyMessage={equipmentList.length === 0 ? "No equipment available. Add some in the Equipment page." : "No matching equipment."}
                 />
               )}
             </div>
