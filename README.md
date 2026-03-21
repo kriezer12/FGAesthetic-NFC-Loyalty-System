@@ -1,311 +1,73 @@
-# FG Aesthetic NFC Loyalty System
+<div align="center">
+  <img src="docs/assets/banner_v2.png" alt="FG Aesthetic Banner" width="100%">
+  
+  # ✨ FG Aesthetic NFC Loyalty System ✨
+  
+  *Elevating Beauty Clinic Management with Seamless Intelligence*
+  
+  [![Tech Stack](https://img.shields.io/badge/Stack-React_19_|_Flask_|_Supabase-blueviolet?style=for-the-badge)](https://github.com/ruzzhel/FG-Aesthetic)
+  [![License](https://img.shields.io/badge/License-MIT-gold?style=for-the-badge)](LICENSE)
+  [![Status](https://img.shields.io/badge/Status-Premium_Build-emerald?style=for-the-badge)](https://github.com/ruzzhel/FG-Aesthetic)
 
-Full-stack loyalty card system with NFC integration for beauty clinics. Features customer management, points tracking, and seamless NFC card scanning for quick check-ins.
+  ---
+</div>
 
-## Features
+## 💎 The Vision
 
-- 🎫 **NFC Card Scanning** - Tap-to-identify using USB NFC readers (keyboard HID)
-- 👥 **Customer Management** - Full customer database with search, filters, and pagination
-- ⭐ **Points & Rewards** - Track loyalty points and visit history
-- 🩺 **Treatment Progress** - Record remaining/used sessions per package with validation and audit logging (see issue #19); also view/update from customer modal.
-- 💼 **Service Catalog** - Admin page to define available services by category, including equipment/product flags, price, and loyalty points; used by appointments and future inventory integration.
-- 📋 **Beauty Clinic Fields** - Skin type, allergies, emergency contacts
-- 🔐 **Secure Auth** - Supabase authentication with email/password
-- 📱 **Responsive Design** - Works on desktop and mobile devices
-
-## Tech Stack
-
-**Frontend:** React 19 + Vite 7 + Tailwind CSS 4 + shadcn/ui  
-**Backend:** Flask + Supabase (PostgreSQL)  
-**Auth:** Supabase Auth (Email/Password + Google OAuth)  
-**NFC:** USB HID readers (keyboard emulation - no special drivers needed)
+FG Aesthetic is a sophisticated, full-stack ecosystem designed specifically for high-end beauty clinics. It bridges the gap between hardware and software, integrating **NFC technology** to provide an unparalleled check-in experience while streamlining complex clinic operations.
 
 ---
 
-## Quick Start with Docker
+## 🚀 Key Capabilities
 
-### Prerequisites
-- Docker Desktop installed ([download](https://www.docker.com/products/docker-desktop))
-- Supabase account ([signup](https://supabase.com))
+### 🎫 Hardware-Level Intelligence
+- **NFC Seamless Integration** – Tap-to-identify using USB HID readers for instant profile retrieval.
+- **Smart Registration** – Automated detection of new cards with immediate provisioning.
 
-### Setup
+### 👥 Precision Client Care
+- **Holistic Profiles** – Track skin types, allergies, emergency contacts, and detailed point histories.
+- **Loyalty Engine** – Automated point accrual and redemption system balanced with manual audit controls.
 
-1. **Clone the repository:**
-```bash
-git clone <your-repo-url>
-cd FGAesthetic-NFC-Loyalty-System
-```
+### 📅 Advanced Clinic Orchestration
+- **Intuitive Calendar** – Segmented scheduling with support for multiple branches and staff filters.
+- **Treatment Tracking** – Maintain granular logs of session-based treatments and remaining counts.
+- **Operational Analytics** – Dynamic daily, weekly, and monthly reports for sales and staff performance.
 
-2. **Create `.env` file in project root:**
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
-```
-
-3. **Create `.env` file in frontend folder:**
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
-4. **Start the application:**
-```bash
-docker-compose up --build
-```
-
-5. **Access the app:**
-- **Frontend:** http://localhost:5173
-- **Backend API:** http://localhost:5000
-
-**Database note:** before using the treatment UI you must create the
-additional JSON column and log table in your Supabase project.  Run the
-following SQL from the Supabase SQL editor or via your preferred migration
-tool.  (The leading `>` characters shown below are just Markdown quoting;
-copy the lines starting with keywords such as `create` or `alter` when you
-paste into the editor.)
-
-```sql
--- store package/session state on the customer row
-alter table customers add column if not exists treatments jsonb;
-
--- audit history for any treatment updates
-create table if not exists treatment_logs (
-  id uuid primary key default gen_random_uuid(),
-  customer_id uuid references customers(id),
-  changes jsonb not null,
-  created_at timestamptz default now()
-);
-
--- add treatment pointer to appointments (optional, used by calendar)
-alter table appointments add column if not exists treatment_id text;
-alter table appointments add column if not exists treatment_name text;
-
--- service catalog tables for available treatments
-create table if not exists service_categories (
-  id text primary key,
-  name text not null
-);
-
-create table if not exists services (
-  id text primary key,
-  category_id text references service_categories(id) on delete cascade,
-  name text not null,
-  uses_equipment boolean default false,
-  equipment text,
-  uses_product boolean default false,
-  product text,
-  price numeric not null default 0,
-  points_value integer not null default 0
-);
-```
-
-6. **Default Routes:**
-- `/login` - Login page
-- `/signup` - Registration page
-- `/dashboard` - Main NFC scanner dashboard
-- `/dashboard/customers` - Customer management
+### 🏥 Branch & Asset Management
+- **Role-Based Governance** – Super Admin, Branch Admin, and Staff tiers with strict data isolation.
+- **Equipment Health** – Track the operational status of specialized clinic equipment.
+- **Inventory Control** – Monitor consumable levels to ensure continuous service availability.
 
 ---
 
-## Local Development (without Docker)
+## 🛠️ The Architecture
 
-### Backend
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -r requirements.txt
-python -m app.main
-```
-
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | React 19 • TypeScript • Vite 7 • Tailwind CSS 4 • Shaden/ui |
+| **Backend** | Python 3 • Flask • Supabase Python SDK |
+| **Database** | PostgreSQL • Row Level Security (RLS) |
+| **Auth** | Supabase Auth (JWT & Managed Sessions) |
+| **Hardware** | Any USB HID-Mode NFC Reader (Keyboard Emulation) |
 
 ---
 
-## Project Structure
+## 💳 NFC Hardware Workflow
 
-```
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py          # Package init
-│   │   ├── main.py              # Flask app factory
-│   │   ├── config.py            # Environment config
-│   │   ├── routes/              # API route blueprints
-│   │   └── services/
-│   │       └── supabase_client.py  # Supabase client
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── main.jsx             # App entry point & routes
-│   │   ├── login.jsx            # Login page
-│   │   ├── signup.jsx           # Signup page
-│   │   ├── dashboard.tsx        # Main dashboard with NFC scanner
-│   │   ├── customers.tsx        # Customers list page
-│   │   ├── components/
-│   │   │   ├── app-sidebar.tsx  # Navigation sidebar
-│   │   │   ├── nfc-scanner.tsx  # NFC card scanning component
-│   │   │   ├── customer-info.tsx # Customer details & points
-│   │   │   ├── register-card.tsx # New card registration form
-│   │   │   ├── login-form.tsx   # Login form with Supabase auth
-│   │   │   ├── signup-form.tsx  # Signup form with Supabase auth
-│   │   │   └── ui/              # shadcn/ui components
-│   │   ├── hooks/
-│   │   │   └── use-mobile.ts    # Mobile detection hook
-│   │   └── lib/
-│   │       ├── supabase.ts      # Supabase client
-│   │       └── utils.ts         # Utility functions
-│   ├── package.json
-│   ├── Dockerfile
-│   └── nginx.conf
-├── docker-compose.yml
-└── README.md
-```
+The system is optimized for **zero-click identification**:
+
+1. **Tap:** Client taps their loyalty card on the reader.
+2. **Identification:** The system traps the HID signal and queries the profile in real-time.
+3. **Action:** Dashboard automatically updates to reflect the client's current status, remaining treatments, and loyalty balance.
 
 ---
 
-## NFC Reader Setup
+## 📜 License
 
-This system works with any USB NFC reader that operates in **keyboard HID mode** (most common type). When a card is tapped, the reader types the card's UID directly into the focused input field.
-
-**Supported readers:** ACR122U, ACR1252U, or any HID keyboard-emulating NFC reader.
-
-**How it works:**
-1. User navigates to the NFC Scanner page
-2. The input field automatically stays focused
-3. User taps their NFC card on the reader
-4. Reader types the 10-digit UID + Enter
-5. System looks up the card in the database
-6. If found → Shows customer info with points management
-7. If not found → Opens registration form for new customer
+Distributed under the **MIT License**. Created by [FG Aesthetic Team].
 
 ---
 
----
-
-
-**Status flags**
-
-A few concepts are used in the UI for filtering clients:
-
-* **Active** – not archived and not flagged as inactive (see below).
-* **Inactive** – last visit is more than ~60 days old (or never visited) and not archived.
-* **Archived** – `archived_at` is non‑null (soft deleted). Archived clients are hidden unless the
- filter is explicitly set.
-
-## API Endpoints
-
-### Health Check
-- `GET /health` - Returns `{"status": "healthy"}`
-- `GET /` - API information
-
-### Authentication
-Authentication is handled directly by Supabase Auth on the frontend.
-The backend validates Supabase JWT tokens for protected routes.
-
----
-
-## Team Workflow
-
-### For New Team Members
-
-1. Install Docker Desktop
-2. Clone repo
-3. Get `.env` credentials from team lead
-4. Run `docker-compose up --build`
-5. Access app at `http://localhost`
-
-### Making Changes
-
-**Backend changes:**
-- Edit files in `backend` folder
-- Restart container: `docker-compose restart backend`
-
-**Frontend changes:**
-- Edit files in `frontend/src`
-- Rebuild: `docker-compose up --build frontend`
-
-**Restart containers:**
-```bash
-docker-compose restart
-```
-
-**Rebuild after dependency changes:**
-```bash
-docker-compose up --build
-```
-
-**Stop containers:**
-```bash
-docker-compose down
-```
-
----
-
-## Docker Commands
-
-```bash
-# Start everything
-docker-compose up
-
-# Start in background (detached)
-docker-compose up -d
-
-# Rebuild after code changes
-docker-compose up --build
-
-# Stop everything
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Restart a single service
-docker-compose restart backend
-docker-compose restart frontend
-```
-
----
-
-## Environment Variables
-
-### Root `.env` (for Docker)
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
-```
-
-### Frontend `.env`
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
----
-
-## Troubleshooting
-
-**Port conflicts:**
-```bash
-docker-compose down
-docker-compose up
-```
-
-**Database connection issues:**
-- Verify Supabase credentials in `.env`
-- Check Supabase project status
-
-**CORS errors:**
-- Ensure backend `FRONTEND_URL` matches frontend URL
-- Check Flask-CORS configuration in `backend/app/main.py`
-
----
-
-## License
-
-MIT
+<div align="center">
+  <sub>Built for performance, designed for beauty.</sub>
+</div>
