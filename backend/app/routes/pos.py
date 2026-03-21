@@ -303,3 +303,121 @@ def list_transactions():
         return jsonify({"error": str(e)}), 500
 
     return jsonify({"transactions": resp.data or []}), 200
+
+
+@pos_bp.route("/z-readings", methods=["GET"])
+def list_z_readings():
+    """List Z-Reading snapshots, branch-scoped for staff/branch_admin."""
+    try:
+        caller_id = get_user_from_token()
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+
+    supabase = get_supabase_admin()
+    caller_profile = supabase.table("user_profiles").select("role, branch_id").eq("id", caller_id).single().execute()
+    if not caller_profile.data:
+        return jsonify({"error": "Caller profile not found"}), 404
+
+    caller_role = caller_profile.data.get("role")
+    caller_branch_id = caller_profile.data.get("branch_id")
+
+    query = supabase.table("z_readings").select("*").order("business_date", desc=True)
+
+    if caller_role in ["branch_admin", "staff"]:
+        if not caller_branch_id:
+            return jsonify({"z_readings": [], "total": 0}), 200
+        query = query.eq("branch_id", caller_branch_id)
+
+    business_date = request.args.get("business_date")
+    if business_date:
+        query = query.eq("business_date", business_date)
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    try:
+        per_page = min(100, max(1, int(request.args.get("per_page", 25))))
+    except ValueError:
+        per_page = 25
+
+    start = (page - 1) * per_page
+    end = start + per_page - 1
+
+    try:
+        total_resp = supabase.table("z_readings").select("id", count="exact", head=True)
+        if caller_role in ["branch_admin", "staff"] and caller_branch_id:
+            total_resp = total_resp.eq("branch_id", caller_branch_id)
+        if business_date:
+            total_resp = total_resp.eq("business_date", business_date)
+        total_res = total_resp.execute()
+        total_count = total_res.count if total_res.count is not None else 0
+
+        page_resp = query.range(start, end).execute()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({
+        "z_readings": page_resp.data or [],
+        "page": page,
+        "per_page": per_page,
+        "total": total_count,
+    }), 200
+
+
+@pos_bp.route("/z-readings", methods=["POST"])
+def create_z_reading():
+    """Create a Z-Reading snapshot."""
+    try:
+        caller_id = get_user_from_token()
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+
+    payload = request.get_json(force=True, silent=True) or {}
+
+    supabase = get_supabase_admin()
+    caller_profile = supabase.table("user_profiles").select("role, branch_id").eq("id", caller_id).single().execute()
+    if not caller_profile.data:
+        return jsonify({"error": "Caller profile not found"}), 404
+
+    caller_role = caller_profile.data.get("role")
+    caller_branch_id = caller_profile.data.get("branch_id")
+
+    branch_id = payload.get("branch_id") or caller_branch_id
+    if not branch_id:
+        return jsonify({"error": "Branch ID is required"}), 400
+
+    if caller_role in ["branch_admin", "staff"] and branch_id != caller_branch_id:
+        return jsonify({"error": "Forbidden: branch mismatch"}), 403
+
+    required_fields = ["business_date", "reading_no", "tx_count", "gross_sales", "discount_total", "net_sales", "vatable_sales", "vat_amount", "payment_breakdown"]
+    missing = [f for f in required_fields if payload.get(f) is None]
+    if missing:
+        return jsonify({"error": "Missing fields", "missing": missing}), 400
+
+    z_payload = {
+        "id": str(uuid.uuid4()),
+        "branch_id": branch_id,
+        "created_by": caller_id,
+        "business_date": payload.get("business_date"),
+        "reading_no": payload.get("reading_no"),
+        "generated_at": payload.get("generated_at") or datetime.now(timezone.utc).isoformat(),
+        "tx_count": payload.get("tx_count"),
+        "gross_sales": payload.get("gross_sales"),
+        "discount_total": payload.get("discount_total"),
+        "net_sales": payload.get("net_sales"),
+        "vatable_sales": payload.get("vatable_sales"),
+        "vat_amount": payload.get("vat_amount"),
+        "payment_breakdown": payload.get("payment_breakdown"),
+    }
+
+    try:
+        resp = supabase.table("z_readings").insert(z_payload).execute()
+    except Exception as e:
+        return jsonify({"error": "Failed to create z-reading", "details": str(e)}), 500
+
+    if resp.error:
+        return jsonify({"error": resp.error.message or "Failed to create z-reading"}), 500
+
+    return jsonify({"success": True, "z_reading": z_payload}), 201
+
