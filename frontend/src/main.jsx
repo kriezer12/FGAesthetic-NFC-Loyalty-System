@@ -35,6 +35,7 @@ const AccountsPage = lazy(() => import("./pages/accounts.tsx"))
 const TreatmentsPage = lazy(() => import("./pages/treatments.tsx"))
 const ReportsPage = lazy(() => import("./pages/reports.tsx"))
 const InventoryPage = lazy(() => import("./pages/inventory.tsx"))
+const EquipmentPage = lazy(() => import("./pages/equipment.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/reset-password.tsx"))
 const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
 const CheckoutPage = lazy(() => import("./pages/checkout.tsx"))
@@ -95,6 +96,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/checkout" element={<CheckoutPage />} />
           <Route path="/dashboard/pos-settings" element={<PosSettingsPage />} />
           <Route path="/dashboard/sales-reports" element={<SalesReportsPage />} />
+          <Route path="/dashboard/equipment" element={<EquipmentPage />} />
         </Route>
       </Routes>
     </AuthProvider>

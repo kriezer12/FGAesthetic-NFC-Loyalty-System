@@ -95,7 +95,7 @@ export function Combobox({
       >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <ScrollArea className="h-64">
+          <ScrollArea className="max-h-60">
             <CommandList className="max-h-none overflow-visible">
               <CommandEmpty>{emptyMessage}</CommandEmpty>
               <CommandGroup>
