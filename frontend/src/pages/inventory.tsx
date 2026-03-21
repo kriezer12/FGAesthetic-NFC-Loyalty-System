@@ -12,7 +12,6 @@ import {
   History, 
   Layers, 
   AlertTriangle,
-  ChevronRight,
   ChevronDown,
   ArrowUpRight,
   ArrowDownLeft,
@@ -115,9 +114,26 @@ export default function InventoryPage() {
     )
   }, [products, searchTerm])
 
-  const lowStockCount = useMemo(() => {
-    return filteredStocks.filter(s => s.quantity <= s.min_stock_level).length
+  const reorderCount = useMemo(() => {
+    return filteredStocks.filter(s => s.quantity <= (s.product?.reorder_level || 0)).length
   }, [filteredStocks])
+
+  const dangerCount = useMemo(() => {
+    return filteredStocks.filter(s => s.quantity <= (s.product?.danger_level || 0)).length
+  }, [filteredStocks])
+
+  const branchProductCount = useMemo(() => {
+    if (userProfile?.role === 'super_admin') {
+      return products.length
+    }
+    return new Set(filteredStocks.map((s) => s.product_id)).size
+  }, [userProfile, products.length, filteredStocks])
+
+  const branchTransactionCount = useMemo(() => filteredTransactions.length, [filteredTransactions])
+
+  const currentBranchName = userProfile?.role === 'super_admin'
+    ? 'All Branches'
+    : (userProfile?.branch_name || 'Main Branch')
 
   if (authLoading) {
     return (
@@ -202,16 +218,19 @@ export default function InventoryPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{products.length}</div>
+            <div className="text-2xl font-bold">{branchProductCount}</div>
+            {userProfile?.role !== 'super_admin' && (
+              <div className="text-xs text-muted-foreground">Branch-specific product count</div>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-            <AlertTriangle className={`h-4 w-4 ${lowStockCount > 0 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
+            <CardTitle className="text-sm font-medium">Items to Reorder</CardTitle>
+            <AlertTriangle className={`h-4 w-4 ${reorderCount > 0 ? 'text-yellow-600 animate-pulse' : 'text-muted-foreground'}`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${lowStockCount > 0 ? 'text-destructive' : ''}`}>{lowStockCount}</div>
+            <div className={`text-2xl font-bold ${reorderCount > 0 ? 'text-yellow-600' : ''}`}>{reorderCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -220,7 +239,10 @@ export default function InventoryPage() {
             <History className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{transactions.length}</div>
+            <div className="text-2xl font-bold">{branchTransactionCount}</div>
+            {userProfile?.role !== 'super_admin' && (
+              <div className="text-xs text-muted-foreground">Branch-specific transaction count</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -229,9 +251,7 @@ export default function InventoryPage() {
             <Layers className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold truncate">
-              {userProfile.role === 'super_admin' ? 'All Branches' : (userProfile.branch_name || 'Main Branch')}
-            </div>
+            <div className="text-2xl font-bold truncate">{currentBranchName}</div>
           </CardContent>
         </Card>
       </div>
@@ -285,64 +305,110 @@ export default function InventoryPage() {
         <TabsContent value="stocks" className="space-y-4">
           {error && <div className="p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">{error}</div>}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredStocks.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-muted-foreground">
-                No stock items found.
+          {reorderCount > 0 && (
+            <div className="flex gap-4 p-4 rounded-lg bg-yellow-100 text-yellow-900 border border-yellow-200 mb-4 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-yellow-600" />
+              <div className="space-y-1">
+                <h5 className="font-medium leading-none tracking-tight">Reorder Level Reached</h5>
+                <div className="text-sm opacity-90">
+                  <strong>{reorderCount}</strong> product(s) have reached their reorder level. 
+                  {dangerCount > 0 && <span className="text-red-600 font-semibold ml-1">({dangerCount} at danger level!)</span>}
+                  Please review and restock these items soon.
+                </div>
               </div>
-            ) : (
-              filteredStocks.map((stock) => (
-                <Card key={stock.id} className="overflow-hidden group hover:shadow-md transition-all duration-200">
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex gap-2 mb-2">
-                          <Badge variant="outline">{stock.product?.category || 'General'}</Badge>
-                          {userProfile.role === 'super_admin' && selectedBranchId === 'all' && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
-                              {stock.branch?.name || 'Unknown'}
-                            </Badge>
-                          )}
-                        </div>
-                        <CardTitle className="text-lg">{stock.product?.name}</CardTitle>
-                        <CardDescription>{stock.product?.sku}</CardDescription>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-2xl font-bold ${stock.quantity <= stock.min_stock_level ? 'text-destructive' : ''}`}>
-                          {stock.quantity}
-                        </div>
-                        <div className="text-xs text-muted-foreground uppercase">Quantity</div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <div className="flex justify-between items-end">
-                      <div className="space-y-1">
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          Min level: {stock.min_stock_level}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          Last updated: {format(new Date(stock.updated_at), 'MMM d, h:mm a')}
-                        </div>
-                      </div>
-                      {!isReadOnly && (
-                        <Button size="sm" variant="secondary" className="gap-1" onClick={() => handleAdjustStock(stock)}>
-                          Adjust
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+            </div>
+          )}
+
+          <Card>
+            <CardContent className="p-0">
+              <div className="relative overflow-x-auto rounded-lg border">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground uppercase bg-secondary/50">
+                    <tr>
+                      <th className="px-6 py-3">Product Name</th>
+                      <th className="px-6 py-3">SKU</th>
+                      <th className="px-6 py-3">Category</th>
+                      <th className="px-6 py-3">Unit Price</th>
+                      {userProfile.role === 'super_admin' && selectedBranchId === 'all' && (
+                        <th className="px-6 py-3">Branch</th>
                       )}
-                    </div>
-                  </CardContent>
-                  {stock.quantity <= stock.min_stock_level && (
-                    <div className="bg-destructive/10 px-4 py-1 text-[10px] text-destructive font-semibold text-center uppercase tracking-wider">
-                      Low Stock Warning
-                    </div>
-                  )}
-                </Card>
-              ))
-            )}
-          </div>
+                      <th className="px-6 py-3 text-right">Quantity</th>
+                      <th className="px-6 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredStocks.length === 0 ? (
+                      <tr>
+                        <td colSpan={userProfile.role === 'super_admin' && selectedBranchId === 'all' ? 7 : 6} className="px-6 py-12 text-center text-muted-foreground">
+                          No stock items found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredStocks.map((stock) => (
+                        <tr key={stock.id} className="hover:bg-muted/50 transition-colors">
+                          <td className="px-6 py-4 font-medium">
+                            <div className="flex items-center gap-2">
+                              {stock.product?.name}
+                              {stock.quantity <= (stock.product?.danger_level || 0) ? (
+                                <AlertTriangle className="h-4 w-4 text-red-600" />
+                              ) : stock.quantity <= (stock.product?.reorder_level || 0) ? (
+                                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">{stock.product?.sku}</td>
+                          <td className="px-6 py-4">
+                            <Badge variant="secondary">{stock.product?.category || 'General'}</Badge>
+                          </td>
+                          <td className="px-6 py-4">
+                            {stock.product?.unit_price ? `₱${stock.product.unit_price.toLocaleString()}` : 'N/A'}
+                          </td>
+                          {userProfile.role === 'super_admin' && selectedBranchId === 'all' && (
+                            <td className="px-6 py-4">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                {stock.branch?.name || 'Unknown'}
+                              </Badge>
+                            </td>
+                          )}
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className={`font-bold ${
+                                stock.quantity <= (stock.product?.danger_level || 0) ? 'text-red-600' :
+                                stock.quantity <= (stock.product?.min_stock_level || 0) ? 'text-orange-600' :
+                                stock.quantity <= (stock.product?.reorder_level || 0) ? 'text-yellow-600' :
+                                stock.quantity > (stock.product?.max_stock_level || Infinity) ? 'text-blue-600' : ''
+                              }`}>
+                                {stock.quantity}
+                              </span>
+                              {stock.product?.max_stock_level ? (
+                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                  {Math.round((stock.quantity / stock.product.max_stock_level) * 100)}% left
+                                </span>
+                              ) : null}
+                              {stock.quantity <= (stock.product?.reorder_level || 0) && (
+                                <span className={`text-[10px] font-medium ${
+                                  stock.quantity <= (stock.product?.danger_level || 0) ? 'text-red-600' : 'text-yellow-600'
+                                }`}>
+                                  Reorder
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {!isReadOnly && (
+                              <Button size="sm" variant="outline" onClick={() => handleAdjustStock(stock)}>
+                                Adjust
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="products">
@@ -398,42 +464,64 @@ export default function InventoryPage() {
               <CardDescription>Recent stock movements and adjustments.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {filteredTransactions.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-full ${
-                        t.type === 'in' ? 'bg-green-100 text-green-600' : 
-                        t.type === 'out' ? 'bg-red-100 text-red-600' : 
-                        'bg-blue-100 text-blue-600'
-                      }`}>
-                        {t.type === 'in' ? <ArrowDownLeft className="h-4 w-4" /> : 
-                         t.type === 'out' ? <ArrowUpRight className="h-4 w-4" /> : 
-                         <Layers className="h-4 w-4" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold">{t.product?.name}</div>
-                          {userProfile.role === 'super_admin' && selectedBranchId === 'all' && (
-                            <Badge variant="outline" className="text-[10px] h-4 px-1">
-                              {t.branch?.name}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground italic">{t.reason || 'No reason provided'}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-bold ${t.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {t.quantity > 0 ? `+${t.quantity}` : t.quantity}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground uppercase">
-                        {format(new Date(t.created_at), 'MMM d, p')}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div className="relative overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-muted-foreground uppercase bg-secondary/50">
+                      <tr>
+                        <th className="px-4 py-3">Date & Time</th>
+                        <th className="px-4 py-3">Product</th>
+                        <th className="px-4 py-3">Movement</th>
+                        <th className="px-4 py-3 text-right">Qty Change</th>
+                        <th className="px-4 py-3 text-right">Resulting Qty</th>
+                        <th className="px-4 py-3">Reason / Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground whitespace-nowrap">
+                            No stock movements recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredTransactions.map((t) => (
+                          <tr key={t.id} className="hover:bg-muted/50 transition-colors">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {format(new Date(t.created_at), 'MMM d, yyyy p')}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col">
+                                <span className="font-medium">{t.product?.name}</span>
+                                <span className="text-[10px] text-muted-foreground">{t.branch?.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge 
+                                variant="outline" 
+                                className={`text-[10px] uppercase font-bold ${
+                                  t.type === 'in' ? 'bg-green-50 text-green-700 border-green-200' : 
+                                  t.type === 'out' ? 'bg-red-50 text-red-700 border-red-200' : 
+                                  'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}
+                              >
+                                {t.type}
+                              </Badge>
+                            </td>
+                            <td className={`px-4 py-3 text-right font-bold ${t.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {t.quantity > 0 ? `+${t.quantity}` : t.quantity}
+                            </td>
+                            <td className="px-4 py-3 text-right text-muted-foreground">
+                              {t.new_quantity ?? '—'}
+                            </td>
+                            <td className="px-4 py-3 max-w-[200px] truncate" title={t.reason || ''}>
+                              {t.reason || 'Manual Update'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
             </CardContent>
           </Card>
         </TabsContent>
