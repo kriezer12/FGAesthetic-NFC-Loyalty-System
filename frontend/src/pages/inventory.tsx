@@ -13,8 +13,6 @@ import {
   Layers, 
   AlertTriangle,
   ChevronDown,
-  ArrowUpRight,
-  ArrowDownLeft,
   Settings2,
   Trash2
 } from "lucide-react"
