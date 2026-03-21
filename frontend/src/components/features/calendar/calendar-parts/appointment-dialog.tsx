@@ -468,7 +468,7 @@ export function AppointmentDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl p-0 gap-0 h-[92vh] max-h-[860px]">
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 flex flex-col max-h-[85vh]">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0 bg-background">
           <DialogTitle>{isEdit ? "Edit Appointment" : "New Appointment"}</DialogTitle>
           <DialogDescription>
@@ -486,7 +486,7 @@ export function AppointmentDialog({
               <Combobox
                 options={APPOINTMENT_TYPE_OPTIONS}
                 value={appointmentType}
-                onValueChange={setAppointmentType}
+                onValueChange={(val) => setAppointmentType(val as "consultation" | "treatment" | "followup")}
               />
             </div>
 
@@ -578,7 +578,6 @@ export function AppointmentDialog({
                 <TimePicker
                   value={startTime}
                   onChange={setStartTime}
-                  minuteStep={interval as 15 | 30 | 60}
                   minTime={minutesToTimeInput(clinicHours.open * 60)}
                   maxTime={minutesToTimeInput(clinicHours.close * 60)}
                 />
@@ -590,7 +589,6 @@ export function AppointmentDialog({
                 <TimePicker
                   value={endTime}
                   onChange={setEndTime}
-                  minuteStep={interval as 15 | 30 | 60}
                   minTime={minutesToTimeInput(clinicHours.open * 60)}
                   maxTime={minutesToTimeInput(clinicHours.close * 60)}
                 />
