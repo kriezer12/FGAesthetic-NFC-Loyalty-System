@@ -9,9 +9,25 @@ import { supabase } from "@/lib/supabase"
 import { apiCall } from "@/lib/api"
 import { openInvoiceA4Landscape, type ReceiptTemplateData } from "@/lib/receipt-templates"
 import { NotificationToast } from "@/components/ui/notification-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useAuth } from "@/contexts/auth-context"
 import type { Appointment } from "@/types/appointment"
 import type { Service } from "@/types/service"
+
+type Customer = {
+  id: string
+  name: string
+  phone?: string | null
+}
 
 type InventoryProduct = {
   id: string
@@ -119,7 +135,9 @@ type PosInventoryItem = {
   sku?: string | null
   unit_price: number
   is_active?: boolean | null
-  low_stock_threshold?: number | null
+  min_stock_level: number
+  reorder_level: number
+  danger_level: number
   stock_qty: number
 }
 
@@ -169,8 +187,10 @@ export default function CheckoutPage() {
   const [billedAppointmentIds, setBilledAppointmentIds] = useState<Set<string>>(new Set())
   const [services, setServices] = useState<Service[]>([])
   const [products, setProducts] = useState<InventoryProduct[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("")
+  const [selectedCustomerId, setSelectedCustomerId] = useState("")
   const [selectedProductId, setSelectedProductId] = useState("")
   const [productQty, setProductQty] = useState("1")
   const [paymentMethod, setPaymentMethod] = useState("cash")
@@ -201,6 +221,7 @@ export default function CheckoutPage() {
 
   const [amountPaidInput, setAmountPaidInput] = useState("0")
   const [isCheckoutStage, setIsCheckoutStage] = useState(false)
+  const [zConfirmOpen, setZConfirmOpen] = useState(false)
 
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -250,6 +271,7 @@ export default function CheckoutPage() {
           { data: productsData, error: productsError },
           { data: billedData, error: billedError },
           { data: settingsData, error: settingsError },
+          { data: customersData, error: customersError },
         ] = await Promise.all([
           supabase
             .from("appointments")
@@ -274,6 +296,10 @@ export default function CheckoutPage() {
             .select("*")
             .eq("id", "default")
             .maybeSingle(),
+          supabase
+            .from("customers")
+            .select("id, name, phone")
+            .order("name", { ascending: true }),
         ])
 
         if (appointmentsError) throw appointmentsError
@@ -281,12 +307,14 @@ export default function CheckoutPage() {
         if (productsError) throw productsError
         if (billedError) throw billedError
         if (settingsError) throw settingsError
+        if (customersError) throw customersError
 
         setAppointments((appointmentsData || []) as Appointment[])
         setServices((servicesData || []) as Service[])
         setProducts((productsData || []) as InventoryProduct[])
         setBilledAppointmentIds(new Set((billedData || []).map((row: { appointment_id?: string | null }) => row.appointment_id).filter(Boolean) as string[]))
         setBusinessSettings((settingsData || null) as BusinessSettings | null)
+        setCustomers((customersData || []) as Customer[])
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Failed to load checkout data")
       } finally {
@@ -314,6 +342,11 @@ export default function CheckoutPage() {
     }
 
     void fetchBranchMeta()
+    
+    // Always pre-load POS inventory strictly to inform cart product dropdown.
+    if (userProfile !== undefined) {
+      void loadInventory()
+    }
   }, [userProfile?.branch_id])
 
   const billableAppointments = useMemo(() => {
@@ -370,9 +403,16 @@ export default function CheckoutPage() {
     [billableAppointments, packageQueueByCustomer],
   )
 
+  const customerOptions = useMemo(
+    () => customers.map((c) => ({ value: c.id, label: `${c.name}${c.phone ? ` (${c.phone})` : ""}` })),
+    [customers],
+  )
+
   const productOptions = useMemo(
-    () => products.map((product) => ({ value: product.id, label: `${product.name}${product.sku ? ` (${product.sku})` : ""}` })),
-    [products],
+    () => inventoryRows
+      .filter((row) => row.is_active !== false && row.stock_qty > 0)
+      .map((row) => ({ value: row.id, label: `${row.name}${row.sku ? ` (${row.sku})` : ""} - In stock: ${row.stock_qty}` })),
+    [inventoryRows],
   )
 
   const paymentMethodLabel = useMemo(
@@ -426,6 +466,8 @@ export default function CheckoutPage() {
     const appointment = appointments.find((a) => a.id === appointmentId)
     if (!appointment) return
 
+    if (appointment.customer_id) setSelectedCustomerId(appointment.customer_id)
+
     const ids = appointment.service_ids || []
     const nextItems: CartItem[] = ids
       .map((serviceId) => services.find((service) => service.id === serviceId))
@@ -448,7 +490,7 @@ export default function CheckoutPage() {
   const addProductToCart = () => {
     if (!selectedProductId) return
     const qty = Math.max(1, Math.floor(toAmount(productQty)))
-    const product = products.find((p) => p.id === selectedProductId)
+    const product = inventoryRows.find((p) => p.id === selectedProductId)
     if (!product) return
 
     const unitPrice = toAmount(product.unit_price)
@@ -494,7 +536,12 @@ export default function CheckoutPage() {
     })
   }
 
-  const applyQuickCash = (amount: number) => setAmountPaidInput(String(amount))
+  const applyQuickCash = (amount: number) => {
+    setAmountPaidInput((prev) => {
+      const current = parseFloat(prev || "0")
+      return String(current + amount)
+    })
+  }
 
   const buildTemplateData = (receipt: ReceiptSnapshot, modeLabel: ReceiptTemplateData["modeLabel"]): ReceiptTemplateData => {
     const tx = receipt.transaction
@@ -709,7 +756,7 @@ export default function CheckoutPage() {
 
       const primary = await supabase
         .from("inventory_products")
-        .select("id, name, sku, unit_price, is_active, low_stock_threshold")
+        .select("id, name, sku, unit_price, is_active, min_stock_level, reorder_level, danger_level")
         .order("name", { ascending: true })
 
       productsData = primary.data as any[] | null
@@ -752,7 +799,9 @@ export default function CheckoutPage() {
         sku: product.sku,
         unit_price: Number(product.unit_price || 0),
         is_active: product.is_active ?? true,
-        low_stock_threshold: product.low_stock_threshold ?? 0,
+        min_stock_level: Number(product.min_stock_level || 0),
+        reorder_level: Number(product.reorder_level || 0),
+        danger_level: Number(product.danger_level || 0),
         stock_qty: stockMap.get(product.id) || 0,
       }))
 
@@ -791,7 +840,34 @@ export default function CheckoutPage() {
     }
   }
 
+  const generateXReading = () => {
+    const filtered = logTransactions.filter((tx) => {
+      const txDate = new Date(tx.created_at)
+      const dateKey = txDate.toISOString().slice(0, 10)
+      return dateKey === zBusinessDate
+    })
+
+    if (filtered.length === 0) {
+      setErrorMessage("No sales transactions found for previewing X-Reading.")
+      return
+    }
+
+    const snapshot = buildZReadingSnapshot(zBusinessDate, filtered, 0)
+    printZReading(snapshot, true)
+    setSuccessMessage(`X-Reading report generated for ${zBusinessDate}. Sales counter remains active.`)
+  }
+
+  const triggerZReadingConfirm = () => {
+    const alreadyExists = zReadingHistory.some((z) => z.businessDate === zBusinessDate)
+    if (alreadyExists) {
+      setErrorMessage(`A Z-Reading has already been generated for ${zBusinessDate}. This report can only be finalized once per operational day.`)
+      return
+    }
+    setZConfirmOpen(true)
+  }
+
   const generateZReading = async () => {
+    setZConfirmOpen(false)
     const filtered = logTransactions.filter((tx) => {
       const txDate = new Date(tx.created_at)
       const dateKey = txDate.toISOString().slice(0, 10)
@@ -818,10 +894,10 @@ export default function CheckoutPage() {
     setSuccessMessage(`Z-Reading #${snapshot.readingNo} generated for ${snapshot.businessDate}.`)
   }
 
-  const printZReading = (z: ZReadingSnapshot) => {
+  const printZReading = (z: ZReadingSnapshot, isXReading = false) => {
     if (typeof window === "undefined") return
 
-    const reportTitle = `${z.branchName || branchMeta?.name || "Branch"} - Z-Reading Report`
+    const reportTitle = `${z.branchName || branchMeta?.name || "Branch"} - ${isXReading ? "X" : "Z"}-Reading Report`
 
     const rows = Object.entries(z.paymentBreakdown)
       .map(([method, amount]) => `<tr><td>${method.toUpperCase()}</td><td style="text-align:right;">${formatMoney(amount)}</td></tr>`)
@@ -845,7 +921,8 @@ export default function CheckoutPage() {
         </head>
         <body>
           <h1>${reportTitle}</h1>
-          <div>Reading No: <strong>${z.readingNo}</strong></div>
+          <div>Reading Type: <strong>${isXReading ? "X-READING (PREVIEW)" : "Z-READING (FINAL)"}</strong></div>
+          <div>Reading No: <strong>${z.readingNo === 0 ? "N/A" : z.readingNo}</strong></div>
           <div>Business Date: <strong>${z.businessDate}</strong></div>
           <div>Generated At: ${new Date(z.generatedAt).toLocaleString()}</div>
           <div>Transactions: ${z.txCount}</div>
@@ -998,11 +1075,10 @@ export default function CheckoutPage() {
       const accessToken = sessionData.session?.access_token
       if (!accessToken) throw new Error("Missing session token. Please sign in again.")
 
-      const selectedAppointment = appointments.find((a) => a.id === selectedAppointmentId)
       const payload = {
         branch_id: userProfile?.branch_id || null,
         appointment_id: selectedAppointmentId || null,
-        customer_id: selectedAppointment?.customer_id || null,
+        customer_id: selectedCustomerId || null,
         payment_method: paymentMethod,
         notes: paymentReference.trim() ? `Payment Reference (${paymentMethodLabel}): ${paymentReference.trim()}` : null,
         subtotal,
@@ -1049,7 +1125,7 @@ export default function CheckoutPage() {
         paymentReference: paymentReference.trim(),
         adjustmentLabel: selectedAdjustment ? `${selectedAdjustment.name} (${selectedAdjustment.percent}%)` : "",
         seniorPwdDiscount: selectedAdjustment && ["senior", "pwd"].includes(selectedAdjustment.id) ? discount : 0,
-        customerName: selectedAppointment?.customer_name || "Walk-in",
+        customerName: selectedCustomerId ? customers.find(c => c.id === selectedCustomerId)?.name || "Walk-in" : "Walk-in",
         branchAddress: branchMeta?.address || businessSettings?.address || "NOT SET",
         branchName: branchMeta?.name || "N/A",
         businessSettings,
@@ -1064,6 +1140,8 @@ export default function CheckoutPage() {
 
       setCartItems([])
       setSelectedAppointmentId("")
+      setSelectedCustomerId("")
+      setSelectedProductId("")
       setAmountPaidInput("0")
       setPaymentMethod("cash")
       setPaymentReference("")
@@ -1161,6 +1239,20 @@ export default function CheckoutPage() {
               />
               <p className="text-xs text-muted-foreground">
                 Recurring/package schedules are billed once. Follow-up occurrences in the same package are excluded after billing.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Customer <span>(Retail-only)</span></p>
+              <Combobox
+                options={customerOptions}
+                value={selectedCustomerId}
+                onValueChange={setSelectedCustomerId}
+                placeholder="Walk-in checkout or select profile"
+                emptyMessage="No customers found"
+              />
+              <p className="text-xs text-muted-foreground">
+                Automatically selected if loading from an appointment. Use for pure retail walk-in checkouts.
               </p>
             </div>
 
@@ -1397,23 +1489,30 @@ export default function CheckoutPage() {
                     </tr>
                   ) : (
                     filteredInventoryRows.map((row) => {
-                      const threshold = Number(row.low_stock_threshold || 0)
-                      const lowStock = threshold > 0 && row.stock_qty <= threshold
+                      const qty = row.stock_qty;
+                      let statusNode = null;
+                      
+                      if (!row.is_active) {
+                        statusNode = <span className="rounded-md bg-muted px-2 py-1 text-xs whitespace-nowrap">Inactive</span>
+                      } else if (qty <= 0) {
+                        statusNode = <span className="rounded-md bg-red-100 px-2 py-1 text-xs text-red-900 font-semibold whitespace-nowrap">No Stock</span>
+                      } else if (row.danger_level > 0 && qty <= row.danger_level) {
+                        statusNode = <span className="rounded-md bg-red-100 px-2 py-1 text-xs text-red-900 font-semibold whitespace-nowrap">Danger</span>
+                      } else if (row.min_stock_level > 0 && qty <= row.min_stock_level) {
+                        statusNode = <span className="rounded-md bg-orange-100 px-2 py-1 text-xs text-orange-900 font-semibold whitespace-nowrap">Warning</span>
+                      } else if (row.reorder_level > 0 && qty <= row.reorder_level) {
+                        statusNode = <span className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 font-semibold whitespace-nowrap">Reorder</span>
+                      } else {
+                        statusNode = <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-900 font-medium whitespace-nowrap">Healthy</span>
+                      }
+
                       return (
                         <tr key={row.id} className="border-t">
                           <td className="px-3 py-2 font-medium">{row.name}</td>
                           <td className="px-3 py-2">{row.sku || "-"}</td>
                           <td className="px-3 py-2 text-right">{formatMoney(row.unit_price)}</td>
-                          <td className="px-3 py-2 text-right">{row.stock_qty}</td>
-                          <td className="px-3 py-2">
-                            {!row.is_active ? (
-                              <span className="rounded-md bg-muted px-2 py-1 text-xs">Inactive</span>
-                            ) : lowStock ? (
-                              <span className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900">Low Stock</span>
-                            ) : (
-                              <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-900">Healthy</span>
-                            )}
-                          </td>
+                          <td className="px-3 py-2 text-right font-bold">{qty}</td>
+                          <td className="px-3 py-2">{statusNode}</td>
                         </tr>
                       )
                     })
@@ -1421,6 +1520,30 @@ export default function CheckoutPage() {
                 </tbody>
               </table>
             </div>
+
+            <AlertDialog open={zConfirmOpen} onOpenChange={setZConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Generate Final Z-Reading Report?</AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3">
+                    <p>
+                      <strong>Business Date:</strong> {zBusinessDate}
+                    </p>
+                    <p>
+                      This action signifies the end of the operational business day. 
+                      Final Z-Reading reports finalize sales records for the day and can only be executed once.
+                    </p>
+                    <p className="font-semibold text-destructive">
+                      Are you sure you want to end the operational day?
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={generateZReading}>Finalize Day & Print</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -1451,14 +1574,20 @@ export default function CheckoutPage() {
                       <p className="text-xs text-muted-foreground">Business Date</p>
                       <Input type="date" value={zBusinessDate} onChange={(e) => setZBusinessDate(e.target.value)} className="w-48" />
                     </div>
-                    <Button type="button" onClick={generateZReading}>Generate Z-Reading</Button>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={generateXReading}>X-Reading (Preview)</Button>
+                      <Button type="button" onClick={triggerZReadingConfirm}>Final Z-Reading</Button>
+                    </div>
                     {zReadingReport && (
-                      <Button type="button" variant="outline" onClick={() => printZReading(zReadingReport)}>
+                      <Button type="button" variant="ghost" onClick={() => printZReading(zReadingReport)}>
                         <Download className="mr-2 h-4 w-4" />
-                        Print Latest
+                        Print Z-Reading
                       </Button>
                     )}
                   </div>
+                  <p className="text-[10px] text-muted-foreground italic">
+                    X-Reading is a preview of the day's sales. Final Z-Reading signifies the end of the operational day and can only be done once.
+                  </p>
 
                   {zReadingReport && (
                     <div className="grid gap-2 md:grid-cols-3 text-sm">
