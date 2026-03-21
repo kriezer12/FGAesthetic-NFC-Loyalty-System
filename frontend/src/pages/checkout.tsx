@@ -159,7 +159,6 @@ const defaultAdjustments: AdjustmentOption[] = [
 ]
 
 const localAdjustmentStorageKey = "fg_pos_adjustments"
-const localZReadingStorageKey = "fg_pos_zreadings"
 
 export default function CheckoutPage() {
   const { userProfile } = useAuth()
@@ -236,18 +235,6 @@ export default function CheckoutPage() {
       }
     } catch {
       setAdjustmentOptions(defaultAdjustments)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    try {
-      const raw = window.localStorage.getItem(localZReadingStorageKey)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) setZReadingHistory(parsed)
-    } catch {
-      setZReadingHistory([])
     }
   }, [])
 
@@ -598,6 +585,60 @@ export default function CheckoutPage() {
     }
   }
 
+  const loadZReadings = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error("Missing session token")
+
+      const res = await apiCall(`/pos/z-readings?page=1&per_page=100`, { method: "GET", authToken: accessToken })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body?.error || "Failed to load z-reading history")
+
+      const readings = (body?.z_readings || []) as ZReadingSnapshot[]
+      setZReadingHistory(readings)
+      if (!zReadingReport && readings.length > 0) {
+        setZReadingReport(readings[0])
+      }
+    } catch (err) {
+      console.warn("Z-reading load failed, using local cache", err)
+    }
+  }
+
+  const persistZReading = async (snapshot: ZReadingSnapshot) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token
+      if (!accessToken) throw new Error("Missing session token")
+
+      const payload = {
+        branch_id: userProfile?.branch_id || null,
+        business_date: snapshot.businessDate,
+        reading_no: snapshot.readingNo,
+        generated_at: snapshot.generatedAt,
+        tx_count: snapshot.txCount,
+        gross_sales: snapshot.grossSales,
+        discount_total: snapshot.discountTotal,
+        net_sales: snapshot.netSales,
+        vatable_sales: snapshot.vatableSales,
+        vat_amount: snapshot.vatAmount,
+        payment_breakdown: snapshot.paymentBreakdown,
+      }
+
+      const res = await apiCall("/pos/z-readings", {
+        method: "POST",
+        authToken: accessToken,
+        body: JSON.stringify(payload),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body?.error || "Failed to save z-reading")
+      return true
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to persist z-reading")
+      return false
+    }
+  }
+
   const loadLogs = async () => {
     setLogsLoading(true)
     try {
@@ -608,6 +649,8 @@ export default function CheckoutPage() {
       const txRes = await apiCall("/pos/transactions", { method: "GET", authToken: accessToken })
       const txBody = await txRes.json()
       if (!txRes.ok) throw new Error(txBody?.error || "Failed to fetch transaction logs")
+
+      await loadZReadings()
 
       const txRows = (txBody?.transactions || []) as LogTx[]
       setLogTransactions(txRows)
@@ -748,7 +791,7 @@ export default function CheckoutPage() {
     }
   }
 
-  const generateZReading = () => {
+  const generateZReading = async () => {
     const filtered = logTransactions.filter((tx) => {
       const txDate = new Date(tx.created_at)
       const dateKey = txDate.toISOString().slice(0, 10)
@@ -763,13 +806,15 @@ export default function CheckoutPage() {
     const lastNo = zReadingHistory.length > 0 ? Math.max(...zReadingHistory.map((z) => z.readingNo)) : 0
     const snapshot = buildZReadingSnapshot(zBusinessDate, filtered, lastNo + 1)
 
+    const saved = await persistZReading(snapshot)
+    if (!saved) {
+      setErrorMessage("Z-Reading generated locally, but failed to persist to server.")
+    }
+
     const nextHistory = [snapshot, ...zReadingHistory]
     setZReadingReport(snapshot)
     setZReadingHistory(nextHistory)
     setZHistoryPage(1)
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(localZReadingStorageKey, JSON.stringify(nextHistory))
-    }
     setSuccessMessage(`Z-Reading #${snapshot.readingNo} generated for ${snapshot.businessDate}.`)
   }
 
@@ -849,12 +894,16 @@ export default function CheckoutPage() {
     const snapshot = buildZReadingSnapshot(previousDate, previousDayTransactions, lastNo + 1)
     const nextHistory = [snapshot, ...zReadingHistory]
 
+    void (async () => {
+      const saved = await persistZReading(snapshot)
+      if (!saved) {
+        setErrorMessage("Auto-generated z-reading could not be persisted to server.")
+      }
+    })()
+
     setZReadingReport(snapshot)
     setZReadingHistory(nextHistory)
     setZHistoryPage(1)
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(localZReadingStorageKey, JSON.stringify(nextHistory))
-    }
     setSuccessMessage(`Auto-generated end-of-day Z-Reading #${snapshot.readingNo} for ${snapshot.businessDate}.`)
   }, [activeView, logsLoading, logTransactions, zReadingHistory, branchMeta?.name])
 
