@@ -256,14 +256,15 @@ export default function CustomersPage() {
   const getAppointmentStatusVariant = (status: string | undefined) => {
     switch (status) {
       case "completed":
-        return "secondary"
+        return "success"
       case "cancelled":
         return "destructive"
       case "in-progress":
-        return "default"
+        return "warning"
       case "confirmed":
-        return "default"
+        return "success"
       case "scheduled":
+        return "info"
       default:
         return "outline"
     }
@@ -971,7 +972,7 @@ export default function CustomersPage() {
         }
       }
 
-      setSelectedCustomer(customer)
+      setSelectedCustomer((customer as Customer) || null)
       setModalView("details")
       if (state.fromNfc) {
         setCameFromNfc(true)
@@ -1656,7 +1657,7 @@ export default function CustomersPage() {
                               // Sort groups by the start time of their primary appointment (descending for history)
                               groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
 
-                              const openTreatmentDocForGroup = (g: { sessions: any[]; isPackage: boolean }) => {
+                              const openTreatmentDocForGroup = (g: { sessions: any[]; isPackage: boolean; primaryAppointment: any }) => {
                                 const a = g.primaryAppointment
                                 if (a.customer_id && a.id) {
                                   setSelectedAppointment(a)
@@ -1688,8 +1689,8 @@ export default function CustomersPage() {
                                   g.sessions.every((s) => s.status === "completed" || s.status === "cancelled")
                                 const statusVariant = isPackage
                                   ? isPackageFinished
-                                    ? "secondary"
-                                    : "default"
+                                    ? "success"
+                                    : "warning"
                                   : getAppointmentStatusVariant(a.status)
                                 const statusLabel = isPackage
                                   ? isPackageFinished
@@ -1713,7 +1714,7 @@ export default function CustomersPage() {
                                                 <p className="font-medium text-sm">
                                                   {a.title}
                                                 </p>
-                                                <Badge variant={statusVariant}>
+                                                <Badge variant={statusVariant} className="capitalize">
                                                   {statusLabel}
                                                 </Badge>
                                               </div>
@@ -2232,7 +2233,10 @@ export default function CustomersPage() {
                         {treatmentGroupCompletedSessions} of {treatmentGroupTotalSessions} sessions completed • {treatmentGroupRemainingSessions} remaining
                       </p>
                     </div>
-                    <Badge variant="secondary" className="uppercase">
+                    <Badge 
+                      variant={treatmentGroupCompletedSessions === treatmentGroupTotalSessions ? "success" : "warning"} 
+                      className="capitalize"
+                    >
                       {treatmentGroupCompletedSessions === treatmentGroupTotalSessions
                         ? "Complete"
                         : "In progress"}
@@ -2265,7 +2269,7 @@ export default function CustomersPage() {
                                     })}
                                   </p>
                                 </div>
-                                <Badge variant={getAppointmentStatusVariant(s.status)} className="uppercase">
+                                <Badge variant={getAppointmentStatusVariant(s.status)} className="capitalize">
                                   {s.status?.replace("-", " ") || "Unknown"}
                                 </Badge>
                               </div>

@@ -299,7 +299,7 @@ export default function InventoryPage() {
                         <div className="flex gap-2 mb-2">
                           <Badge variant="outline">{stock.product?.category || 'General'}</Badge>
                           {userProfile.role === 'super_admin' && selectedBranchId === 'all' && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
+                            <Badge variant="info">
                               {stock.branch?.name || 'Unknown'}
                             </Badge>
                           )}
@@ -403,9 +403,9 @@ export default function InventoryPage() {
                   <div key={t.id} className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-4">
                       <div className={`p-2 rounded-full ${
-                        t.type === 'in' ? 'bg-green-100 text-green-600' : 
-                        t.type === 'out' ? 'bg-red-100 text-red-600' : 
-                        'bg-blue-100 text-blue-600'
+                        t.type === 'in' ? 'bg-emerald-500/10 text-emerald-600' : 
+                        t.type === 'out' ? 'bg-destructive/10 text-destructive' : 
+                        'bg-sky-500/10 text-sky-600'
                       }`}>
                         {t.type === 'in' ? <ArrowDownLeft className="h-4 w-4" /> : 
                          t.type === 'out' ? <ArrowUpRight className="h-4 w-4" /> : 

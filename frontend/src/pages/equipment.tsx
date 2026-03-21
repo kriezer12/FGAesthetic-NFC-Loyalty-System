@@ -150,11 +150,11 @@ export default function EquipmentPage() {
   const getStatusBadge = (status: EquipmentStatus) => {
     switch (status) {
       case 'active':
-        return <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 gap-1"><CheckCircle2 className="h-3 w-3" /> Active</Badge>
+        return <Badge variant="success" className="gap-1"><CheckCircle2 className="h-3 w-3" /> Active</Badge>
       case 'maintenance':
-        return <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 gap-1"><Construction className="h-3 w-3" /> Maintenance</Badge>
+        return <Badge variant="warning" className="gap-1"><Construction className="h-3 w-3" /> Maintenance</Badge>
       case 'out_of_order':
-        return <Badge className="bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20 gap-1"><AlertCircle className="h-3 w-3" /> Out of Order</Badge>
+        return <Badge variant="destructive" className="gap-1"><AlertCircle className="h-3 w-3" /> Out of Order</Badge>
     }
   }
 
