@@ -345,13 +345,15 @@ def list_z_readings():
     end = start + per_page - 1
 
     try:
-        total_resp = supabase.table("z_readings").select("id", count="exact", head=True)
+        # Get count manually to avoid postgrest-py 'head' parameter conflicts in some library versions
+        count_query = supabase.table("z_readings").select("id")
         if caller_role in ["branch_admin", "staff"] and caller_branch_id:
-            total_resp = total_resp.eq("branch_id", caller_branch_id)
+            count_query = count_query.eq("branch_id", caller_branch_id)
         if business_date:
-            total_resp = total_resp.eq("business_date", business_date)
-        total_res = total_resp.execute()
-        total_count = total_res.count if total_res.count is not None else 0
+            count_query = count_query.eq("business_date", business_date)
+        
+        count_res = count_query.execute()
+        total_count = len(count_res.data) if count_res.data else 0
 
         page_resp = query.range(start, end).execute()
     except Exception as e:
@@ -395,6 +397,21 @@ def create_z_reading():
     if missing:
         return jsonify({"error": "Missing fields", "missing": missing}), 400
 
+    # Prevent duplicate final z-reading for same branch and business date
+    existing = supabase.table("z_readings")\
+        .select("id")\
+        .eq("branch_id", branch_id)\
+        .eq("business_date", payload.get("business_date"))\
+        .maybe_single()\
+        .execute()
+
+    if existing.data:
+        return jsonify({"error": "Z-Reading already exists for this business date", "business_date": payload.get("business_date")}), 409
+
+    payment_breakdown = payload.get("payment_breakdown")
+    if isinstance(payment_breakdown, (dict, list)):
+        payment_breakdown = json.dumps(payment_breakdown)
+
     z_payload = {
         "id": str(uuid.uuid4()),
         "branch_id": branch_id,
@@ -408,7 +425,7 @@ def create_z_reading():
         "net_sales": payload.get("net_sales"),
         "vatable_sales": payload.get("vatable_sales"),
         "vat_amount": payload.get("vat_amount"),
-        "payment_breakdown": payload.get("payment_breakdown"),
+        "payment_breakdown": payment_breakdown,
     }
 
     try:
