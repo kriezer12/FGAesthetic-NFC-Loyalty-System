@@ -365,7 +365,7 @@ export default function InventoryPage() {
                           </td>
                           {userProfile.role === 'super_admin' && selectedBranchId === 'all' && (
                             <td className="px-6 py-4">
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                              <Badge variant="info">
                                 {stock.branch?.name || 'Unknown'}
                               </Badge>
                             </td>
@@ -497,12 +497,8 @@ export default function InventoryPage() {
                             </td>
                             <td className="px-4 py-3">
                               <Badge 
-                                variant="outline" 
-                                className={`text-[10px] uppercase font-bold ${
-                                  t.type === 'in' ? 'bg-green-50 text-green-700 border-green-200' : 
-                                  t.type === 'out' ? 'bg-red-50 text-red-700 border-red-200' : 
-                                  'bg-blue-50 text-blue-700 border-blue-200'
-                                }`}
+                                variant={t.type === 'in' ? 'success' : t.type === 'out' ? 'destructive' : 'info'}
+                                className="text-[10px] uppercase font-bold"
                               >
                                 {t.type}
                               </Badge>
