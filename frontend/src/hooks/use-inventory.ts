@@ -9,6 +9,10 @@ export interface Product {
     sku: string
     category: string | null
     unit_price: number
+    min_stock_level: number
+    max_stock_level: number
+    reorder_level: number
+    danger_level: number
     created_at: string
     updated_at: string
 }
@@ -30,6 +34,8 @@ export interface Transaction {
     branch_id: string
     type: 'in' | 'out' | 'adjustment' | 'transfer'
     quantity: number
+    previous_quantity: number
+    new_quantity: number
     reason: string | null
     performed_by: string | null
     created_at: string
@@ -174,7 +180,7 @@ export function useInventory() {
             
             if (stockError) throw stockError
 
-            // 3. Log transaction
+            // 3. Log transaction (Audit Log)
             const { error: transError } = await supabase
                 .from("inventory_transactions")
                 .insert({
@@ -182,6 +188,8 @@ export function useInventory() {
                     branch_id: params.branchId,
                     type: params.type,
                     quantity: params.quantity,
+                    previous_quantity: currentStock?.quantity || 0,
+                    new_quantity: newQuantity,
                     reason: params.reason,
                     performed_by: userProfile?.id
                 })

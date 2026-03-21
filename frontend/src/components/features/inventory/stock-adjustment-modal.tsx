@@ -30,7 +30,8 @@ export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: St
   const [loading, setLoading] = useState(false)
   const [adjustmentType, setAdjustmentType] = useState<'in' | 'out' | 'adjustment'>('adjustment')
   const [quantity, setQuantity] = useState<number | "">(0)
-  const [reason, setReason] = useState("")
+  const [reasonCategory, setReasonCategory] = useState("Manual Audit")
+  const [notes, setNotes] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,11 +55,12 @@ export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: St
         branchId: stock.branch_id,
         quantity: actualQuantity,
         type: adjustmentType,
-        reason: reason
+        reason: notes ? `[${reasonCategory}] ${notes}` : reasonCategory
       })
       onOpenChange(false)
       setQuantity(0)
-      setReason("")
+      setReasonCategory("Manual Audit")
+      setNotes("")
     } catch (error) {
       console.error("Failed to adjust stock:", error)
     } finally {
@@ -114,13 +116,28 @@ export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: St
               </p>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="reason">Reason / Notes</Label>
+              <Label htmlFor="reasonCategory">Reason Category</Label>
+              <SelectNative
+                id="reasonCategory"
+                value={reasonCategory}
+                onChange={(e) => setReasonCategory(e.target.value)}
+              >
+                <option value="Manual Audit">Manual Audit / Correction</option>
+                <option value="New Delivery">New Delivery / Restock</option>
+                <option value="Damaged Goods">Damaged Goods</option>
+                <option value="Expired">Expired Items</option>
+                <option value="Internal Use">Internal consumption</option>
+                <option value="Customer Return">Customer Return</option>
+                <option value="Other">Other</option>
+              </SelectNative>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="notes">Additional Notes (Optional)</Label>
               <Input
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Weekly restock, Damaged, New shipment"
-                required
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Details of the adjustment..."
               />
             </div>
           </div>
@@ -128,7 +145,7 @@ export function StockAdjustmentModal({ open, onOpenChange, stock, onAdjust }: St
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || (adjustmentType !== 'adjustment' && quantity <= 0)}>
+            <Button type="submit" disabled={loading || (adjustmentType !== 'adjustment' && Number(quantity) <= 0)}>
               {loading ? "Applying..." : "Apply Adjustment"}
             </Button>
           </DialogFooter>

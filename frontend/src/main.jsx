@@ -38,6 +38,9 @@ const InventoryPage = lazy(() => import("./pages/inventory.tsx"))
 const EquipmentPage = lazy(() => import("./pages/equipment.tsx"))
 const ResetPasswordPage = lazy(() => import("./pages/reset-password.tsx"))
 const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
+const CheckoutPage = lazy(() => import("./pages/checkout.tsx"))
+const SalesReportsPage = lazy(() => import("./pages/sales-reports.tsx"))
+const PosSettingsPage = lazy(() => import("./pages/pos-settings.tsx"))
 
 // Loading fallback component
 function PageLoader() {
@@ -90,6 +93,9 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/accounts" element={<AccountsPage />} />
           <Route path="/dashboard/reports" element={<ReportsPage />} />
           <Route path="/dashboard/inventory" element={<InventoryPage />} />
+          <Route path="/dashboard/checkout" element={<CheckoutPage />} />
+          <Route path="/dashboard/pos-settings" element={<PosSettingsPage />} />
+          <Route path="/dashboard/sales-reports" element={<SalesReportsPage />} />
           <Route path="/dashboard/equipment" element={<EquipmentPage />} />
         </Route>
       </Routes>

@@ -58,9 +58,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .select("id, role, email, full_name, branch_id, avatar_url, branches(name)")
         .eq("id", userId)
         .single()
+
       if (error) {
         console.error("Error fetching user profile:", error)
-        console.log("Attempted to fetch with userId:", userId)
         setUserProfile(null)
       } else {
         // if branch relation included, normalize to branch_name field
