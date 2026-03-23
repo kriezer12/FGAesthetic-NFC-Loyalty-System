@@ -55,8 +55,21 @@ export async function logUserAction(params: LogUserActionParams) {
       branch_id: params.branchId,
       changes: params.changes,
       metadata,
-      created_at: new Date().toISOString(),
+      // Supplying created_at manually is fine, but Supabase default now() can handle it too.
     });
+
+    if (error) {
+       // Using console.table for easier debugging in the user's browser if they check.
+       console.error("Supabase User Log Insertion Failed:");
+       console.table({
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+       });
+    } else {
+       console.log(`[UserLog] Successfully logged: ${params.actionType}`);
+    }
 
     if (error) {
       console.error("Error inserting user log:", error);

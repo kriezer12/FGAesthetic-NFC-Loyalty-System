@@ -9,17 +9,23 @@ import { supabase } from "@/lib/supabase"
 import { apiCall } from "@/lib/api"
 import { openInvoiceA4Landscape, type ReceiptTemplateData } from "@/lib/receipt-templates"
 import { NotificationToast } from "@/components/ui/notification-toast"
+
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useAuth } from "@/contexts/auth-context"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import type { Appointment } from "@/types/appointment"
 import type { Service } from "@/types/service"
 
@@ -109,6 +115,7 @@ type LogTx = {
   receipt_number: string
   payment_method?: string | null
   notes?: string | null
+  status?: string | null
   subtotal?: number | null
   discount_amount?: number | null
   vatable_sales?: number | null
@@ -222,6 +229,10 @@ export default function CheckoutPage() {
   const [amountPaidInput, setAmountPaidInput] = useState("0")
   const [isCheckoutStage, setIsCheckoutStage] = useState(false)
   const [zConfirmOpen, setZConfirmOpen] = useState(false)
+
+  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false)
+  const [voidTarget, setVoidTarget] = useState<LogTx | null>(null)
+  const [voidReason, setVoidReason] = useState("")
 
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -638,17 +649,34 @@ export default function CheckoutPage() {
       const accessToken = sessionData.session?.access_token
       if (!accessToken) throw new Error("Missing session token")
 
-      const res = await apiCall(`/pos/z-readings?page=1&per_page=100`, { method: "GET", authToken: accessToken })
+      const res = await apiCall(`/pos/z-readings?page=1&per_page=100`, { 
+        method: "GET", 
+        authToken: accessToken 
+      })
       const body = await res.json()
       if (!res.ok) throw new Error(body?.error || "Failed to load z-reading history")
 
-      const readings = (body?.z_readings || []) as ZReadingSnapshot[]
+      const rawReadings = (body?.z_readings || []) as any[]
+      const readings: ZReadingSnapshot[] = rawReadings.map(row => ({
+         readingNo: Number(row.reading_no),
+         branchName: branchMeta?.name || "Branch",
+         businessDate: row.business_date,
+         generatedAt: row.generated_at,
+         txCount: Number(row.tx_count || 0),
+         grossSales: Number(row.gross_sales || 0),
+         discountTotal: Number(row.discount_total || 0),
+         netSales: Number(row.net_sales || 0),
+         vatableSales: Number(row.vatable_sales || 0),
+         vatAmount: Number(row.vat_amount || 0),
+         paymentBreakdown: typeof row.payment_breakdown === 'object' ? row.payment_breakdown : JSON.parse(row.payment_breakdown || "{}")
+      }))
+
       setZReadingHistory(readings)
       if (!zReadingReport && readings.length > 0) {
         setZReadingReport(readings[0])
       }
     } catch (err) {
-      console.warn("Z-reading load failed, using local cache", err)
+      console.warn("Z-reading load failed (API)", err)
     }
   }
 
@@ -656,7 +684,7 @@ export default function CheckoutPage() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const accessToken = sessionData.session?.access_token
-      if (!accessToken) throw new Error("Missing session token")
+      if (!accessToken) throw new Error("Missing session")
 
       const payload = {
         branch_id: userProfile?.branch_id || null,
@@ -677,11 +705,14 @@ export default function CheckoutPage() {
         authToken: accessToken,
         body: JSON.stringify(payload),
       })
+      
       const body = await res.json()
       if (!res.ok) throw new Error(body?.error || "Failed to save z-reading")
+      
       return true
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to persist z-reading")
+      const errorMsg = err instanceof Error ? err.message : "Failed to persist z-reading"
+      setErrorMessage(errorMsg)
       return false
     }
   }
@@ -842,6 +873,7 @@ export default function CheckoutPage() {
 
   const generateXReading = () => {
     const filtered = logTransactions.filter((tx) => {
+      if (tx.status === "voided") return false
       const txDate = new Date(tx.created_at)
       const dateKey = txDate.toISOString().slice(0, 10)
       return dateKey === zBusinessDate
@@ -858,6 +890,7 @@ export default function CheckoutPage() {
   }
 
   const triggerZReadingConfirm = () => {
+    console.debug("triggerZReadingConfirm", { zBusinessDate, zReadingHistoryLength: zReadingHistory.length })
     const alreadyExists = zReadingHistory.some((z) => z.businessDate === zBusinessDate)
     if (alreadyExists) {
       setErrorMessage(`A Z-Reading has already been generated for ${zBusinessDate}. This report can only be finalized once per operational day.`)
@@ -866,32 +899,144 @@ export default function CheckoutPage() {
     setZConfirmOpen(true)
   }
 
+  const triggerVoidTransaction = (tx: LogTx) => {
+    setVoidTarget(tx)
+    setVoidReason("")
+    setVoidConfirmOpen(true)
+  }
+
+  const confirmVoidTransaction = async () => {
+    if (!voidTarget) return
+    if (!voidReason.trim()) {
+      setErrorMessage("A valid reason is required to void this transaction.")
+      return
+    }
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session?.access_token) throw new Error("Missing session")
+
+      const { error } = await supabase
+         .from("transactions")
+         .update({ 
+           status: "voided",
+           notes: (voidTarget.notes ? voidTarget.notes + "\n" : "") + `VOIDED: ${voidReason.trim()}`
+         })
+         .eq("id", voidTarget.id)
+      
+      if (error) throw error
+
+      const { data: txItemsData } = await supabase
+         .from("transaction_items")
+         .select("id, inventory_product_id, quantity")
+         .eq("transaction_id", voidTarget.id)
+
+      if (txItemsData && txItemsData.length > 0) {
+        for (const item of txItemsData) {
+           if (item.inventory_product_id) {
+             const branchId = voidTarget.branch_id || userProfile?.branch_id
+             
+             const { data: stockData } = await supabase
+                .from("inventory_stocks")
+                .select("quantity")
+                .eq("product_id", item.inventory_product_id)
+                .eq("branch_id", branchId)
+                .maybeSingle()
+
+             const currentQty = stockData ? (stockData.quantity || 0) : 0
+             const newQty = currentQty + (item.quantity || 0)
+
+             await supabase
+                .from("inventory_stocks")
+                .upsert({
+                   product_id: item.inventory_product_id,
+                   branch_id: branchId,
+                   quantity: newQty,
+                   updated_at: new Date().toISOString()
+                }, { onConflict: "product_id,branch_id" })
+
+             await supabase
+                .from("inventory_transactions")
+                .insert({
+                   id: crypto.randomUUID(),
+                   product_id: item.inventory_product_id,
+                   branch_id: branchId,
+                   type: "in",
+                   quantity: item.quantity,
+                   previous_quantity: currentQty,
+                   new_quantity: newQty,
+                   reason: `Voided Receipt ${voidTarget.receipt_number}`,
+                   performed_by: userProfile?.id
+                })
+           }
+        }
+      }
+
+      setLogTransactions(prev => prev.map(tx => tx.id === voidTarget.id ? { ...tx, status: "voided", notes: (tx.notes ? tx.notes + "\n" : "") + `VOIDED: ${voidReason.trim()}` } : tx))
+      
+      try {
+        await supabase.from("user_logs").insert({
+           user_id: sessionData.session.user.id,
+           user_email: sessionData.session.user.email,
+           user_name: userProfile?.full_name || sessionData.session.user.email,
+           action_type: "voided_transactions",
+           entity_type: "transaction",
+           entity_id: voidTarget.id,
+           entity_name: `[REFUND] Receipt #${voidTarget.receipt_number}`,
+           branch_id: voidTarget.branch_id || userProfile?.branch_id,
+           metadata: { reason: voidReason.trim(), receipt: voidTarget.receipt_number }
+        });
+      } catch (err) {
+        console.warn("Failed to generate independent user_log for void", err)
+      }
+
+      setSuccessMessage(`Transaction ${voidTarget.receipt_number} voided successfully.`)
+      setVoidConfirmOpen(false)
+      setVoidTarget(null)
+      void loadInventory()
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to void transaction.")
+    }
+  }
+
   const generateZReading = async () => {
-    setZConfirmOpen(false)
+    console.debug("generateZReading", { zBusinessDate, zReadingHistoryLength: zReadingHistory.length })
+    // 1. Filter log transactions exactly like X-Reading (excluding voided)
     const filtered = logTransactions.filter((tx) => {
+      if (tx.status === "voided") return false
       const txDate = new Date(tx.created_at)
       const dateKey = txDate.toISOString().slice(0, 10)
       return dateKey === zBusinessDate
     })
 
     if (filtered.length === 0) {
-      setErrorMessage("No sales transactions found for selected business date.")
+      setErrorMessage(`No sales transactions found to finalize for ${zBusinessDate}.`)
+      setZConfirmOpen(false)
       return
     }
 
-    const lastNo = zReadingHistory.length > 0 ? Math.max(...zReadingHistory.map((z) => z.readingNo)) : 0
+    // 2. Build snapshot with incremental reading number
+    const lastNo = zReadingHistory.length > 0 
+      ? Math.max(...zReadingHistory.map((z) => z.readingNo)) 
+      : 0
     const snapshot = buildZReadingSnapshot(zBusinessDate, filtered, lastNo + 1)
 
+    // 3. Immediate print to bypass popup blocker
+    printZReading(snapshot, false)
+
+    // 4. Persistence
     const saved = await persistZReading(snapshot)
-    if (!saved) {
-      setErrorMessage("Z-Reading generated locally, but failed to persist to server.")
+    
+    if (saved) {
+      setZReadingReport(snapshot)
+      setZReadingHistory(prev => [snapshot, ...prev])
+      setZHistoryPage(1)
+      setSuccessMessage(`Z-Reading #${snapshot.readingNo} for ${snapshot.businessDate} finalized and printed.`)
+    } else {
+      // Error message is set in persistZReading
     }
 
-    const nextHistory = [snapshot, ...zReadingHistory]
-    setZReadingReport(snapshot)
-    setZReadingHistory(nextHistory)
-    setZHistoryPage(1)
-    setSuccessMessage(`Z-Reading #${snapshot.readingNo} generated for ${snapshot.businessDate}.`)
+    setZConfirmOpen(false)
   }
 
   const printZReading = (z: ZReadingSnapshot, isXReading = false) => {
@@ -1520,30 +1665,30 @@ export default function CheckoutPage() {
                 </tbody>
               </table>
             </div>
-
-            <AlertDialog open={zConfirmOpen} onOpenChange={setZConfirmOpen}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Generate Final Z-Reading Report?</AlertDialogTitle>
-                  <AlertDialogDescription className="space-y-3">
-                    <p>
+            <Dialog open={zConfirmOpen} onOpenChange={setZConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Generate Final Z-Reading Report?</DialogTitle>
+                  <DialogDescription className="space-y-3 block">
+                    <span className="block">
                       <strong>Business Date:</strong> {zBusinessDate}
-                    </p>
-                    <p>
+                    </span>
+                    <span className="block">
                       This action signifies the end of the operational business day. 
                       Final Z-Reading reports finalize sales records for the day and can only be executed once.
-                    </p>
-                    <p className="font-semibold text-destructive">
+                    </span>
+                    <span className="block font-semibold text-destructive">
                       Are you sure you want to end the operational day?
-                    </p>
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={generateZReading}>Finalize Day & Print</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                    </span>
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setZConfirmOpen(false)}>Cancel</Button>
+                  <Button type="button" variant="secondary" onClick={() => { setZConfirmOpen(false); generateXReading() }}>X-Reading (Preview)</Button>
+                  <Button type="button" onClick={generateZReading}>Finalize Day & Print</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -1680,24 +1825,38 @@ export default function CheckoutPage() {
                     </tr>
                   ) : (
                     paginatedTransactions.map((tx) => (
-                      <tr key={tx.id} className="border-t">
-                        <td className="px-3 py-2 font-medium">{tx.receipt_number}</td>
-                        <td className="px-3 py-2">{new Date(tx.created_at).toLocaleString()}</td>
-                        <td className="px-3 py-2">{tx.payment_method || "cash"}</td>
-                        <td className="px-3 py-2 text-right">{formatMoney(Number(tx.total_due || 0))}</td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="inline-flex gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openInvoiceA4Landscape(buildLogTemplateData(tx, "INTERNAL DUPLICATE"))}
-                            >
-                              Invoice
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                      <ContextMenu key={tx.id}>
+                        <ContextMenuTrigger asChild>
+                          <tr className="border-t cursor-context-menu hover:bg-muted/50 transition-colors">
+                            <td className="px-3 py-2 font-medium">
+                              {tx.receipt_number}
+                              {tx.status === "voided" && <span className="ml-[8px] rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-red-800 uppercase">Voided</span>}
+                            </td>
+                            <td className="px-3 py-2">{new Date(tx.created_at).toLocaleString()}</td>
+                            <td className="px-3 py-2">{tx.payment_method || "cash"}</td>
+                            <td className="px-3 py-2 text-right">{formatMoney(Number(tx.total_due || 0))}</td>
+                            <td className="px-3 py-2 text-right text-muted-foreground text-xs italic">
+                              Right-click row
+                            </td>
+                          </tr>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-48">
+                          <ContextMenuItem onClick={() => openInvoiceA4Landscape(buildLogTemplateData(tx, "INTERNAL DUPLICATE"))}>
+                            View Invoice
+                          </ContextMenuItem>
+                          {tx.status !== "voided" && (
+                            <>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem 
+                                className="text-red-600 focus:text-red-600 font-medium" 
+                                onClick={() => triggerVoidTransaction(tx)}
+                              >
+                                Void Transaction
+                              </ContextMenuItem>
+                            </>
+                          )}
+                        </ContextMenuContent>
+                      </ContextMenu>
                     ))
                   )}
                 </tbody>
@@ -1727,6 +1886,36 @@ export default function CheckoutPage() {
                   </Button>
                 </div>
               </div>
+            )}
+
+            {voidTarget && (
+              <Dialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Void Transaction: {voidTarget.receipt_number}</DialogTitle>
+                    <DialogDescription className="space-y-4 pt-2 block">
+                       <span className="block font-medium text-destructive">
+                         Warning: Voiding this transaction will mark it as invalid and will restock any associated inventory products. This action cannot be reversed.
+                       </span>
+                       <span className="block space-y-2">
+                         <span className="block text-sm font-semibold text-foreground">Reason for voiding:</span>
+                         <Input 
+                            value={voidReason} 
+                            onChange={(e) => setVoidReason(e.target.value)}
+                            placeholder="e.g. Test, Wrong Input, Customer Refund..." 
+                            autoFocus
+                         />
+                       </span>
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button type="button" variant="outline" onClick={() => setVoidConfirmOpen(false)}>Cancel</Button>
+                    <Button type="button" variant="destructive" onClick={confirmVoidTransaction}>
+                       Confirm Void
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             )}
           </div>
         )}

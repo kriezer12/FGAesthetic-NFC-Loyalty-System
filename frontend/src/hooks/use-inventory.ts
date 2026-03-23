@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
+import { logUserAction } from "@/lib/user-log"
 
 export interface Product {
     id: string
@@ -122,6 +123,17 @@ export function useInventory() {
                 .single()
             
             if (error) throw error
+            
+            // Log action
+            await logUserAction({
+                actionType: 'inventory_product_create',
+                entityType: 'inventory_product',
+                entityId: data.id,
+                entityName: data.name,
+                metadata: { operation: 'create' },
+                changes: { after: data }
+            })
+
             setProducts(prev => [...prev, data])
             return data
         } catch (err) {
@@ -132,6 +144,9 @@ export function useInventory() {
 
     const updateProduct = async (id: string, updates: Partial<Product>) => {
         try {
+            // Get original for logging
+            const original = products.find(p => p.id === id)
+
             const { data, error } = await supabase
                 .from("inventory_products")
                 .update(updates)
@@ -140,6 +155,20 @@ export function useInventory() {
                 .single()
             
             if (error) throw error
+
+            // Log action
+            await logUserAction({
+                actionType: 'inventory_product_update',
+                entityType: 'inventory_product',
+                entityId: id,
+                entityName: data.name,
+                metadata: { operation: 'update' },
+                changes: { 
+                    before: original,
+                    after: data 
+                }
+            })
+
             setProducts(prev => prev.map(p => p.id === id ? data : p))
             return data
         } catch (err) {
@@ -159,7 +188,7 @@ export function useInventory() {
             // 1. Get current stock
             const { data: currentStock, error: stockFetchError } = await supabase
                 .from("inventory_stocks")
-                .select("*")
+                .select("*, product:inventory_products(*)")
                 .eq("product_id", params.productId)
                 .eq("branch_id", params.branchId)
                 .maybeSingle()
@@ -207,12 +236,27 @@ export function useInventory() {
 
     const deleteProduct = async (id: string) => {
         try {
+            // Get original for logging
+            const original = products.find(p => p.id === id)
+
             const { error } = await supabase
                 .from("inventory_products")
                 .delete()
                 .eq("id", id)
             
             if (error) throw error
+
+            // Log action
+            if (original) {
+                await logUserAction({
+                    actionType: 'inventory_product_delete',
+                    entityType: 'inventory_product',
+                    entityId: id,
+                    entityName: original.name,
+                    metadata: { operation: 'delete' },
+                    changes: { before: original }
+                })
+            }
             
             setProducts(prev => prev.filter(p => p.id !== id))
             // Stocks will be deleted by CASCADE in DB, but we refresh local state too
