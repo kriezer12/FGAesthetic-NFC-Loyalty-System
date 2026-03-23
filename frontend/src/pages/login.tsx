@@ -37,7 +37,7 @@ export default function LoginPage() {
               {/* Company Logo & Name */}
               <div className="flex justify-center gap-3 mb-8">
                 <a href="#" className="flex items-center gap-3">
-                  <img src="/logo/logo-orig.svg" alt="FG Aesthetic Centre Logo" className="h-10 w-auto" />
+                  <img src="/logo/logo-orig.svg" alt="FG Aesthetic Centre Logo" className="h-10 w-auto" loading="lazy" />
                   <span className="font-manrope font-medium text-lg tracking-wide">FG AESTHETIC CENTRE</span>
                 </a>
               </div>
