@@ -1,13 +1,14 @@
-import { Users, Activity, Archive, TrendingUp } from "lucide-react"
+import { Users, Activity, Archive, TrendingUp, Trophy } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import type { ClientCounts } from "./types"
+import type { ClientCounts, TopStaffSales } from "./types"
 
 interface ClientStatusCardsProps {
   clientCounts: ClientCounts | null
+  topStaffSales?: TopStaffSales | null
   loading: boolean
 }
 
-export function ClientStatusCards({ clientCounts, loading }: ClientStatusCardsProps) {
+export function ClientStatusCards({ clientCounts, topStaffSales, loading }: ClientStatusCardsProps) {
   const cards = [
     {
       icon: Users,
@@ -41,10 +42,22 @@ export function ClientStatusCards({ clientCounts, loading }: ClientStatusCardsPr
       color: "text-green-600",
       bgColor: "bg-green-50",
     },
+    {
+      icon: Trophy,
+      label: "Top Sales Staff",
+      value: topStaffSales 
+        ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(topStaffSales.total_sales) 
+        : "—",
+      description: topStaffSales 
+        ? `${topStaffSales.staff_name} (${topStaffSales.completed_appointments} appts)` 
+        : "No completed appointments",
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+    },
   ]
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
       {cards.map((card) => {
         const IconComponent = card.icon
         return (

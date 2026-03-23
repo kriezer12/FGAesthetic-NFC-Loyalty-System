@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
 import type { LoyaltyReward, EarningRule } from "@/pages/loyalty-admin"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import type { Service } from "@/types/service"
+
 
 type CustomerPointsDashboardProps = {
   customerId: string
@@ -99,7 +99,7 @@ export function CustomerPointsDashboard({
                   <div className="font-medium text-sm">{reward.reward_name}</div>
                   <div className="text-xs text-muted-foreground">{reward.description}</div>
                 </div>
-                <div className="font-bold text-primary">-{reward.points_required} pts</div>
+                <div className="font-bold text-destructive">-{reward.points_required} pts</div>
               </Button>
             ))}
           </div>

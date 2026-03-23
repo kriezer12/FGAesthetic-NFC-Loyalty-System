@@ -6,6 +6,8 @@ export interface EarningRule {
   points_earned: number
   is_active: boolean
   description?: string
+  expiration_days?: number
+  created_at?: string
 }
 
 /**
@@ -18,13 +20,26 @@ export interface EarningRule {
 export async function applyAutomatedPoints(customerId: string, treatmentId?: string) {
   try {
     // 1. Fetch active rules
-    const { data: rules, error: rulesError } = await supabase
+    const { data: allRules, error: rulesError } = await supabase
       .from("earning_rules")
       .select("*")
       .eq("is_active", true)
 
-    if (rulesError || !rules || rules.length === 0) {
+    if (rulesError || !allRules || allRules.length === 0) {
       return { success: false, message: "No active earning rules found" }
+    }
+
+    // Filter out expired rules
+    const rules = allRules.filter(r => {
+      if (!r.expiration_days || !r.created_at) return true
+      const createdAt = new Date(r.created_at)
+      const expiryDate = new Date(createdAt)
+      expiryDate.setDate(createdAt.getDate() + r.expiration_days)
+      return expiryDate.getTime() > Date.now()
+    })
+
+    if (rules.length === 0) {
+      return { success: false, message: "All matching rules have expired" }
     }
 
     // 2. Find the best matching rule
@@ -66,12 +81,20 @@ export async function applyAutomatedPoints(customerId: string, treatmentId?: str
     if (updateError) throw updateError
 
     // 4. Log the transaction and check-in
+    let expiresAt: string | null = null
+    if (selectedRule.expiration_days) {
+      const date = new Date()
+      date.setDate(date.getDate() + selectedRule.expiration_days)
+      expiresAt = date.toISOString()
+    }
+
     await Promise.all([
       supabase.from("points_transactions").insert({
         customer_id: customerId,
         points_change: selectedRule.points_earned,
         reason: selectedRule.description || "Automated Visit Points",
-        type: "earn"
+        type: "earn",
+        expires_at: expiresAt
       }),
       supabase.from("checkin_logs").insert({
         customer_id: customerId,

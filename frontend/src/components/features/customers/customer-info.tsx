@@ -81,13 +81,21 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
         .single()
       
       if (!error && data) {
+        let expiresAt: string | null = null
+        if ('expiration_days' in rule && rule.expiration_days) {
+          const date = new Date()
+          date.setDate(date.getDate() + (rule.expiration_days as number))
+          expiresAt = date.toISOString()
+        }
+
         await supabase
           .from("points_transactions")
           .insert({
             customer_id: customer.id,
             points_change: rule.points_earned,
             reason: rule.description || "Earned Points",
-            type: "earn"
+            type: "earn",
+            expires_at: expiresAt
           })
         
         await supabase
@@ -96,7 +104,6 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
             customer_id: customer.id,
             checked_in_at: new Date().toISOString(),
             points_added: rule.points_earned,
-            points_added: amount,
             processed_by: user?.id || null,
             branch_id: userProfile?.branch_id || null,
           })

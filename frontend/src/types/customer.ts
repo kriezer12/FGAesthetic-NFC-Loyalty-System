@@ -33,6 +33,10 @@ export interface Customer {
   // simplicity. see roadmap/client_treatments for a more normalized
   // eventual design.
   treatments?: Treatment[]
+
+  // Branch information
+  branch_id?: string
+  branch_name?: string
 }
 
 export interface CheckinLog {

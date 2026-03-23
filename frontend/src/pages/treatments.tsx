@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { MoreHorizontal, Pencil, Trash2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,28 +13,94 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from "@/lib/supabase"
 import { generateId } from "@/components/features/calendar/calendar-parts/calendar-utils"
 import type { ServiceCategory, Service } from "@/types/service"
+import { useEquipment } from "@/hooks/use-equipment"
+
+const ROOT_SCOPE = "__root__"
+
+const getScopeKey = (categoryId: string | null | undefined) => categoryId || ROOT_SCOPE
+
+const reorderById = (ids: string[], activeId: string, overId: string) => {
+  const from = ids.indexOf(activeId)
+  const to = ids.indexOf(overId)
+  if (from < 0 || to < 0 || from === to) return ids
+
+  const next = [...ids]
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
+const getSortOrder = (sortOrder?: number | null) => sortOrder ?? Number.MAX_SAFE_INTEGER
+
+const compareBySortOrder = (a?: number | null, b?: number | null) => getSortOrder(a) - getSortOrder(b)
+
 export default function TreatmentsPage() {
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [inventoryProducts, setInventoryProducts] = useState<{id: string, name: string, sku: string}[]>([])
+  const { equipment: equipmentList, fetchEquipment } = useEquipment()
 
   const [catModalOpen, setCatModalOpen] = useState(false)
   const [svcModalOpen, setSvcModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ServiceCategory | null>(null)
   const [editingService, setEditingService] = useState<Service | null>(null)
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("")
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
+
+  const [draggingCategoryId, setDraggingCategoryId] = useState<string | null>(null)
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
+  const [draggingService, setDraggingService] = useState<{ id: string; scope: string } | null>(null)
+  const [dragOverServiceId, setDragOverServiceId] = useState<string | null>(null)
+
+  const createEmptyService = (categoryId: string | null): Service => ({
+    id: "",
+    category_id: categoryId,
+    sort_order: null,
+    name: "",
+    uses_equipment: false,
+    uses_product: false,
+    price: 0,
+    is_package: false,
+  })
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from("service_categories").select("*")
+    const { data, error } = await supabase
+      .from("service_categories")
+      .select("*")
+      .order("sort_order", { ascending: true, nullsFirst: false })
+
+    if (error) {
+      const { data: fallback } = await supabase.from("service_categories").select("*")
+      setCategories((fallback || []) as ServiceCategory[])
+      return
+    }
+
     setCategories((data || []) as ServiceCategory[])
   }
+
   const fetchServices = async () => {
-    const { data } = await supabase.from("services").select("*")
+    const { data, error } = await supabase
+      .from("services")
+      .select("*")
+      .order("sort_order", { ascending: true, nullsFirst: false })
+
+    if (error) {
+      const { data: fallback } = await supabase.from("services").select("*")
+      setServices((fallback || []) as Service[])
+      return
+    }
+
     setServices((data || []) as Service[])
+  }
+  const fetchInventoryProducts = async () => {
+    const { data } = await supabase.from("inventory_products").select("id, name, sku").order("name")
+    setInventoryProducts((data || []) as {id: string, name: string, sku: string}[])
   }
 
   useEffect(() => {
     fetchCategories()
     fetchServices()
+    fetchInventoryProducts()
+    fetchEquipment()
   }, [])
 
   const saveCategory = async (cat: ServiceCategory) => {
@@ -42,10 +108,12 @@ export default function TreatmentsPage() {
       await supabase.from("service_categories").update({ name: cat.name }).eq("id", cat.id)
     } else {
       const id = generateId()
-      await supabase.from("service_categories").insert({ id, name: cat.name })
+      const nextSortOrder = categories.reduce((max, current) => Math.max(max, current.sort_order ?? -1), -1) + 1
+      await supabase.from("service_categories").insert({ id, name: cat.name, sort_order: nextSortOrder })
     }
     fetchCategories()
   }
+
   const deleteCategory = async (id: string) => {
     await supabase.from("service_categories").delete().eq("id", id)
     fetchCategories()
@@ -57,33 +125,232 @@ export default function TreatmentsPage() {
       await supabase.from("services").update(svc).eq("id", svc.id)
     } else {
       const id = generateId()
-      await supabase.from("services").insert({ ...svc, id })
+      const scopeServices = services.filter((s) => getScopeKey(s.category_id) === getScopeKey(svc.category_id))
+      const nextSortOrder = scopeServices.reduce((max, current) => Math.max(max, current.sort_order ?? -1), -1) + 1
+      await supabase.from("services").insert({ ...svc, id, sort_order: nextSortOrder })
     }
     fetchServices()
   }
+
   const deleteService = async (id: string) => {
     await supabase.from("services").delete().eq("id", id)
     fetchServices()
   }
 
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => compareBySortOrder(a.sort_order, b.sort_order))
+  }, [categories])
+
+  const sortServicesForScope = (scope: string, scopedServices: Service[]) => {
+    return [...scopedServices]
+      .filter((s) => getScopeKey(s.category_id) === scope)
+      .sort((a, b) => compareBySortOrder(a.sort_order, b.sort_order))
+  }
+
+  const uncategorizedServices = useMemo(
+    () => sortServicesForScope(ROOT_SCOPE, services.filter((s) => !s.category_id)),
+    [services],
+  )
+
+  const persistCategoryOrder = async (orderedIds: string[]) => {
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        supabase.from("service_categories").update({ sort_order: index }).eq("id", id),
+      ),
+    )
+  }
+
+  const persistServiceOrder = async (orderedIds: string[]) => {
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        supabase.from("services").update({ sort_order: index }).eq("id", id),
+      ),
+    )
+  }
+
+  const handleCategoryDrop = (targetCategoryId: string) => {
+    if (!draggingCategoryId || draggingCategoryId === targetCategoryId) return
+
+    const orderedIds = reorderById(
+      sortedCategories.map((category) => category.id),
+      draggingCategoryId,
+      targetCategoryId,
+    )
+
+    setCategories((prev) => {
+      const orderMap = new Map(orderedIds.map((id, index) => [id, index]))
+      return prev.map((category) => ({
+        ...category,
+        sort_order: orderMap.get(category.id) ?? category.sort_order ?? null,
+      }))
+    })
+    void persistCategoryOrder(orderedIds)
+    setDraggingCategoryId(null)
+    setDragOverCategoryId(null)
+  }
+
+  const handleServiceDrop = (scope: string, targetServiceId: string) => {
+    if (!draggingService || draggingService.scope !== scope || draggingService.id === targetServiceId) return
+
+    const scopedServices = sortServicesForScope(
+      scope,
+      services.filter((service) => getScopeKey(service.category_id) === scope),
+    )
+
+    const orderedIds = reorderById(
+      scopedServices.map((service) => service.id),
+      draggingService.id,
+      targetServiceId,
+    )
+
+    setServices((prev) => {
+      const orderMap = new Map(orderedIds.map((id, index) => [id, index]))
+      return prev.map((service) => {
+        if (getScopeKey(service.category_id) !== scope) return service
+        return {
+          ...service,
+          sort_order: orderMap.get(service.id) ?? service.sort_order ?? null,
+        }
+      })
+    })
+    void persistServiceOrder(orderedIds)
+    setDraggingService(null)
+    setDragOverServiceId(null)
+  }
+
+  const renderServiceRows = (scopedServices: Service[], scope: string) => (
+    scopedServices.map((s) => (
+      <ContextMenu key={s.id}>
+        <ContextMenuTrigger asChild>
+          <TableRow
+            className={`cursor-context-menu ${dragOverServiceId === s.id ? "bg-accent/40" : ""}`}
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation()
+              setDraggingService({ id: s.id, scope })
+            }}
+            onDragEnd={() => {
+              setDraggingService(null)
+              setDragOverServiceId(null)
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (draggingService?.scope === scope && draggingService.id !== s.id) {
+                setDragOverServiceId(s.id)
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleServiceDrop(scope, s.id)
+            }}
+          >
+            <TableCell className="font-medium">{s.name}</TableCell>
+            <TableCell className="text-muted-foreground">{s.equipment || "—"}</TableCell>
+            <TableCell className="text-muted-foreground">{s.product || "—"}</TableCell>
+            <TableCell className="text-center">
+              {s.is_package
+                ? ([
+                  s.session_count ? `${s.session_count}×` : null,
+                  s.recurrence_days ? `every ${s.recurrence_days}d` : "weekly",
+                ].filter(Boolean).join(" ") || "Yes")
+                : "—"}
+            </TableCell>
+            <TableCell className="text-right">₱{s.price.toFixed(2)}</TableCell>
+            <TableCell className="text-right">
+              <div className="flex justify-end gap-1">
+                <Button size="icon" variant="ghost" className="size-8" onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
+                  <Pencil className="size-4" />
+                </Button>
+                <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => deleteService(s.id)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
+            <Pencil className="size-4 mr-2" />Edit Service
+          </ContextMenuItem>
+          <ContextMenuItem variant="destructive" onClick={() => deleteService(s.id)}>
+            <Trash2 className="size-4 mr-2" />Delete Service
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    ))
+  )
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">Service Catalog</h1>
-      <div className="mb-4">
+      <div className="mb-4 flex items-center gap-2">
         <Button onClick={() => { setEditingCategory(null); setCatModalOpen(true) }}>
           + Create Category
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setSelectedCategoryId(null)
+            setEditingService(createEmptyService(null))
+            setSvcModalOpen(true)
+          }}
+        >
+          <Plus className="size-4 mr-1" />Add Service
         </Button>
       </div>
 
       <div className="space-y-6">
-        {categories.map((cat) => {
-          const catServices = services.filter((s) => s.category_id === cat.id)
+        <Card className="py-0 gap-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 py-4">
+            <CardTitle className="text-lg">Uncategorized Services</CardTitle>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            {uncategorizedServices.length === 0 ? (
+              <p className="text-sm text-muted-foreground px-6 pb-4">No services in root yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service</TableHead>
+                    <TableHead>Equipment</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-center">Package</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>{renderServiceRows(uncategorizedServices, ROOT_SCOPE)}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {sortedCategories.map((cat) => {
+          const catServices = sortServicesForScope(cat.id, services.filter((s) => s.category_id === cat.id))
           return (
-            <Card key={cat.id} className="py-0 gap-0">
+            <Card
+              key={cat.id}
+              className={`py-0 gap-0 transition ${dragOverCategoryId === cat.id ? "ring-2 ring-primary/60" : ""}`}
+              draggable
+              onDragStart={() => setDraggingCategoryId(cat.id)}
+              onDragEnd={() => {
+                setDraggingCategoryId(null)
+                setDragOverCategoryId(null)
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (draggingCategoryId && draggingCategoryId !== cat.id) {
+                  setDragOverCategoryId(cat.id)
+                }
+              }}
+              onDrop={() => handleCategoryDrop(cat.id)}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 px-6 py-4">
                 <CardTitle className="text-lg">{cat.name}</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => { setSelectedCategoryId(cat.id); setEditingService(null); setSvcModalOpen(true) }}>
+                  <Button size="sm" onClick={() => { setSelectedCategoryId(cat.id); setEditingService(createEmptyService(cat.id)); setSvcModalOpen(true) }}>
                     <Plus className="size-4 mr-1" />Service
                   </Button>
                   <DropdownMenu>
@@ -118,43 +385,7 @@ export default function TreatmentsPage() {
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {catServices.map((s) => (
-                        <ContextMenu key={s.id}>
-                          <ContextMenuTrigger asChild>
-                            <TableRow className="cursor-context-menu">
-                              <TableCell className="font-medium">{s.name}</TableCell>
-                              <TableCell className="text-muted-foreground">{s.equipment || "—"}</TableCell>
-                              <TableCell className="text-muted-foreground">{s.product || "—"}</TableCell>
-                              <TableCell className="text-center">
-                                {s.is_package ? (
-                                  [s.session_count ? `${s.session_count}×` : null, s.recurrence_days ? `every ${s.recurrence_days}d` : "weekly"].filter(Boolean).join(" ") || "Yes"
-                                ) : "—"}
-                              </TableCell>
-                              <TableCell className="text-right">₱{s.price.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1">
-                                  <Button size="icon" variant="ghost" className="size-8" onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
-                                    <Pencil className="size-4" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => deleteService(s.id)}>
-                                    <Trash2 className="size-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent>
-                            <ContextMenuItem onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
-                              <Pencil className="size-4 mr-2" />Edit Service
-                            </ContextMenuItem>
-                            <ContextMenuItem variant="destructive" onClick={() => deleteService(s.id)}>
-                              <Trash2 className="size-4 mr-2" />Delete Service
-                            </ContextMenuItem>
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      ))}
-                    </TableBody>
+                    <TableBody>{renderServiceRows(catServices, cat.id)}</TableBody>
                   </Table>
                 )}
               </CardContent>
@@ -200,7 +431,7 @@ export default function TreatmentsPage() {
                 value={editingService?.name || ""}
                 onChange={(e) => setEditingService((es) => ({
                   id: es?.id || "",
-                  category_id: es?.category_id || selectedCategoryId,
+                  category_id: es?.category_id ?? selectedCategoryId,
                   name: e.target.value,
                   uses_equipment: es?.uses_equipment || false,
                   equipment: es?.equipment,
@@ -231,11 +462,11 @@ export default function TreatmentsPage() {
               </div>
               {editingService?.uses_equipment && (
                 <Combobox
-                  options={[]}
+                  options={equipmentList.map(e => ({ label: e.name, value: e.name }))}
                   value={editingService?.equipment || ""}
                   onValueChange={(v) => setEditingService((es) => ({ ...es!, equipment: v }))}
                   placeholder="Select equipment…"
-                  emptyMessage="No equipment available yet"
+                  emptyMessage={equipmentList.length === 0 ? "No equipment available. Add some in the Equipment page." : "No matching equipment."}
                 />
               )}
             </div>
@@ -249,19 +480,31 @@ export default function TreatmentsPage() {
                   onCheckedChange={(v) => setEditingService((es) => ({
                     ...es!,
                     uses_product: !!v,
-                    ...(!v && { product: undefined }),
+                    ...(!v && { product: undefined, inventory_product_id: undefined }),
                   }))}
                 />
                 <Label htmlFor="uses-product">Uses Product</Label>
               </div>
               {editingService?.uses_product && (
-                <Combobox
-                  options={[]}
-                  value={editingService?.product || ""}
-                  onValueChange={(v) => setEditingService((es) => ({ ...es!, product: v }))}
-                  placeholder="Select product…"
-                  emptyMessage="No products available yet"
-                />
+                <div className="grid gap-2">
+                  <Combobox
+                    options={inventoryProducts.map(p => ({ label: `${p.name} (${p.sku})`, value: p.id }))}
+                    value={editingService?.inventory_product_id || ""}
+                    onValueChange={(v) => {
+                      const p = inventoryProducts.find(item => item.id === v)
+                      setEditingService((es) => ({ 
+                        ...es!, 
+                        inventory_product_id: v,
+                        product: p?.name 
+                      }))
+                    }}
+                    placeholder="Select inventory product…"
+                    emptyMessage="No products found in inventory"
+                  />
+                  <p className="text-[10px] text-muted-foreground ml-1">
+                    Linked to: {editingService?.product || "None"}
+                  </p>
+                </div>
               )}
             </div>
 
@@ -271,12 +514,14 @@ export default function TreatmentsPage() {
               <Input
                 type="number"
                 min={0}
-                value={editingService?.price ?? 0}
-                onChange={(e) => setEditingService((es) => ({ ...es!, price: parseFloat(e.target.value) || 0 }))}
+                value={editingService?.price ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEditingService((es) => ({ ...es!, price: val === "" ? "" : (parseFloat(val) || 0) } as any))
+                }}
                 placeholder="0.00"
               />
             </div>
-
 
             {/* Package flag + recurrence */}
             <div className="grid gap-1">
@@ -300,7 +545,10 @@ export default function TreatmentsPage() {
                       type="number"
                       min={1}
                       value={editingService?.session_count ?? ""}
-                      onChange={(e) => setEditingService((es) => ({ ...es!, session_count: parseInt(e.target.value, 10) || undefined }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingService((es) => ({ ...es!, session_count: val === "" ? "" : (parseInt(val, 10) || undefined) } as any))
+                      }}
                       placeholder="e.g. 15"
                     />
                   </div>
@@ -310,7 +558,10 @@ export default function TreatmentsPage() {
                       type="number"
                       min={1}
                       value={editingService?.recurrence_days ?? ""}
-                      onChange={(e) => setEditingService((es) => ({ ...es!, recurrence_days: parseInt(e.target.value, 10) || undefined }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingService((es) => ({ ...es!, recurrence_days: val === "" ? "" : (parseInt(val, 10) || undefined) } as any))
+                      }}
                       placeholder="7 (weekly)"
                     />
                   </div>

@@ -1,13 +1,14 @@
 // @ts-nocheck
 
 import { Suspense, useEffect, useState } from "react"
-import { Outlet } from "react-router-dom"
+import { Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
 import { NotificationSettingsProvider } from "@/contexts/notification-settings-context"
 import { MissedNotificationsProvider } from "@/contexts/missed-notifications-context"
 import { AppNavbar } from "./app-navbar"
 import { FirstLoginModal } from "../auth/first-login-modal"
 import { AppointmentNotifier } from "../features/appointments/appointment-notifier"
+import { AnnouncementNotifier } from "./announcement-notifier"
 import { GlobalNFCListener } from "../features/nfc/global-nfc-listener"
 
 function ContentLoader() {
@@ -59,6 +60,54 @@ export function DashboardLayout() {
   const { userProfile, user, refreshUser } = useAuth()
   const [showFirstLoginModal, setShowFirstLoginModal] = useState(false)
 
+  const location = useLocation()
+
+  useEffect(() => {
+    // Ensure no leftover overlay state blocks interaction when routes change.
+    try {
+      document.body.style.pointerEvents = ""
+      document.body.style.overflow = ""
+      document
+        .querySelectorAll(
+          "[data-radix-dialog-overlay],[data-radix-context-menu-overlay],[data-radix-dropdown-menu-overlay],[data-radix-popover-overlay]",
+        )
+        .forEach((el) => el.remove())
+    } catch {
+      // ignore if document not available
+    }
+  }, [location.pathname])
+
+  useEffect(() => {
+    // Defensive: if body is left unclickable for any reason, reset it immediately.
+    if (typeof document === "undefined") return
+    const cleanup = () => {
+      if (document.body.style.pointerEvents === "none") {
+        document.body.style.pointerEvents = ""
+      }
+      if (document.body.style.overflow === "hidden") {
+        document.body.style.overflow = ""
+      }
+      document
+        .querySelectorAll(
+          "[data-radix-dialog-overlay],[data-radix-context-menu-overlay],[data-radix-dropdown-menu-overlay],[data-radix-popover-overlay]",
+        )
+        .forEach((el) => el.remove())
+    }
+
+    // Run once immediately
+    cleanup()
+
+    // Also observe body style changes and auto-fix if it becomes unclickable.
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents === "none") {
+        cleanup()
+      }
+    })
+    observer.observe(document.body, { attributes: true, attributeFilter: ["style"] })
+
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     // Show first login modal if user.first_login is true
     if (userProfile && userProfile.first_login) {
@@ -78,6 +127,7 @@ export function DashboardLayout() {
     <div className="min-h-screen flex flex-col bg-background">
       <GlobalNFCListener />
       <AppointmentNotifier />
+      <AnnouncementNotifier />
       <AppNavbar />
       <main className="flex-1 p-6">
         <Suspense fallback={<ContentLoader />}>

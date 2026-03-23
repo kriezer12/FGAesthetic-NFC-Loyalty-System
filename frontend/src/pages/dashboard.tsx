@@ -1,15 +1,20 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from "react"
+import { useEffect, useState, useMemo, useRef, useCallback, lazy, Suspense } from "react"
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check } from "lucide-react"
+import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check, Calendar, Package, ClipboardList, UserPlus } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
-import {
-  BarChart, Bar, AreaChart, Area,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from "recharts"
+import { computeChart } from "@/lib/dashboard-utils"
+
+export type TimeFilter = "daily" | "weekly" | "yearly"
+export interface RawRow { visits: number; last_visit: string | null; created_at: string | null; nfc_uid: string | null }
+export interface ChartPoint { label: string; count: number }
+
+// Lazy load heavy chart components
+const DashboardCharts = lazy(() => import("@/components/features/dashboard/dashboard-charts"))
+const DashboardModalCharts = lazy(() => import("@/components/features/dashboard/dashboard-modal-charts"))
 
 // ---------------------------------------------------------------------------
 // Drag-and-drop types & helpers
@@ -31,13 +36,6 @@ function loadOrder(): SectionId[] {
 }
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-type TimeFilter = "daily" | "weekly" | "yearly"
-interface ChartPoint { label: string; count: number }
-interface RawRow { visits: number; last_visit: string | null; created_at: string | null; nfc_uid: string | null }
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function greeting() {
@@ -47,116 +45,14 @@ function greeting() {
   return "Good evening"
 }
 
-const GOLD = "var(--color-primary)"
-
-// ---------------------------------------------------------------------------
-// Chart data computation
-// ---------------------------------------------------------------------------
-function generateTimeBuckets(filter: TimeFilter): { label: string; start: number; end: number; count: number }[] {
-  const buckets: { label: string; start: number; end: number; count: number }[] = []
-  const now = new Date()
-  
-  if (filter === "daily") {
-    // 7 days ending today
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
-      const start = d.getTime()
-      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime()
-      buckets.push({ label: d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }), start, end, count: 0 })
-    }
-  } else if (filter === "weekly") {
-    // 8 weeks ending today
-    for (let i = 7; i >= 0; i--) {
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (i * 7), 23, 59, 59, 999)
-      const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6, 0, 0, 0, 0)
-      buckets.push({ label: start.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), start: start.getTime(), end: end.getTime(), count: 0 })
-    }
-  } else if (filter === "yearly") {
-    // 12 months ending this month
-    for (let i = 11; i >= 0; i--) {
-      const start = new Date(now.getFullYear(), now.getMonth() - i, 1, 0, 0, 0, 0)
-      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999)
-      buckets.push({ label: start.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }), start: start.getTime(), end: end.getTime(), count: 0 })
-    }
-  }
-  return buckets
-}
-
-function computeChart(rows: RawRow[], filter: TimeFilter, dateKey: "last_visit" | "created_at"): ChartPoint[] {
-  const buckets = generateTimeBuckets(filter)
-  
-  for (const row of rows) {
-    const val = row[dateKey]
-    if (!val) continue
-    
-    // Parse the date robustly
-    const time = new Date(val).getTime()
-    if (isNaN(time)) continue
-    
-    // Find matching bucket
-    for (const b of buckets) {
-      if (time >= b.start && time <= b.end) {
-        b.count++
-        break
-      }
-    }
-  }
-  
-  return buckets.map(b => ({ label: b.label, count: b.count }))
-}
-
-const FILTER_SUBTITLES: Record<"activity" | "registrations", Record<TimeFilter, string>> = {
-  activity: {
-    daily: "Check-ins over the last 7 days",
-    weekly: "Check-ins over the last 8 weeks",
-    yearly: "Check-ins over the last 12 months",
-  },
-  registrations: {
-    daily: "New customers in the last 7 days",
-    weekly: "New customers over the last 8 weeks",
-    yearly: "New customers over the last 12 months",
-  },
-}
-
-// ---------------------------------------------------------------------------
-// FilterToggle component
-// ---------------------------------------------------------------------------
-const FILTERS: { label: string; value: TimeFilter }[] = [
-  { label: "Daily", value: "daily" },
-  { label: "Weekly", value: "weekly" },
-  { label: "Yearly", value: "yearly" },
-]
-function FilterToggle({ value, onChange }: { value: TimeFilter; onChange: (v: TimeFilter) => void }) {
+// Loading skeleton for charts
+function ChartLoader({ height = 200 }: { height?: number }) {
   return (
-    <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5">
-      {FILTERS.map((f) => (
-        <button
-          key={f.value}
-          onClick={() => onChange(f.value)}
-          className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
-            value === f.value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Custom tooltip shared by all charts
-// ---------------------------------------------------------------------------
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number; name?: string }[]; label?: string }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="rounded-lg border border-border bg-background px-3 py-2 shadow-md text-xs">
-      <p className="font-medium text-foreground mb-1">{label}</p>
-      {payload.map((p, i) => (
-        <p key={i} className="text-muted-foreground">{p.name ?? "Value"}: <span className="font-semibold text-primary">{p.value}</span></p>
-      ))}
+    <div style={{ height }} className="w-full flex items-center justify-center bg-muted/5 rounded-lg border border-dashed border-border/50">
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary" />
+        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Loading Chart...</p>
+      </div>
     </div>
   )
 }
@@ -327,73 +223,16 @@ export default function Dashboard() {
     ),
 
     charts: (
-      /* ── Charts Row: Daily Activity + New Registrations ─────────────── */
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="border border-border shadow-sm lg:col-span-3">
-          <CardHeader className="pb-2 pt-4 px-5">
-            <div className="flex items-start justify-between gap-2 flex-wrap">
-              <div>
-                <CardTitle className="text-sm font-semibold">Daily Activity</CardTitle>
-                <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.activity[activityFilter]}</p>
-              </div>
-              <FilterToggle value={activityFilter} onChange={setActivityFilter} />
-            </div>
-          </CardHeader>
-          <CardContent className="px-2 pb-4">
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={dailyActivity} barCategoryGap="30%">
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                <Bar dataKey="count" name="Customers" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border shadow-sm lg:col-span-2">
-          <CardHeader className="pb-2 pt-4 px-5">
-            <div className="flex items-start justify-between gap-2 flex-wrap">
-              <div>
-                <CardTitle className="text-sm font-semibold">New Registrations</CardTitle>
-                <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
-              </div>
-              <FilterToggle value={registrationsFilter} onChange={setRegistrationsFilter} />
-            </div>
-          </CardHeader>
-          <CardContent className="px-2 pb-4">
-            <ResponsiveContainer key={`registrations-${registrationsFilter}`} width="100%" height={200}>
-              <AreaChart data={monthlyGrowth}>
-                <defs>
-                  <linearGradient id="regGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
-                <Tooltip content={<ChartTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  name="Registered"
-                  stroke="var(--color-primary)"
-                  strokeWidth={2}
-                  fill="url(#regGradient)"
-                  dot={{ r: 3, fill: "var(--color-primary)", strokeWidth: 0 }}
-                  activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-background)", fill: "var(--color-primary)" }}
-                  isAnimationActive={true}
-                  animationBegin={0}
-                  animationDuration={1500}
-                  animationEasing="ease-in-out"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      <Suspense fallback={<ChartLoader />}>
+        <DashboardCharts
+          dailyActivity={dailyActivity}
+          monthlyGrowth={monthlyGrowth}
+          activityFilter={activityFilter}
+          registrationsFilter={registrationsFilter}
+          onActivityFilterChange={setActivityFilter}
+          onRegistrationsFilterChange={setRegistrationsFilter}
+        />
+      </Suspense>
     ),
 
     "quick-actions": (
@@ -404,30 +243,41 @@ export default function Dashboard() {
           <p className="text-xs text-muted-foreground">Jump to common tasks</p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 pb-4 px-5">
-          {[
-            { href: "/dashboard/scan", icon: CreditCard, label: "Scan NFC Card", desc: "Register or look up a customer" },
-            { href: "/dashboard/customers", icon: Users, label: "Customer Directory", desc: "Browse and manage profiles" },
-            { href: "/dashboard/checkin-logs", icon: Activity, label: "Check-in Logs", desc: "View full visit history" },
-            { href: "/dashboard/scan", icon: TrendingUp, label: "Register New Card", desc: "Link a card to a customer" },
-          ].map(({ href, icon: Icon, label, desc }) => (
-            <Link
-              key={label}
-              to={href}
-              className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
-            >
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium leading-tight">{label}</p>
-                <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
-              </div>
-            </Link>
-          ))}
+          {(() => {
+            const isPrivileged = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+            const actions = [
+              { href: "/dashboard/scan", icon: CreditCard, label: "Check-in Member", desc: "Lookup and auto-apply points" },
+              { href: "/dashboard/scan", icon: UserPlus, label: "New Registration", desc: "Link a new card to a member", state: { mode: "register" } },
+              { href: "/dashboard/customers", icon: Users, label: "Member Directory", desc: "Manage clinic profiles" },
+              { href: "/dashboard/appointments", icon: Calendar, label: "Appointments", desc: "View and book sessions" },
+            ]
+            
+            if (isPrivileged) {
+              actions.push({ href: "/dashboard/inventory", icon: Package, label: "Inventory", desc: "Manage stock and items" })
+              actions.push({ href: "/dashboard/reports", icon: ClipboardList, label: "Reports", desc: "View clinic analytics" })
+            }
+            
+            return actions.map(({ href, icon: Icon, label, desc, state }) => (
+              <Link
+                key={label}
+                to={href}
+                state={state}
+                className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
+              >
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">{label}</p>
+                  <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
+                </div>
+              </Link>
+            ))
+          })()}
         </CardContent>
       </Card>
     ),
-  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth])
+  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth, userProfile])
 
   return (
     <div className="space-y-6 pb-6">
@@ -493,41 +343,15 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Total Customers</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="flex items-baseline justify-between">
-              <p className="text-sm text-muted-foreground">New Registrations Over Time</p>
-              <FilterToggle value={registrationsFilter} onChange={setRegistrationsFilter} />
-            </div>
-            <ResponsiveContainer key={`modal-registrations-${registrationsFilter}-${openModal}`} width="100%" height={300}>
-              <AreaChart data={monthlyGrowth}>
-                <defs>
-                  <linearGradient id="regGradientModal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
-                <Tooltip content={<ChartTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  name="Registered"
-                  stroke="var(--color-primary)"
-                  strokeWidth={2}
-                  fill="url(#regGradientModal)"
-                  dot={{ r: 3, fill: "var(--color-primary)", strokeWidth: 0 }}
-                  activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-background)", fill: "var(--color-primary)" }}
-                  isAnimationActive={true}
-                  animationBegin={0}
-                  animationDuration={1500}
-                  animationEasing="ease-in-out"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-            <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
-          </div>
+          <Suspense fallback={<ChartLoader height={300} />}>
+            <DashboardModalCharts
+              type="customers"
+              data={monthlyGrowth}
+              filter={registrationsFilter}
+              onFilterChange={setRegistrationsFilter}
+              stats={stats}
+            />
+          </Suspense>
         </DialogContent>
       </Dialog>
 
@@ -537,34 +361,15 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Active NFC Cards</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <p className="text-xs text-muted-foreground mb-1">Active Cards</p>
-                <p className="text-3xl font-bold">{stats.activeCards}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <p className="text-xs text-muted-foreground mb-1">Total Customers</p>
-                <p className="text-3xl font-bold">{stats.totalCustomers}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <p className="text-xs text-muted-foreground mb-1">Linked Rate</p>
-                <p className="text-3xl font-bold">{stats.totalCustomers > 0 ? Math.round((stats.activeCards / stats.totalCustomers) * 100) : 0}%</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-3">Cards Added Over Time</p>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={monthlyGrowth} barCategoryGap="30%">
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                  <Bar dataKey="count" name="Cards" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <Suspense fallback={<ChartLoader height={250} />}>
+            <DashboardModalCharts
+              type="cards"
+              data={monthlyGrowth}
+              filter={registrationsFilter} // Not used for cards but required by type
+              onFilterChange={setRegistrationsFilter}
+              stats={stats}
+            />
+          </Suspense>
         </DialogContent>
       </Dialog>
 
@@ -574,34 +379,15 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Total Visits</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <p className="text-xs text-muted-foreground mb-1">Total Visits</p>
-                <p className="text-3xl font-bold">{stats.totalVisits}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/30 p-4">
-                <p className="text-xs text-muted-foreground mb-1">Avg Visits per Customer</p>
-                <p className="text-3xl font-bold">{stats.totalCustomers > 0 ? (stats.totalVisits / stats.totalCustomers).toFixed(1) : 0}</p>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-muted-foreground">Daily Activity</p>
-                <FilterToggle value={activityFilter} onChange={setActivityFilter} />
-              </div>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={dailyActivity} barCategoryGap="30%">
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                  <Bar dataKey="count" name="Visits" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
-                </BarChart>
-              </ResponsiveContainer>
-              <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.activity[activityFilter]}</p>
-            </div>
-          </div>
+          <Suspense fallback={<ChartLoader height={250} />}>
+            <DashboardModalCharts
+              type="visits"
+              data={dailyActivity}
+              filter={activityFilter}
+              onFilterChange={setActivityFilter}
+              stats={stats}
+            />
+          </Suspense>
         </DialogContent>
       </Dialog>
 
@@ -611,28 +397,15 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Recent Activity</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <p className="text-xs text-muted-foreground mb-1">Last 7 Days</p>
-              <p className="text-3xl font-bold">{stats.recentActivity}</p>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-muted-foreground">Check-ins This Week</p>
-                <FilterToggle value={activityFilter} onChange={setActivityFilter} />
-              </div>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={dailyActivity} barCategoryGap="30%">
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} width={24} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--color-accent)" }} />
-                  <Bar dataKey="count" name="Check-ins" fill={GOLD} radius={[4, 4, 0, 0]} isAnimationActive={true} animationBegin={0} animationDuration={1200} animationEasing="ease-out" />
-                </BarChart>
-              </ResponsiveContainer>
-              <p className="text-xs text-muted-foreground mt-2">{FILTER_SUBTITLES.activity[activityFilter]}</p>
-            </div>
-          </div>
+          <Suspense fallback={<ChartLoader height={250} />}>
+            <DashboardModalCharts
+              type="activity"
+              data={dailyActivity}
+              filter={activityFilter}
+              onFilterChange={setActivityFilter}
+              stats={stats}
+            />
+          </Suspense>
         </DialogContent>
       </Dialog>
 

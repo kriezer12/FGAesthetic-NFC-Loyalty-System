@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import { Clock, Plus } from "lucide-react"
+import { Clock, Plus, ShoppingCart } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { AddAccountModal } from "@/components/features/accounts"
 import { NavbarLogo } from "./navbar/navbar-logo"
@@ -8,12 +8,15 @@ import { NavbarLinks } from "./navbar/navbar-links"
 import { NavbarAdminDropdown } from "./navbar/navbar-admin-dropdown"
 import { NavbarNotificationBell } from "./navbar/navbar-notification-bell"
 import { NavbarProfileMenu } from "./navbar/navbar-profile-menu"
+import { AnnouncementCreatorModal } from "@/components/features/admin/announcement-creator"
+import { Megaphone } from "lucide-react"
 
 export function AppNavbar() {
   const { user, userProfile, signOut } = useAuth()
   const navigate = useNavigate()
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [isAddButtonHovered, setIsAddButtonHovered] = useState(false)
+  const [announcementModalOpen, setAnnouncementModalOpen] = useState(false)
 
   const handleLogout = async () => {
     await signOut()
@@ -89,6 +92,15 @@ export function AppNavbar() {
           <div className="flex items-center gap-4 ml-auto">
             {userProfile && ["super_admin", "branch_admin"].includes(userProfile.role) && (
               <div className="flex items-center gap-1">
+                {userProfile.role === "super_admin" && (
+                  <button
+                    onClick={() => setAnnouncementModalOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                    title="Broadcast Announcement"
+                  >
+                    <Megaphone className="h-5 w-5" />
+                  </button>
+                )}
                 <NavbarAdminDropdown />
                 <button
                   onClick={() => setAddAccountOpen(true)}
@@ -110,6 +122,14 @@ export function AppNavbar() {
               </div>
             )}
             <NavbarNotificationBell />
+            <button
+              onClick={() => navigate("/dashboard/checkout")}
+              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+              title="Checkout"
+              aria-label="Go to checkout"
+            >
+              <ShoppingCart className="h-5 w-5" />
+            </button>
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary">
               <Clock className="h-3.5 w-3.5 shrink-0" />
               <div className="flex flex-col leading-none">
@@ -122,6 +142,7 @@ export function AppNavbar() {
         </div>
       </header>
       <AddAccountModal open={addAccountOpen} onOpenChange={setAddAccountOpen} />
+      <AnnouncementCreatorModal open={announcementModalOpen} onOpenChange={setAnnouncementModalOpen} />
     </>
   )
 }

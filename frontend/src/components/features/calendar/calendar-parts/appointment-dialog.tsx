@@ -6,7 +6,7 @@
  * Validates working hours, overlaps and blocked-time conflicts before saving.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -157,6 +157,9 @@ export function AppointmentDialog({
   const [error, setError]               = useState("")
   const [saving, setSaving]             = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const notesRef = useRef<HTMLTextAreaElement | null>(null)
+  const prevOpenRef = useRef(false)
+  const prevAppointmentIdRef = useRef<string | undefined>(undefined)
 
   // ---- memoized options ----
   const staffOptions: ComboboxOption[] = useMemo(
@@ -271,7 +274,16 @@ export function AppointmentDialog({
 
   // ---- reset / populate on open ----
   useEffect(() => {
-    if (!open) return
+    const currentAppointmentId = appointment?.id
+    const isOpening = open && !prevOpenRef.current
+    const switchedAppointment =
+      open && currentAppointmentId !== prevAppointmentIdRef.current
+
+    prevOpenRef.current = open
+    prevAppointmentIdRef.current = currentAppointmentId
+
+    if (!isOpening && !switchedAppointment) return
+
     setConfirmingDelete(false)
     if (appointment) {
       setAppointmentType(appointment.appointment_type ?? "treatment")
@@ -311,6 +323,12 @@ export function AppointmentDialog({
     }
     setError("")
   }, [open, appointment, prefillStaffId, prefillStartMinutes, prefillCustomerId, prefillCustomerName, prefillServiceIds, staff, interval, selectedDate])
+
+  useEffect(() => {
+    if (!open || !notesRef.current) return
+    notesRef.current.style.height = "auto"
+    notesRef.current.style.height = `${Math.min(notesRef.current.scrollHeight, 180)}px`
+  }, [notes, open])
 
   // sync interval when package selection changes; default to 7 (weekly) if service has no interval set
   useEffect(() => {
@@ -450,8 +468,8 @@ export function AppointmentDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 flex flex-col max-h-[85vh]">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0 bg-background">
           <DialogTitle>{isEdit ? "Edit Appointment" : "New Appointment"}</DialogTitle>
           <DialogDescription>
             {isEdit
@@ -460,182 +478,194 @@ export function AppointmentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 grid gap-4 py-3 px-5">
-          {/* Appointment type */}
-          <div className="grid gap-2">
-            <Label>Appointment Type</Label>
-            <Combobox
-              options={APPOINTMENT_TYPE_OPTIONS}
-              value={appointmentType}
-              onValueChange={setAppointmentType}
-            />
-          </div>
-
-          {/* Services (only for non-consultation) */}
-          {appointmentType !== "consultation" && (
-            <div className="grid gap-2">
-              <Label>
-                Services <span className="text-destructive">*</span>
-              </Label>
-              <ServicePicker
-                value={serviceIds}
-                onChange={setServiceIds}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="grid gap-4 px-5 py-4 pb-8 sm:grid-cols-2">
+            {/* Appointment type */}
+            <div className="grid gap-1.5">
+              <Label>Appointment Type</Label>
+              <Combobox
+                options={APPOINTMENT_TYPE_OPTIONS}
+                value={appointmentType}
+                onValueChange={(val) => setAppointmentType(val as "consultation" | "treatment" | "followup")}
               />
             </div>
-          )}
 
-          {/* Customer */}
-          <div className="grid gap-2">
-            <Label>Customer</Label>
-            <Combobox
-              options={customerOptions}
-              value={customerId}
-              onValueChange={handleCustomerChange}
-              placeholder="Search for a customer..."
-              searchPlaceholder="Type to search customers..."
-              emptyMessage={customersLoading ? "Loading..." : "No customers found."}
-            />
-          </div>
-
-          {/* Staff */}
-          <div className="grid gap-2">
-            <Label>
-              Staff <span className="text-destructive">*</span>
-            </Label>
-            <Combobox
-              options={staffOptions}
-              value={staffId}
-              onValueChange={setStaffId}
-              placeholder="Select staff member..."
-              searchPlaceholder="Search staff..."
-              emptyMessage="No staff found."
-            />
-          </div>
-
-          {/* Appointment Date */}
-          <div className="grid gap-2">
-            <Label>Appointment Date</Label>
-            <DatePicker
-              value={appointmentDate}
-              onChange={(date) => date && setAppointmentDate(date)}
-              placeholder="Select appointment date"
-            />
-          </div>
-
-          {/* Start / End times */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label>
-                Start Time <span className="text-destructive">*</span>
-              </Label>
-              <TimePicker
-                value={startTime}
-                onChange={setStartTime}
-                minuteStep={interval as 15 | 30 | 60}
-                minTime={minutesToTimeInput(clinicHours.open * 60)}
-                maxTime={minutesToTimeInput(clinicHours.close * 60)}
+            {/* Status */}
+            <div className="grid gap-1.5">
+              <Label>Status</Label>
+              <Combobox
+                options={statusOptions}
+                value={status}
+                onValueChange={(val) => setStatus(val as AppointmentStatus)}
+                placeholder="Select status..."
+                searchPlaceholder="Search status..."
+                emptyMessage="No status found."
               />
             </div>
-            <div className="grid gap-2">
-              <Label>
-                End Time <span className="text-destructive">*</span>
-              </Label>
-              <TimePicker
-                value={endTime}
-                onChange={setEndTime}
-                minuteStep={interval as 15 | 30 | 60}
-                minTime={minutesToTimeInput(clinicHours.open * 60)}
-                maxTime={minutesToTimeInput(clinicHours.close * 60)}
+
+            {/* Services (only for non-consultation) */}
+            {appointmentType !== "consultation" && (
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>
+                  Services <span className="text-destructive">*</span>
+                </Label>
+                <ServicePicker
+                  value={serviceIds}
+                  onChange={setServiceIds}
+                  showSelectedBadges
+                  compactSelectedPreview
+                />
+              </div>
+            )}
+
+            {/* Customer */}
+            <div className="grid gap-1.5">
+              <Label>Customer</Label>
+              <Combobox
+                options={customerOptions}
+                value={customerId}
+                onValueChange={handleCustomerChange}
+                placeholder="Search for a customer..."
+                searchPlaceholder="Type to search customers..."
+                emptyMessage={customersLoading ? "Loading..." : "No customers found."}
               />
             </div>
-          </div>
 
-          {/* Recurrence */}
-          {hasPackageSelected && (
-            <div className="rounded-md border bg-muted/40 p-3 grid gap-3">
-              <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label>Days between sessions</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={recurrenceInterval ?? ""}
-                    onChange={(e) => setRecurrenceInterval(parseInt(e.target.value, 10) || undefined)}
-                    placeholder="7 (weekly)"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Total sessions</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={recurrenceCount}
-                    onChange={(e) => setRecurrenceCount(parseInt(e.target.value, 10) || 1)}
-                  />
-                </div>
+            {/* Staff */}
+            <div className="grid gap-1.5">
+              <Label>
+                Staff <span className="text-destructive">*</span>
+              </Label>
+              <Combobox
+                options={staffOptions}
+                value={staffId}
+                onValueChange={setStaffId}
+                placeholder="Select staff member..."
+                searchPlaceholder="Search staff..."
+                emptyMessage="No staff found."
+              />
+            </div>
+
+            {/* Appointment Date */}
+            <div className="grid gap-1.5">
+              <Label>Appointment Date</Label>
+              <DatePicker
+                value={appointmentDate}
+                onChange={(date) => date && setAppointmentDate(date)}
+                placeholder="Select appointment date"
+              />
+            </div>
+
+            {/* Location */}
+            <div className="grid gap-1.5">
+              <Label>Location</Label>
+              <Combobox
+                options={locationOptions}
+                value={locationType}
+                onValueChange={(val) => setLocationType(val as "branch" | "home_based")}
+                placeholder="Select location..."
+                searchPlaceholder="Search location..."
+                emptyMessage="No location found."
+              />
+            </div>
+
+            {/* Start / End times */}
+            <div className="grid grid-cols-2 gap-3 sm:col-span-2">
+              <div className="grid gap-1.5">
+                <Label>
+                  Start Time <span className="text-destructive">*</span>
+                </Label>
+                <TimePicker
+                  value={startTime}
+                  onChange={setStartTime}
+                  minTime={minutesToTimeInput(clinicHours.open * 60)}
+                  maxTime={minutesToTimeInput(clinicHours.close * 60)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>
+                  End Time <span className="text-destructive">*</span>
+                </Label>
+                <TimePicker
+                  value={endTime}
+                  onChange={setEndTime}
+                  minTime={minutesToTimeInput(clinicHours.open * 60)}
+                  maxTime={minutesToTimeInput(clinicHours.close * 60)}
+                />
               </div>
             </div>
-          )}
 
-          {/* Location */}
-          <div className="grid gap-2">
-            <Label>Location</Label>
-            <Combobox
-              options={locationOptions}
-              value={locationType}
-              onValueChange={(val) => setLocationType(val as "branch" | "home_based")}
-              placeholder="Select location..."
-              searchPlaceholder="Search location..."
-              emptyMessage="No location found."
-            />
-          </div>
+            {/* Recurrence */}
+            {hasPackageSelected && (
+              <div className="sm:col-span-2 rounded-md border bg-muted/40 p-3 grid gap-3">
+                <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label>Days between sessions</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={recurrenceInterval ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRecurrenceInterval(val === "" ? "" : (parseInt(val, 10) || undefined) as any)
+                      }}
+                      placeholder="7 (weekly)"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>Total sessions</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={recurrenceCount ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRecurrenceCount(val === "" ? "" : (parseInt(val, 10) || 1) as any)
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
-          {/* Status */}
-          <div className="grid gap-2">
-            <Label>Status</Label>
-            <Combobox
-              options={statusOptions}
-              value={status}
-              onValueChange={(val) => setStatus(val as AppointmentStatus)}
-              placeholder="Select status..."
-              searchPlaceholder="Search status..."
-              emptyMessage="No status found."
-            />
-          </div>
-
-          {/* Notes */}
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="appt-notes">Notes</Label>
-              <span className={`text-xs tabular-nums ${
-                notes.length > 360 ? "text-destructive" : "text-muted-foreground"
-              }`}>
-                {notes.length}/400
-              </span>
+            {/* Notes */}
+            <div className="grid gap-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="appt-notes">Notes</Label>
+                <span className={`text-xs tabular-nums ${
+                  notes.length > 360 ? "text-destructive" : "text-muted-foreground"
+                }`}>
+                  {notes.length}/400
+                </span>
+              </div>
+              <Textarea
+                ref={notesRef}
+                id="appt-notes"
+                rows={2}
+                maxLength={400}
+                className="resize-none min-h-[76px] max-h-[180px] overflow-y-auto"
+                placeholder="Skin/hair sensitivities, product preferences, allergies, follow-up reminders..."
+                value={notes}
+                onChange={(e) => {
+                  setNotes(e.target.value)
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Use for skin/hair sensitivities, preferences, product notes, or follow-up reminders.
+              </p>
             </div>
-            <Textarea
-              id="appt-notes"
-              rows={3}
-              maxLength={400}
-              placeholder="Skin/hair sensitivities, product preferences, allergies, follow-up reminders…"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Use for skin/hair sensitivities, preferences, product notes, or follow-up reminders.
-            </p>
-          </div>
 
-          {/* Validation error */}
-          {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+            {/* Validation error */}
+            {error && (
+              <p className="sm:col-span-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </div>
         </ScrollArea>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 border-t px-5 py-3 shrink-0 bg-background">
           {isEdit && onDelete && appointment && (
             <Button
               variant="destructive"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react"
+import { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
@@ -23,12 +23,15 @@ import {
   FileText,
   Trash2,
   Download,
+  Plus,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useBranches } from "@/hooks/use-branches"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -49,6 +52,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
+import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
 import { LoyaltyReward } from "./loyalty-admin"
@@ -65,7 +69,7 @@ import {
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu"
 import type { Customer } from "@/types/customer"
-import type { IntervalMinutes } from "@/types/appointment"
+import type { Appointment, IntervalMinutes } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
 
@@ -73,6 +77,7 @@ export default function CustomersPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { userProfile } = useAuth()
+  const { branches } = useBranches()
 
   const [cameFromNfc, setCameFromNfc] = useState(false)
 
@@ -105,6 +110,105 @@ export default function CustomersPage() {
   })
   const [savingProfile, setSavingProfile] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+
+  const [assignNfcModalOpen, setAssignNfcModalOpen] = useState(false)
+  const [isAssigningNfc, setIsAssigningNfc] = useState(false)
+  const [shouldReopenProfileEditor, setShouldReopenProfileEditor] = useState(false)
+  const [scanMessage, setScanMessage] = useState<string | null>(null)
+  const [assignSuccessMessage, setAssignSuccessMessage] = useState<string | null>(null)
+  const [reassignPrompt, setReassignPrompt] = useState<
+    | {
+        nfcUid: string
+        ownerName: string
+        ownerId: string
+      }
+    | null
+  >(null)
+
+  const handleAssignNfcCard = async (nfcUid: string) => {
+    if (!selectedCustomer) return
+    if (reassignPrompt) return // already prompting
+
+    setIsAssigningNfc(true)
+    setAssignSuccessMessage(null)
+
+    try {
+      const selectedName =
+        selectedCustomer.name ||
+        `${selectedCustomer.first_name || ""} ${selectedCustomer.last_name || ""}`.trim() ||
+        "Customer"
+
+      const { data: existingOwner } = await supabase
+        .from("customers")
+        .select("id, name, first_name, last_name")
+        .eq("nfc_uid", nfcUid)
+        .single()
+
+      if (existingOwner && existingOwner.id !== selectedCustomer.id) {
+        const ownerName =
+          existingOwner.name ||
+          `${existingOwner.first_name || ""} ${existingOwner.last_name || ""}`.trim() ||
+          "Another customer"
+
+        setReassignPrompt({ nfcUid, ownerName, ownerId: existingOwner.id })
+        return
+      }
+
+      if (existingOwner && existingOwner.id === selectedCustomer.id) {
+        setScanMessage("This card is already assigned to the selected customer. Please scan a different card.")
+        return
+      }
+
+      const { data: updated, error } = await supabase
+        .from("customers")
+        .update({ nfc_uid: nfcUid })
+        .eq("id", selectedCustomer.id)
+        .select()
+        .single()
+
+      if (!error && updated) {
+        setSelectedCustomer(updated)
+        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+        setAssignSuccessMessage(`Assigned card ${nfcUid} to ${selectedCustomer.name || selectedName}.`)
+      }
+    } catch (err) {
+      console.error("Failed to assign NFC card:", err)
+    } finally {
+      setIsAssigningNfc(false)
+    }
+  }
+
+  const handleConfirmReassign = async () => {
+    if (!reassignPrompt || !selectedCustomer) return
+
+    setIsAssigningNfc(true)
+    try {
+      const { data: updated, error } = await supabase
+        .from("customers")
+        .update({ nfc_uid: reassignPrompt.nfcUid })
+        .eq("id", selectedCustomer.id)
+        .select()
+        .single()
+
+      if (!error && updated) {
+        setSelectedCustomer(updated)
+        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      }
+    } catch (err) {
+      console.error("Failed to reassign NFC card:", err)
+    } finally {
+      setIsAssigningNfc(false)
+      setAssignNfcModalOpen(false)
+      setReassignPrompt(null)
+
+    }
+  }
+
+  const handleCancelReassign = () => {
+    setReassignPrompt(null)
+    setIsAssigningNfc(false)
+  }
+
   const [showPointsHistory, setShowPointsHistory] = useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
 
@@ -114,6 +218,7 @@ export default function CustomersPage() {
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "archived">("")
   const [sortMetric, setSortMetric] = useState<"" | "points" | "visits">("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [branchFilter, setBranchFilter] = useState("")
   const [showFilters, setShowFilters] = useState(false)
 
   // number of days without a visit before a client is considered inactive
@@ -146,6 +251,23 @@ export default function CustomersPage() {
     if (isArchivedClient(c)) return 2
     if (isInactiveClient(c)) return 1
     return 0
+  }
+
+  const getAppointmentStatusVariant = (status: string | undefined) => {
+    switch (status) {
+      case "completed":
+        return "success"
+      case "cancelled":
+        return "destructive"
+      case "in-progress":
+        return "warning"
+      case "confirmed":
+        return "success"
+      case "scheduled":
+        return "info"
+      default:
+        return "outline"
+    }
   }
 
   // generic dropdown builder for radio options
@@ -186,15 +308,34 @@ export default function CustomersPage() {
 
   // Appointment dialog state
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
+  const [appointmentToEdit, setAppointmentToEdit] = useState<Appointment | null>(null)
   const [prefillCustomer, setPrefillCustomer] = useState<Customer | null>(null)
   const [prefillServiceIds, setPrefillServiceIds] = useState<string[]>([])
   const [pendingReward, setPendingReward] = useState<LoyaltyReward | null>(null)
+  const reschedulePendingRef = useRef(false)
   const { staff = [] } = useStaff()
   
   // Treatment documentation state
   const [treatmentDocModalOpen, setTreatmentDocModalOpen] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null)
-  const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' }>>([])
+  const [selectedAppointmentGroup, setSelectedAppointmentGroup] = useState<{
+    sessions: any[]
+    isPackage: boolean
+    primaryAppointment: any
+  } | null>(null)
+
+  useEffect(() => {
+    if (!treatmentDocModalOpen && reschedulePendingRef.current) {
+      reschedulePendingRef.current = false
+      setAppointmentDialogOpen(true)
+    }
+  }, [treatmentDocModalOpen])
+  const [uploadSectionOpen, setUploadSectionOpen] = useState({
+    beforeAfter: false,
+    forms: false,
+    miscellaneous: false,
+  })
+  const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' | 'other' }>>([])
   const [treatmentConsentPath, setTreatmentConsentPath] = useState<string>("")
   const [treatmentConsentUrl, setTreatmentConsentUrl] = useState<string>("")
   const [treatmentConsentUploaded, setTreatmentConsentUploaded] = useState(false)
@@ -204,7 +345,27 @@ export default function CustomersPage() {
   const [treatmentConsentUploading, setTreatmentConsentUploading] = useState(false)
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
   
-  const { appointments, addAppointment } = useAppointments()
+  const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+
+  const openRescheduleAppointment = (appt: Appointment) => {
+    // When rescheduling, ensure the appointment re-opens as a new scheduled appointment
+    setAppointmentToEdit({ ...appt, status: "scheduled" })
+    setPrefillCustomer(selectedCustomer)
+    setPrefillServiceIds(appt.service_ids || [])
+    reschedulePendingRef.current = true
+    setTreatmentDocModalOpen(false)
+  }
+
+  const treatmentGroupSessions = useMemo(() => selectedAppointmentGroup?.sessions ?? [], [selectedAppointmentGroup])
+  const treatmentGroupIsPackage = selectedAppointmentGroup?.isPackage ?? false
+  const treatmentGroupTotalSessions = treatmentGroupSessions.length
+  const treatmentGroupCompletedSessions = treatmentGroupSessions.filter((s) => s.status === "completed").length
+  const treatmentGroupRemainingSessions = treatmentGroupTotalSessions - treatmentGroupCompletedSessions
+  const treatmentGroupSessionsSorted = useMemo(
+    () => [...treatmentGroupSessions].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+    [treatmentGroupSessions],
+  )
+
   const [selectedDate] = useState(new Date())
   const [interval] = useState<IntervalMinutes>(DEFAULT_INTERVAL)
 
@@ -252,11 +413,15 @@ export default function CustomersPage() {
     try {
       const { data, error } = await supabase
         .from("customers")
-        .select("*")
+        .select("*, branches(id, name)")
         .order("created_at", { ascending: false })
 
       if (error) throw error
-      const list: Customer[] = data || []
+      const list: Customer[] = (data || []).map((customer: any) => ({
+        ...customer,
+        branch_name: customer.branches?.name,
+        // Keep branch_id that's already in the customer record
+      }))
       setCustomers(list)
 
       // persist inactive timestamp for newly-inactive clients
@@ -535,11 +700,16 @@ export default function CustomersPage() {
         const { data: urlData } = supabase.storage
           .from("customer-picture")
           .getPublicUrl(path)
+        
+        let type: 'before' | 'after' | 'other' = 'other'
+        if (f.name.includes('_before_')) type = 'before'
+        else if (f.name.includes('_after_')) type = 'after'
+
         return {
           id: f.name,
           path,
           url: signedMap.get(path) ?? urlData.publicUrl,
-          type: f.name.includes('_before_') ? 'before' as const : 'after' as const
+          type
         }
       })
 
@@ -588,7 +758,7 @@ export default function CustomersPage() {
     }
   }
 
-  const handleTreatmentPhotoUpload = async (file: File, photoType: 'before' | 'after') => {
+  const handleTreatmentPhotoUpload = async (file: File, photoType: 'before' | 'after' | 'other') => {
     if (!selectedAppointment) return
     
     setTreatmentGalleryError("")
@@ -641,7 +811,7 @@ export default function CustomersPage() {
     }
   }
 
-  const handleDeleteTreatmentPhoto = async (photo: { id: string; path: string; url: string; type: 'before' | 'after' }) => {
+  const handleDeleteTreatmentPhoto = async (photo: { id: string; path: string; url: string; type: 'before' | 'after' | 'other' }) => {
     try {
       const { error } = await supabase.storage
         .from("customer-picture")
@@ -701,6 +871,9 @@ export default function CustomersPage() {
     if (genderFilter) {
       filtered = filtered.filter((c) => c.gender === genderFilter)
     }
+    if (branchFilter) {
+      filtered = filtered.filter((c) => c.branch_id === branchFilter)
+    }
 
     // status filter (active / inactive / archived)
     if (statusFilter) {
@@ -737,9 +910,9 @@ export default function CustomersPage() {
     }
 
     setFilteredCustomers(filtered)
-  }, [searchQuery, skinTypeFilter, genderFilter, statusFilter, sortMetric, sortOrder, customers])
+  }, [searchQuery, skinTypeFilter, genderFilter, statusFilter, sortMetric, sortOrder, branchFilter, customers])
 
-  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric)
+  const hasActiveFilters = Boolean(skinTypeFilter || genderFilter || statusFilter || sortMetric || branchFilter)
 
   const clearFilters = () => {
     setSearchQuery("")
@@ -748,6 +921,7 @@ export default function CustomersPage() {
     setStatusFilter("")
     setSortMetric("")
     setSortOrder("desc")
+    setBranchFilter("")
   }
 
   // Filter customers whenever state changes
@@ -758,18 +932,61 @@ export default function CustomersPage() {
 
   // open the customer modal when arriving from the NFC scanner page
   useEffect(() => {
-    const state = location.state as { customer?: Customer; fromNfc?: boolean; pointsAdded?: number } | null
-    if (!state?.fromNfc || !state.customer) return
+    const state = location.state as {
+      customer?: Customer
+      fromNfc?: boolean
+      fromAppointment?: boolean
+      pointsAdded?: number
+    } | null
+    if (!state?.customer) return
 
-    const customerFromList = customers.find((c) => c.id === state.customer?.id)
-    setSelectedCustomer(customerFromList || state.customer)
-    setModalView("details")
-    setCameFromNfc(true)
-    if (state.pointsAdded) {
-      // Refresh the list if points were added
-      fetchCustomers()
+    // When navigating from the calendar (appointment), we may only have a partial
+    // customer object (id + name). In that case, fetch the full customer record so
+    // the customer modal shows all fields.
+    const loadCustomer = async () => {
+      let customer = customers.find((c) => c.id === state.customer?.id) || state.customer
+
+      const shouldFetchFullCustomer =
+        state.fromAppointment ||
+        !customer?.first_name ||
+        !customer?.last_name ||
+        !customer?.email
+
+      if (shouldFetchFullCustomer && state.customer?.id) {
+        try {
+          const { data, error } = await supabase
+            .from("customers")
+            .select("*")
+            .eq("id", state.customer.id)
+            .single()
+          if (!error && data) {
+            customer = data as Customer
+            setCustomers((prev) => {
+              const found = prev.find((c) => c.id === data.id)
+              if (found) return prev.map((c) => (c.id === data.id ? data : c))
+              return [data, ...prev]
+            })
+          }
+        } catch (err) {
+          console.error("Failed to load customer for profile navigation:", err)
+        }
+      }
+
+      setSelectedCustomer((customer as Customer) || null)
+      setModalView("details")
+      if (state.fromNfc) {
+        setCameFromNfc(true)
+      }
+      if (state.pointsAdded) {
+        // Refresh the list if points were added
+        fetchCustomers()
+      }
+
+      // Clear state so we don't re-open the modal on future navigations.
+      navigate("/dashboard/customers", { replace: true })
     }
-    navigate("/dashboard/customers", { replace: true })
+
+    loadCustomer()
   }, [location.state, customers, navigate])
 
   // if we opened from the NFC scanner, clear the flag when the modal closes
@@ -899,6 +1116,20 @@ export default function CustomersPage() {
               </div>
               <div>
                 {renderFilter(
+                  "Branch",
+                  branchFilter,
+                  setBranchFilter,
+                  [
+                    { label: "All Branches", value: "" },
+                    ...branches.map((branch) => ({
+                      label: branch.name,
+                      value: branch.id,
+                    })),
+                  ],
+                )}
+              </div>
+              <div>
+                {renderFilter(
                   "Sort Metric",
                   sortMetric,
                   setSortMetric as any,
@@ -932,8 +1163,15 @@ export default function CustomersPage() {
             </div>
           )}
 
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {paginatedCustomers.length} of {filteredCustomers.length} clients
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-muted-foreground">
+            <div>Showing {paginatedCustomers.length} of {filteredCustomers.length} clients</div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/dashboard/scan", { state: { mode: "register" } })}
+            >
+              Add New Customer
+            </Button>
           </div>
 
           <div className="rounded-lg border bg-card">
@@ -944,6 +1182,7 @@ export default function CustomersPage() {
                     <th className="p-4 text-left font-medium">Client</th>
                     <th className="p-4 text-left font-medium">Contact</th>
                     <th className="p-4 text-left font-medium">NFC Card</th>
+                    <th className="p-4 text-left font-medium">Branch</th>
                     <th className="p-4 text-left font-medium">Points</th>
                     <th className="p-4 text-left font-medium">Visits</th>
                     <th className="p-4 text-left font-medium">Last Visit</th>
@@ -952,13 +1191,13 @@ export default function CustomersPage() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
                         Loading clients...
                       </td>
                     </tr>
                   ) : paginatedCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
                         No clients found
                       </td>
                     </tr>
@@ -1025,6 +1264,16 @@ export default function CustomersPage() {
                             </td>
                             <td className="p-4">
                               <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                            </td>
+                            <td className="p-4">
+                              {customer.branch_name ? (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-sm">{customer.branch_name}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                              )}
                             </td>
                             <td className="p-4">
                               <span className="font-semibold text-primary">{customer.points || 0}</span>
@@ -1270,9 +1519,11 @@ export default function CustomersPage() {
                   {/* Allergies */}
                   {selectedCustomer?.allergies && (
                     <div className="space-y-3">
-                      <h4 className="text-base font-semibold text-red-600">⚠️ Allergies</h4>
-                      <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-                        <p className="text-sm text-red-700 font-medium">{selectedCustomer.allergies}</p>
+                      <h4 className="text-base font-semibold text-destructive">Allergies</h4>
+                      <div className="rounded-lg border bg-destructive/10 border-destructive/30 dark:bg-destructive/20 dark:border-destructive/40 p-4">
+                        <p className="text-sm text-destructive/80 font-medium whitespace-pre-wrap">
+                          {selectedCustomer.allergies}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1361,18 +1612,21 @@ export default function CustomersPage() {
                             {(() => {
                               const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer?.id);
 
-                              // split any single appointment that contains multiple services into separate "virtual" appts
-                              const displayAppts = customerAppts.flatMap((a) => {
-                                if (a.service_ids && a.service_ids.length > 1) {
-                                  return a.service_ids.map((sid) => ({
-                                    ...a,
-                                    virtualServiceId: sid,
-                                    title: serviceMap.get(sid)?.name || a.title,
-                                    service_ids: [sid],
-                                  }))
-                                }
-                                return [a]
-                              })
+                              // Hide standalone cancelled appointments from history (they shouldn't be stored there)
+                              // Packages still show cancelled sessions so they can be rescheduled.
+                              const displayAppts = customerAppts
+                                .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
+                                .flatMap((a) => {
+                                  if (a.service_ids && a.service_ids.length > 1) {
+                                    return a.service_ids.map((sid) => ({
+                                      ...a,
+                                      virtualServiceId: sid,
+                                      title: serviceMap.get(sid)?.name || a.title,
+                                      service_ids: [sid],
+                                    }))
+                                  }
+                                  return [a]
+                                })
 
                               // Group by recurrence_group_id + service, or just appointment + service
                               const grouped = displayAppts.reduce((acc, a) => {
@@ -1403,87 +1657,155 @@ export default function CustomersPage() {
                               // Sort groups by the start time of their primary appointment (descending for history)
                               groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
 
+                              const openTreatmentDocForGroup = (g: { sessions: any[]; isPackage: boolean; primaryAppointment: any }) => {
+                                const a = g.primaryAppointment
+                                if (a.customer_id && a.id) {
+                                  setSelectedAppointment(a)
+                                  setSelectedAppointmentGroup(g)
+                                  setUploadSectionOpen({
+                                    beforeAfter: false,
+                                    forms: false,
+                                    miscellaneous: false,
+                                  })
+                                  setTreatmentPhotos([])
+                                  setTreatmentConsentUrl("")
+                                  setTreatmentConsentUploaded(false)
+                                  setTreatmentConsentPath("")
+                                  loadTreatmentPhotos(a.id, a.customer_id)
+                                  loadTreatmentConsentForm(a.id, a.customer_id)
+                                  setTreatmentDocModalOpen(true)
+                                }
+                              }
+
                               return groupList.map((g) => {
-                                const a = g.primaryAppointment;
+                                const a = g.primaryAppointment
+                                const totalSessions = g.sessions.length
+                                const completedCount = g.sessions.filter((s) => s.status === "completed").length
+                                const remainingCount = totalSessions - completedCount
+
+                                const isPackage = g.isPackage
+                                const isPackageFinished =
+                                  isPackage &&
+                                  g.sessions.every((s) => s.status === "completed" || s.status === "cancelled")
+                                const statusVariant = isPackage
+                                  ? isPackageFinished
+                                    ? "success"
+                                    : "warning"
+                                  : getAppointmentStatusVariant(a.status)
+                                const statusLabel = isPackage
+                                  ? isPackageFinished
+                                    ? "Completed"
+                                    : "In progress"
+                                  : a.status
+                                  ? a.status.replace("-", " ")
+                                  : "Unknown"
+
                                 return (
-                                  <Card 
-                                    key={g.id} 
-                                    className="py-0 gap-0 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary hover:border-l-primary/80"
-                                    onClick={() => {
-                                      if (a.customer_id && a.id) {
-                                        setSelectedAppointment(a);
-                                        setTreatmentPhotos([]);
-                                        setTreatmentConsentUrl("");
-                                        setTreatmentConsentUploaded(false);
-                                        setTreatmentConsentPath("");
-                                        loadTreatmentPhotos(a.id, a.customer_id);
-                                        loadTreatmentConsentForm(a.id, a.customer_id);
-                                        setTreatmentDocModalOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    <CardContent className="p-4">
-                                      <div className="flex items-start justify-between">
-                                        <div className="space-y-1 flex-1">
-                                          <p className="font-medium text-sm">
-                                            {a.title} {g.isPackage && <span className="text-xs font-normal text-muted-foreground ml-2">(Package of {g.sessions.length} sessions)</span>}
-                                          </p>
-                                          {a.treatment_name && (
-                                            <p className="text-xs text-muted-foreground">
-                                              Treatment: {a.treatment_name}
-                                            </p>
-                                          )}
-                                          {a.staff_name && (
-                                            <p className="text-xs text-muted-foreground">
-                                              Staff: {a.staff_name}
-                                            </p>
-                                          )}
-                                        </div>
-                                        <div className="text-right space-y-1 flex-shrink-0 ml-4">
-                                          <p className="text-sm font-medium">
-                                            {new Date(a.start_time).toLocaleDateString(undefined, {
-                                              year: "numeric",
-                                              month: "short",
-                                              day: "numeric",
-                                            })}
-                                          </p>
-                                          <p className="text-xs text-muted-foreground">
-                                            {new Date(a.start_time).toLocaleTimeString(undefined, {
-                                              hour: "2-digit",
-                                              minute: "2-digit",
-                                            })}
-                                            {a.end_time && (
-                                              <>
-                                                {" – "}
-                                                {new Date(a.end_time).toLocaleTimeString(undefined, {
+                                  <ContextMenu key={g.id}>
+                                    <ContextMenuTrigger asChild>
+                                      <Card
+                                        className="py-0 gap-0 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary hover:border-l-primary/80"
+                                        onClick={() => openTreatmentDocForGroup(g)}
+                                      >
+                                        <CardContent className="p-4">
+                                          <div className="flex items-start justify-between">
+                                            <div className="space-y-1 flex-1">
+                                              <div className="flex items-center gap-2">
+                                                <p className="font-medium text-sm">
+                                                  {a.title}
+                                                </p>
+                                                <Badge variant={statusVariant} className="capitalize">
+                                                  {statusLabel}
+                                                </Badge>
+                                              </div>
+                                              {g.isPackage && (
+                                                <p className="text-xs text-muted-foreground">
+                                                  Package: {totalSessions} sessions • {completedCount} done • {remainingCount} left
+                                                </p>
+                                              )}
+                                              {a.treatment_name && (
+                                                <p className="text-xs text-muted-foreground">
+                                                  Treatment: {a.treatment_name}
+                                                </p>
+                                              )}
+                                              {a.staff_name && (
+                                                <p className="text-xs text-muted-foreground">
+                                                  Staff: {a.staff_name}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <div className="text-right space-y-1 flex-shrink-0 ml-4">
+                                              <p className="text-sm font-medium">
+                                                {new Date(a.start_time).toLocaleDateString(undefined, {
+                                                  year: "numeric",
+                                                  month: "short",
+                                                  day: "numeric",
+                                                })}
+                                              </p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {new Date(a.start_time).toLocaleTimeString(undefined, {
                                                   hour: "2-digit",
                                                   minute: "2-digit",
                                                 })}
-                                              </>
-                                            )}
-                                          </p>
-                                          {g.isPackage && g.sessions.length > 1 && (
-                                            <p className="text-[10px] text-muted-foreground mt-1">
-                                              Last session: {new Date(g.sessions[g.sessions.length - 1].start_time).toLocaleDateString(undefined, {
-                                                month: "short",
-                                                day: "numeric",
-                                              })}
+                                                {a.end_time && (
+                                                  <>
+                                                    {" – "}
+                                                    {new Date(a.end_time).toLocaleTimeString(undefined, {
+                                                      hour: "2-digit",
+                                                      minute: "2-digit",
+                                                    })}
+                                                  </>
+                                                )}
+                                              </p>
+                                              {g.isPackage && g.sessions.length > 1 && (
+                                                <p className="text-[10px] text-muted-foreground mt-1">
+                                                  Last session: {new Date(g.sessions[g.sessions.length - 1].start_time).toLocaleDateString(undefined, {
+                                                    month: "short",
+                                                    day: "numeric",
+                                                  })}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <div className="ml-4 flex-shrink-0">
+                                              <FileText className="h-5 w-5 text-muted-foreground" />
+                                            </div>
+                                          </div>
+                                          {a.notes && (
+                                            <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+                                              {a.notes}
                                             </p>
                                           )}
-                                        </div>
-                                        <div className="ml-4 flex-shrink-0">
-                                          <FileText className="h-5 w-5 text-muted-foreground" />
-                                        </div>
-                                      </div>
-                                      {a.notes && (
-                                        <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
-                                          {a.notes}
-                                        </p>
-                                      )}
-                                    </CardContent>
-                                  </Card>
-                                );
-                              });
+                                        </CardContent>
+                                      </Card>
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent>
+                                      <ContextMenuItem onSelect={() => openTreatmentDocForGroup(g)}>
+                                        Open
+                                      </ContextMenuItem>
+                                      <ContextMenuItem
+                                        onSelect={() => {
+                                          setTreatmentDocModalOpen(false)
+                                          setTimeout(() => {
+                                            // Ensure any radix overlays are removed before navigation
+                                            document
+                                              .querySelectorAll(
+                                                "[data-radix-dialog-overlay], [data-radix-context-menu-overlay], [data-radix-popover-overlay], [data-radix-dropdown-menu-overlay]",
+                                              )
+                                              .forEach((el) => el.remove())
+
+                                            navigate("/dashboard/appointments", {
+                                              state: { appointmentId: a.id },
+                                            })
+                                          }, 0)
+                                        }}
+                                      >
+                                        Edit appointment
+                                      </ContextMenuItem>
+                                    </ContextMenuContent>
+                                  </ContextMenu>
+                                )
+                              })
+
                             })()}
                           </div>
                         )}
@@ -1629,6 +1951,13 @@ export default function CustomersPage() {
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">NFC Card</label>
+              <Input
+                value={selectedCustomer?.nfc_uid || ""}
+                readOnly
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">Allergies</label>
               <Textarea
                 rows={3}
@@ -1647,20 +1976,140 @@ export default function CustomersPage() {
           </div>
         </ScrollArea>
 
-        <div className="mt-2 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
-            Cancel
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setScanMessage(null)
+              setReassignPrompt(null)
+              setAssignNfcModalOpen(true)
+              setProfileEditorOpen(false)
+              setShouldReopenProfileEditor(true)
+            }}
+            disabled={savingProfile}
+          >
+            Tag New Card
           </Button>
-          <Button onClick={handleSaveProfile} disabled={savingProfile}>
-            {savingProfile ? "Saving..." : "Save Changes"}
-          </Button>
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
       </Dialog>
 
+      <Dialog open={assignNfcModalOpen} onOpenChange={setAssignNfcModalOpen}>
+        <DialogContent className="max-w-2xl h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle>Tag New NFC Card</DialogTitle>
+                <DialogDescription>
+                  Scan a new NFC card to assign it to this customer.
+                </DialogDescription>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssignNfcModalOpen(false)
+                  setReassignPrompt(null)
+                  setIsAssigningNfc(false)
+                  if (shouldReopenProfileEditor) {
+                    setProfileEditorOpen(true)
+                    setShouldReopenProfileEditor(false)
+                  }
+                }}
+                className="rounded-full p-2 text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+                aria-label="Close"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto p-6">
+            {scanMessage && (
+              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+                <p className="font-medium text-destructive">Card already assigned</p>
+                <p className="text-sm text-destructive/80 mt-2">{scanMessage}</p>
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setScanMessage(null)}
+                    disabled={isAssigningNfc}
+                  >
+                    Scan another card
+                  </Button>
+                </div>
+              </div>
+            )}
+            {assignSuccessMessage && (
+              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="font-medium text-emerald-700">Card assigned</p>
+                <p className="text-sm text-emerald-700 mt-2">{assignSuccessMessage}</p>
+              </div>
+            )}
+
+            <div className="w-full max-w-md">
+              <NFCScanner
+                onCustomerFound={(cardCustomer) => {
+                  if (!selectedCustomer) return
+                  handleAssignNfcCard(cardCustomer.nfc_uid)
+                }}
+                onNewCard={(uid) => handleAssignNfcCard(uid)}
+              />
+            </div>
+
+            {isAssigningNfc && (
+              <p className="mt-4 text-sm text-muted-foreground">Assigning card…</p>
+            )}
+            {reassignPrompt && (
+              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+                <p className="font-medium text-destructive">Card already assigned</p>
+                <p className="text-sm text-destructive/80 mt-2">
+                  This card is currently assigned to <span className="font-semibold">{reassignPrompt.ownerName}</span>.
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleCancelReassign}
+                    disabled={isAssigningNfc}
+                  >
+                    Scan another card
+                  </Button>
+                  <Button
+                    onClick={handleConfirmReassign}
+                    disabled={isAssigningNfc}
+                  >
+                    Reassign to this customer
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Treatment Documentation Modal */}
       <Dialog open={treatmentDocModalOpen} onOpenChange={setTreatmentDocModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0">
+        <DialogContent className="max-w-3xl h-[90vh] min-h-0 flex flex-col p-0">
           <div className="px-6 pt-6 pb-4 border-b">
             <DialogHeader>
               <DialogTitle className="text-xl">
@@ -1669,13 +2118,32 @@ export default function CustomersPage() {
               <DialogDescription>
                 {selectedAppointment?.treatment_name && `Treatment: ${selectedAppointment.treatment_name}`}
                 {selectedAppointment?.start_time && (
-                  <>, {new Date(selectedAppointment.start_time).toLocaleDateString()}</>
+                  <span className="block text-sm text-muted-foreground">
+                    <span className="block">
+                      {new Date(selectedAppointment.start_time).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span className="text-xs block">
+                      {new Date(selectedAppointment.start_time).toLocaleDateString(undefined, {
+                        month: "numeric",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </span>
                 )}
               </DialogDescription>
             </DialogHeader>
           </div>
 
-          <ScrollArea className="flex-1 w-full overflow-y-auto pr-3">
+          <ScrollArea
+            className="flex-1 h-full min-h-0 w-full pr-3 overflow-auto scrollbar-thin scrollbar-thumb-primary/50 scrollbar-track-transparent"
+            onWheel={(e) => e.stopPropagation()}
+          >
             <div className="space-y-6 px-6 py-4">
               {/* Hidden file inputs */}
               <input
@@ -1711,6 +2179,22 @@ export default function CustomersPage() {
                 }}
               />
               <input
+                id="treatment-other-input"
+                type="file"
+                accept="image/*"
+                title="Upload other photo"
+                aria-label="Upload other photo"
+                className="hidden"
+                disabled={treatmentGalleryUploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleTreatmentPhotoUpload(file, 'other')
+                  }
+                  e.currentTarget.value = ''
+                }}
+              />
+              <input
                 id="treatment-consent-form-input"
                 type="file"
                 accept="image/*"
@@ -1739,163 +2223,362 @@ export default function CustomersPage() {
                 </div>
               )}
 
-              {/* Gallery Display */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Before Photos Column */}
-                  <div className="space-y-3">
-                    <h6 className="text-sm font-semibold text-muted-foreground">Before</h6>
-                  {treatmentPhotos.filter(p => p.type === 'before').length > 0 ? (
-                    treatmentPhotos.filter(p => p.type === 'before').map((photo) => (
-                      <div key={photo.id} className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
-                        <div className="bg-muted aspect-square flex items-center justify-center relative cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(photo.url)}>
-                          <img 
-                            src={photo.url} 
-                            alt={photo.type}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none'
-                            }}
-                          />
-                        </div>
-                        <div className="p-2 bg-background flex items-center justify-between border-t">
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
-                              onClick={() => downloadImageAsJpeg(photo.url, `${photo.type}-photo`)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
-                              onClick={() => handleDeleteTreatmentPhoto(photo)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <button
-                      className="w-full aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={treatmentGalleryUploading}
-                      onClick={() => document.getElementById('treatment-before-input')?.click()}
-                    >
-                      <div className="bg-primary/10 p-2 rounded-lg">
-                        <Image className="h-5 w-5 text-primary" />
-                      </div>
-                      <p className="text-xs font-semibold">Upload Before</p>
-                    </button>
-                  )}
-                </div>
-
-                {/* After Photos Column */}
-                <div className="space-y-3">
-                  <h6 className="text-sm font-semibold text-muted-foreground">After</h6>
-                  {treatmentPhotos.filter(p => p.type === 'after').length > 0 ? (
-                    treatmentPhotos.filter(p => p.type === 'after').map((photo) => (
-                      <div key={photo.id} className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
-                        <div className="bg-muted aspect-square flex items-center justify-center relative cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(photo.url)}>
-                          <img 
-                            src={photo.url} 
-                            alt={photo.type}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none'
-                            }}
-                          />
-                        </div>
-                        <div className="p-2 bg-background flex items-center justify-between border-t">
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
-                              onClick={() => downloadImageAsJpeg(photo.url, `${photo.type}-photo`)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
-                              onClick={() => handleDeleteTreatmentPhoto(photo)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <button
-                      className="w-full aspect-square flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={treatmentGalleryUploading}
-                      onClick={() => document.getElementById('treatment-after-input')?.click()}
-                    >
-                      <div className="bg-primary/10 p-2 rounded-lg">
-                        <Image className="h-5 w-5 text-primary" />
-                      </div>
-                      <p className="text-xs font-semibold">Upload After</p>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-              {/* Consent Form Display */}
-              <div className="space-y-3">
-                <h6 className="text-sm font-semibold text-muted-foreground">Consent Form</h6>
-                {treatmentConsentUploaded && treatmentConsentUrl ? (
-                  <div className="rounded-xl border-2 overflow-hidden group relative hover:shadow-lg transition-shadow">
-                    <div className="bg-muted aspect-video flex items-center justify-center cursor-pointer hover:opacity-90" onClick={() => setEnlargedImage(treatmentConsentUrl)}>
-                      <img 
-                        src={treatmentConsentUrl}
-                        alt="Consent Form"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none'
-                        }}
-                      />
+              {/* Treatment session summary (for packages) */}
+              {treatmentGroupIsPackage && treatmentGroupTotalSessions > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold">Package history</p>
+                      <p className="text-xs text-muted-foreground">
+                        {treatmentGroupCompletedSessions} of {treatmentGroupTotalSessions} sessions completed • {treatmentGroupRemainingSessions} remaining
+                      </p>
                     </div>
-                    <div className="p-2 bg-background flex items-center justify-between border-t">
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
-                          onClick={() => downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 hover:bg-red-100 hover:text-red-600"
-                          onClick={handleDeleteTreatmentConsentForm}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                    <Badge 
+                      variant={treatmentGroupCompletedSessions === treatmentGroupTotalSessions ? "success" : "warning"} 
+                      className="capitalize"
+                    >
+                      {treatmentGroupCompletedSessions === treatmentGroupTotalSessions
+                        ? "Complete"
+                        : "In progress"}
+                    </Badge>
                   </div>
-                ) : (
+
+                  <div className="mt-4 space-y-2">
+                    {treatmentGroupSessionsSorted.map((s) => (
+                      <ContextMenu key={s.id}>
+                        <ContextMenuTrigger asChild>
+                          <div
+                            title="Right click for options"
+                            className="cursor-context-menu grid grid-cols-[1fr_auto] gap-3 rounded-lg border px-3 py-2 bg-background hover:bg-muted/30 transition-colors"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-medium">
+                                    {new Date(s.start_time).toLocaleDateString(undefined, {
+                                      weekday: "short",
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(s.start_time).toLocaleTimeString(undefined, {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                </div>
+                                <Badge variant={getAppointmentStatusVariant(s.status)} className="capitalize">
+                                  {s.status?.replace("-", " ") || "Unknown"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {s.notes ? s.notes : "No notes"}
+                              </p>
+                            </div>
+
+                            <div className="flex items-start justify-end gap-2">
+                              {s.status === "cancelled" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openRescheduleAppointment(s)}
+                                >
+                                  Reschedule
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </ContextMenuTrigger>
+
+                        <ContextMenuContent>
+                          <ContextMenuItem
+                            onSelect={() => {
+                              setTreatmentDocModalOpen(false)
+                              setTimeout(() => {
+                                document
+                                  .querySelectorAll(
+                                    "[data-radix-dialog-overlay], [data-radix-context-menu-overlay], [data-radix-popover-overlay], [data-radix-dropdown-menu-overlay]",
+                                  )
+                                  .forEach((el) => el.remove())
+
+                                navigate("/dashboard/appointments", {
+                                  state: { appointmentId: s.id },
+                                })
+                              }, 0)
+                            }}
+                          >
+                            Edit appointment
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload sections (collapsible) */}
+              <div className="space-y-4">
+                {/* Before & After */}
+                <div className="rounded-lg border bg-muted/10">
                   <button
-                    className="w-full py-4 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={treatmentConsentUploading}
-                    onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3"
+                    onClick={() =>
+                      setUploadSectionOpen((prev) => ({
+                        ...prev,
+                        beforeAfter: !prev.beforeAfter,
+                      }))
+                    }
                   >
-                    <div className="bg-blue-100 p-2 rounded-lg">
-                      <FileText className="h-5 w-5 text-blue-600" />
+                    <div className="flex items-center gap-2">
+                      <Image className="h-4 w-4 text-primary" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Before &amp; After</p>
+                        <p className="text-xs text-muted-foreground">
+                          Upload photos from the treatment session.
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs font-semibold">Upload Consent Form</p>
+                    <ChevronDown
+                      className={`h-4 w-4 transition ${
+                        uploadSectionOpen.beforeAfter ? "rotate-180" : ""
+                      }`}
+                    />
                   </button>
-                )}
+                  {uploadSectionOpen.beforeAfter && (
+                    <div className="border-t px-4 py-4">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {['before', 'after'].map((type) => {
+                          const photos = treatmentPhotos.filter((p) => p.type === type)
+                          const label = type === 'before' ? 'Before' : 'After'
+                          return (
+                            <div key={type} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium">{label}</p>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    document
+                                      .getElementById(`treatment-${type}-input`)
+                                      ?.click()
+                                  }
+                                  disabled={treatmentGalleryUploading}
+                                >
+                                  Upload
+                                </Button>
+                              </div>
+                              {photos.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-3">
+                                  {photos.map((photo) => (
+                                    <div
+                                      key={photo.id}
+                                      className="relative overflow-hidden rounded-xl border bg-muted"
+                                    >
+                                      <button
+                                        type="button"
+                                        className="absolute inset-0"
+                                        onClick={() => setEnlargedImage(photo.url)}
+                                      />
+                                      <img
+                                        src={photo.url}
+                                        alt={type}
+                                        className="h-24 w-full object-cover"
+                                      />
+                                      <div className="absolute bottom-1 right-1 flex gap-1">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-8 w-8 p-0"
+                                          onClick={() =>
+                                            downloadImageAsJpeg(photo.url, `${type}-photo`)
+                                          }
+                                        >
+                                          <Download className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-8 w-8 p-0"
+                                          onClick={() => handleDeleteTreatmentPhoto(photo)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">No photos added yet.</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Consent Form */}
+                <div className="rounded-lg border bg-muted/10">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3"
+                    onClick={() =>
+                      setUploadSectionOpen((prev) => ({
+                        ...prev,
+                        forms: !prev.forms,
+                      }))
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-blue-600" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Consent Form</p>
+                        <p className="text-xs text-muted-foreground">
+                          Upload a signed consent form or treatment notes.
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 transition ${
+                        uploadSectionOpen.forms ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {uploadSectionOpen.forms && (
+                    <div className="border-t px-4 py-4">
+                      {treatmentConsentUploaded && treatmentConsentUrl ? (
+                        <div className="flex flex-col gap-3">
+                          <div className="relative overflow-hidden rounded-xl border bg-muted">
+                            <button
+                              type="button"
+                              className="absolute inset-0"
+                              onClick={() => setEnlargedImage(treatmentConsentUrl)}
+                            />
+                            <img
+                              src={treatmentConsentUrl}
+                              alt="Consent Form"
+                              className="h-40 w-full object-cover"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')}
+                            >
+                              Download
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={handleDeleteTreatmentConsentForm}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">No consent form uploaded yet.</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
+                            disabled={treatmentConsentUploading}
+                          >
+                            Upload
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Miscellaneous Photos */}
+                <div className="rounded-lg border bg-muted/10">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3"
+                    onClick={() =>
+                      setUploadSectionOpen((prev) => ({
+                        ...prev,
+                        miscellaneous: !prev.miscellaneous,
+                      }))
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <Plus className="h-4 w-4 text-primary" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Miscellaneous</p>
+                        <p className="text-xs text-muted-foreground">
+                          Upload other reference images or notes.
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 transition ${
+                        uploadSectionOpen.miscellaneous ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {uploadSectionOpen.miscellaneous && (
+                    <div className="border-t px-4 py-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {treatmentPhotos
+                          .filter((p) => p.type === 'other')
+                          .map((photo) => (
+                            <div
+                              key={photo.id}
+                              className="relative overflow-hidden rounded-xl border bg-muted"
+                            >
+                              <button
+                                type="button"
+                                className="absolute inset-0"
+                                onClick={() => setEnlargedImage(photo.url)}
+                              />
+                              <img
+                                src={photo.url}
+                                alt="Misc"
+                                className="h-24 w-full object-cover"
+                              />
+                              <div className="absolute bottom-1 right-1 flex gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() =>
+                                    downloadImageAsJpeg(photo.url, `other-photo-${photo.id}`)
+                                  }
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleDeleteTreatmentPhoto(photo)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        <button
+                          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
+                          onClick={() => document.getElementById('treatment-other-input')?.click()}
+                          disabled={treatmentGalleryUploading}
+                        >
+                          <Plus className="h-5 w-5 text-primary" />
+                          Add Photo
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </ScrollArea>
@@ -1923,7 +2606,13 @@ export default function CustomersPage() {
       {/* Appointment Dialog */}
       <AppointmentDialog
         open={appointmentDialogOpen}
-        onOpenChange={setAppointmentDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAppointmentToEdit(null)
+          }
+          setAppointmentDialogOpen(open)
+        }}
+        appointment={appointmentToEdit}
         staff={staff}
         selectedDate={selectedDate}
         interval={interval}
@@ -1931,39 +2620,45 @@ export default function CustomersPage() {
         appointments={appointments}
         blockedTimes={[]}
         onSave={async (appointment) => {
-          await addAppointment(appointment)
-          
-          // If this was a reward redemption, deduct points now
-          if (pendingReward && prefillCustomer) {
-            const newPoints = (prefillCustomer.points || 0) - pendingReward.points_required
-            
-            const { data: updatedCust, error: updateErr } = await supabase
-              .from("customers")
-              .update({ points: newPoints })
-              .eq("id", prefillCustomer.id)
-              .select()
-              .single()
-            
-            if (!updateErr && updatedCust) {
-              await supabase
-                .from("points_transactions")
-                .insert({
-                  customer_id: prefillCustomer.id,
-                  points_change: -pendingReward.points_required,
-                  reason: `Redeemed: ${pendingReward.reward_name}`,
-                  type: "redeem",
-                  appointment_id: appointment.id
-                })
+          if (appointmentToEdit) {
+            await updateAppointment(appointmentToEdit.id, appointment)
+          } else {
+            await addAppointment(appointment)
+
+            // If this was a reward redemption, deduct points now
+            if (pendingReward && prefillCustomer) {
+              const newPoints = (prefillCustomer.points || 0) - pendingReward.points_required
               
-              setCustomers(prev => prev.map(c => c.id === updatedCust.id ? updatedCust : c))
+              const { data: updatedCust, error: updateErr } = await supabase
+                .from("customers")
+                .update({ points: newPoints })
+                .eq("id", prefillCustomer.id)
+                .select()
+                .single()
+              
+              if (!updateErr && updatedCust) {
+                await supabase
+                  .from("points_transactions")
+                  .insert({
+                    customer_id: prefillCustomer.id,
+                    points_change: -pendingReward.points_required,
+                    reason: `Redeemed: ${pendingReward.reward_name}`,
+                    type: "redeem",
+                    appointment_id: appointment.id,
+                  })
+                
+                setCustomers((prev) => prev.map((c) => (c.id === updatedCust.id ? updatedCust : c)))
+              }
             }
           }
 
           setAppointmentDialogOpen(false)
+          setAppointmentToEdit(null)
           setPrefillCustomer(null)
           setPrefillServiceIds([])
           setPendingReward(null)
         }}
+        onDelete={(id) => deleteAppointment(id)}
         prefillCustomerId={prefillCustomer?.id}
         prefillCustomerName={prefillCustomer?.name || `${prefillCustomer?.first_name || ''} ${prefillCustomer?.last_name || ''}`.trim()}
         prefillServiceIds={prefillServiceIds}

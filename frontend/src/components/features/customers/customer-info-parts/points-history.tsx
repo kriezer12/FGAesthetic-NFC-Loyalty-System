@@ -10,6 +10,7 @@ interface PointsTransaction {
   reason: string
   type: string
   created_at: string
+  expires_at?: string | null
 }
 
 interface PointsHistoryProps {
@@ -80,8 +81,13 @@ export function PointsHistory({ customerId, refreshKey = 0 }: PointsHistoryProps
               <span className="text-muted-foreground">{formatCheckinTime(log.created_at)}</span>
             </div>
           </div>
-          <span className={`font-medium ${log.points_change > 0 ? "text-primary" : "text-destructive"}`}>
+          <span className={`font-medium ${log.points_change > 0 ? "text-green-500" : "text-destructive"}`}>
             {log.points_change > 0 ? "+" : ""}{log.points_change} pts
+            {log.type === 'earn' && log.expires_at && (
+              <div className="text-[10px] text-muted-foreground font-normal text-right">
+                Exp: {new Date(log.expires_at).toLocaleDateString()}
+              </div>
+            )}
           </span>
         </div>
       ))}

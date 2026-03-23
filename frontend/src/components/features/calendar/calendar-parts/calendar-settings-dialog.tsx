@@ -76,11 +76,6 @@ export function CalendarSettingsDialog({
   settings,
   onSave,
 }: CalendarSettingsDialogProps) {
-  const staffOnly = useMemo(
-    () => staff.filter((member) => member.role?.toLowerCase() === "staff"),
-    [staff]
-  )
-
   const [workStart, setWorkStart] = useState(settings?.workHoursStart || "09:00")
   const [workEnd, setWorkEnd] = useState(settings?.workHoursEnd || "18:00")
   const [lunchStart, setLunchStart] = useState(settings?.lunchBreakStart || "12:00")
@@ -90,7 +85,7 @@ export function CalendarSettingsDialog({
     settings?.staffSchedules || initializeStaffDays()
   )
   const [selectedStaff, setSelectedStaff] = useState<string[]>(
-    settings?.selectedStaff || staffOnly.map((s) => s.id)
+    settings?.selectedStaff || staff.map((s) => s.id)
   )
   const [staffSearch, setStaffSearch] = useState("")
 
@@ -109,7 +104,7 @@ export function CalendarSettingsDialog({
 
   function initializeStaffDays(): Record<string, DayOfWeek[]> {
     const result: Record<string, DayOfWeek[]> = {}
-    staffOnly.forEach((s) => {
+    staff.forEach((s) => {
       // Default: all staff work all days
       result[s.id] = ["MON", "TUE", "WED", "THU", "FRI"]
     })
@@ -117,7 +112,7 @@ export function CalendarSettingsDialog({
   }
 
   // Filter staff based on search
-  const filteredStaff = staffOnly.filter(
+  const filteredStaff = staff.filter(
     (s) =>
       s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
       s.role?.toLowerCase().includes(staffSearch.toLowerCase())
@@ -154,7 +149,7 @@ export function CalendarSettingsDialog({
   }
 
   const handleSave = () => {
-    const staffIds = new Set(staffOnly.map((s) => s.id))
+    const staffIds = new Set(staff.map((s) => s.id))
     const filteredSelectedStaff = selectedStaff.filter((id) => staffIds.has(id))
     const filteredStaffDays = Object.fromEntries(
       Object.entries(staffDays).filter(([id]) => staffIds.has(id))
@@ -174,16 +169,16 @@ export function CalendarSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 h-[90vh] max-h-[860px]">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0 bg-background">
           <DialogTitle>Calendar Settings</DialogTitle>
           <DialogDescription>
             Configure work hours, lunch breaks, display preferences and staff schedules.
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[60vh] -mx-6 px-6">
-          <div className="space-y-6 py-4 pr-4">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="space-y-6 px-5 py-4 pb-8">
             {/* -------- Work Hours Settings -------- */}
             <div className="space-y-3 border-b pb-6">
             <h3 className="text-sm font-semibold">Work Hours</h3>
@@ -276,7 +271,7 @@ export function CalendarSettingsDialog({
               />
             </div>
 
-            <ScrollArea className="h-[250px]">
+            <ScrollArea className="h-[250px] rounded-md border bg-muted/20 p-2">
               <div className="space-y-3 pr-4">
                 {filteredStaff.length > 0 ? (
                 filteredStaff.map((member) => (
@@ -345,7 +340,7 @@ export function CalendarSettingsDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 border-t px-5 py-3 shrink-0 bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

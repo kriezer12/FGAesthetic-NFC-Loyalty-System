@@ -12,9 +12,21 @@ export default function NFCScanPage() {
   const navigate = useNavigate()
   const [viewState, setViewState] = useState<ViewState>("scanning")
   const [pendingNfcUid, setPendingNfcUid] = useState<string | null>(null)
+  const [isRegisterMode, setIsRegisterMode] = useState(false)
+  const [registerError, setRegisterError] = useState<string | null>(null)
   const location = useLocation()
 
   const handleCustomerFound = async (customer: Customer) => {
+    if (isRegisterMode) {
+      // In register mode we want an unassigned card. Ask user to retry.
+      setRegisterError(
+        `Card already assigned to ${
+          customer.name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "another customer"
+        }. Please scan an unassigned card.`
+      )
+      return
+    }
+
     // 1. Automatically apply points for this visit
     const result = await applyAutomatedPoints(customer.id)
     
@@ -36,6 +48,7 @@ export default function NFCScanPage() {
   }
 
   const handleNewCard = (nfcUid: string) => {
+    setRegisterError(null)
     setPendingNfcUid(nfcUid)
     setViewState("register")
   }
@@ -52,11 +65,12 @@ export default function NFCScanPage() {
     setViewState("scanning")
   }
 
-  // no longer track customer locally; navigation handles viewing/updating
-
   useEffect(() => {
     document.title = "NFC Scanner - FG Aesthetic Centre"
-  }, [])
+
+    const mode = (location.state as any)?.mode
+    setIsRegisterMode(mode === "register")
+  }, [location.state])
 
   // if the listener navigated here with a uid, process it immediately
   useEffect(() => {
@@ -84,14 +98,33 @@ export default function NFCScanPage() {
   }, [location.state])
 
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
-            {viewState === "scanning" && (
-              <NFCScanner onCustomerFound={handleCustomerFound} onNewCard={handleNewCard} />
-            )}
+    <div className="relative flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
+      {/* Subtle radial gradient backdrop */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-primary/[0.03] blur-3xl" />
+        <div className="absolute left-1/3 bottom-1/4 h-[300px] w-[300px] rounded-full bg-primary/[0.02] blur-3xl" />
+      </div>
 
-            {viewState === "register" && pendingNfcUid && (
-              <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
+      <div className="relative z-10 w-full">
+        {viewState === "scanning" && (
+          <>
+            {registerError && (
+              <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                {registerError}
+              </div>
             )}
+            <NFCScanner
+              onCustomerFound={handleCustomerFound}
+              onNewCard={handleNewCard}
+              mode={isRegisterMode ? "register" : "scan"}
+            />
+          </>
+        )}
+
+        {viewState === "register" && pendingNfcUid && (
+          <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
+        )}
+      </div>
     </div>
   )
 }

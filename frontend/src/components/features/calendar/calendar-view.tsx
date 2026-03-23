@@ -7,9 +7,12 @@
  * header, grid and dialog sub-components together.
  */
 
-import { useCallback, useState, useEffect, useMemo } from "react"
+import { useCallback, useState, useEffect, useMemo, useRef } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Card } from "@/components/ui/card"
+import { supabase } from "@/lib/supabase"
 import type { Appointment, IntervalMinutes, StaffMember, ViewMode } from "@/types/appointment"
+import type { Service } from "@/types/service"
 import {
   DEFAULT_INTERVAL,
 } from "./calendar-parts/calendar-config"
@@ -29,6 +32,7 @@ import {
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
 import { awardPointsForAppointment } from "./calendar-parts/loyalty-utils"
+import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
 
 // ---- localStorage key ----
 const SETTINGS_STORAGE_KEY = "calendar-settings"
@@ -84,7 +88,21 @@ export function CalendarView() {
   const [viewMode, setViewMode]         = useState<ViewMode>("day")
   
   // Fetch appointments from Supabase
-  const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+
+  // Load services so we can derive titles for follow-up appointments
+  const [services, setServices] = useState<Service[]>([])
+  const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
+
+  const loadServices = useCallback(async () => {
+    const { data } = await supabase.from("services").select("*")
+    setServices((data || []) as Service[])
+    return (data || []) as Service[]
+  }, [])
+
+  useEffect(() => {
+    loadServices()
+  }, [loadServices])
   
   // Load settings from localStorage (or defaults)
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(() => loadSettings())
@@ -176,6 +194,50 @@ export function CalendarView() {
   const [prefillStaffId, setPrefillStaffId]     = useState<string | undefined>()
   const [prefillStartMin, setPrefillStartMin]   = useState<number | undefined>()
 
+  const location = useLocation()
+  const navigate = useNavigate()
+  const processedAppointmentIdRef = useRef<string | null>(null)
+  const [requestedAppointmentId, setRequestedAppointmentId] = useState<string | null>(null)
+
+  const cleanupRadixOverlays = () => {
+    if (typeof document === "undefined") return
+    const selectors = [
+      "[data-radix-dialog-overlay]",
+      "[data-radix-context-menu-overlay]",
+      "[data-radix-popover-overlay]",
+      "[data-radix-dropdown-menu-overlay]",
+    ]
+    selectors.forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el) => el.remove())
+    })
+    document.body.style.pointerEvents = ""
+    document.body.style.overflow = ""
+  }
+
+  useEffect(() => {
+    const appointmentId = (location.state as any)?.appointmentId
+    if (!appointmentId) return
+
+    setRequestedAppointmentId((prev) => (prev === appointmentId ? prev : appointmentId))
+  }, [location.state])
+
+  useEffect(() => {
+    if (appointmentsLoading || !requestedAppointmentId) return
+    if (processedAppointmentIdRef.current === requestedAppointmentId) return
+
+    const match = appointments.find((a) => a.id === requestedAppointmentId)
+    if (!match) return
+
+    setSelectedDate(new Date(match.start_time))
+    setEditingAppointment(match)
+    setDialogOpen(true)
+    processedAppointmentIdRef.current = requestedAppointmentId
+    setRequestedAppointmentId(null)
+
+    // Clear navigation state so closing the dialog doesn't re-open it.
+    navigate(location.pathname, { replace: true, state: null })
+  }, [appointmentsLoading, requestedAppointmentId, appointments, navigate, location.pathname])
+
   // ---- recurrence action dialog state ----
   const [recurrenceDialogOpen, setRecurrenceDialogOpen] = useState(false)
   const [recurrenceActionType, setRecurrenceActionType] = useState<RecurrenceActionType>("delete")
@@ -208,7 +270,10 @@ export function CalendarView() {
         // If status changed to completed, award points
         if (updates.status === "completed" && oldAppt?.status !== "completed") {
           const updatedAppt = { ...oldAppt, ...updates } as Appointment
-          await awardPointsForAppointment(updatedAppt)
+          await Promise.all([
+            awardPointsForAppointment(updatedAppt),
+            deductInventoryForAppointment(updatedAppt)
+          ])
         }
       } catch (err) {
         console.error("Failed to update appointment:", err)
@@ -232,6 +297,22 @@ export function CalendarView() {
       // if recurrence requested, add sequence
       if (appt.recurrence_days && appt.recurrence_count && appt.recurrence_count > 1) {
         const groupId = appt.recurrence_group_id || generateId()
+
+        // Ensure we have service metadata to generate follow-up titles, otherwise fall back safely
+        let localServiceMap = serviceMap
+        if (localServiceMap.size === 0) {
+          const loaded = await loadServices()
+          localServiceMap = new Map((loaded || []).map((s) => [s.id, s]))
+        }
+
+        const packageServiceIds = (appt.service_ids || []).filter((id) =>
+          localServiceMap.get(id)?.is_package,
+        )
+        const packageTitle = packageServiceIds
+          .map((id) => localServiceMap.get(id)?.name)
+          .filter(Boolean)
+          .join(", ")
+
         let current: Appointment = { ...appt, recurrence_group_id: groupId }
         // first appointment uses whatever type user chose
         await addAppointment(current)
@@ -243,6 +324,8 @@ export function CalendarView() {
             start_time: addDaysToIso(current.start_time, appt.recurrence_days),
             end_time: addDaysToIso(current.end_time, appt.recurrence_days),
             appointment_type: "followup", // force followups after the first session
+            title: packageTitle || current.title,
+            service_ids: packageServiceIds.length > 0 ? packageServiceIds : undefined,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }
@@ -260,9 +343,12 @@ export function CalendarView() {
     } else {
       await updateAppointment(appt.id, appt)
       
-      // If status changed to completed, award points
+      // If status changed to completed, award points and deduct inventory
       if (appt.status === "completed" && oldAppt?.status !== "completed") {
-        await awardPointsForAppointment(appt)
+        await Promise.all([
+          awardPointsForAppointment(appt),
+          deductInventoryForAppointment(appt)
+        ])
       }
     }
     // Dialog closes itself on success; errors propagate back to the dialog
@@ -424,7 +510,19 @@ export function CalendarView() {
 
       <AppointmentDialog
         open={dialogOpen}
-        onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingAppointment(null) }}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) {
+            setEditingAppointment(null)
+            setRequestedAppointmentId(null)
+            // Clear any navigation state that would re-open the dialog
+            navigate(location.pathname, { replace: true, state: null })
+            processedAppointmentIdRef.current = null
+
+            // Safety cleanup: remove any lingering Radix overlay elements (prevents UI freeze)
+            cleanupRadixOverlays()
+          }
+        }}
         appointment={editingAppointment}
         prefillStaffId={prefillStaffId}
         prefillStartMinutes={prefillStartMin}

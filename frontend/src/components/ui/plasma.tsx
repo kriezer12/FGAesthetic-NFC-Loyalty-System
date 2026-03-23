@@ -156,7 +156,10 @@ export const Plasma: React.FC<PlasmaProps> = ({
     }
 
     const setSize = () => {
-      const rect = containerRef.current!.getBoundingClientRect();
+      const container = containerRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
       const width = Math.max(1, Math.floor(rect.width));
       const height = Math.max(1, Math.floor(rect.height));
       renderer.setSize(width, height);
@@ -165,8 +168,10 @@ export const Plasma: React.FC<PlasmaProps> = ({
       res[1] = gl.drawingBufferHeight;
     };
 
-    const ro = new ResizeObserver(setSize);
-    ro.observe(containerRef.current);
+    const ro = new ResizeObserver(() => setSize());
+    if (containerRef.current) {
+      ro.observe(containerRef.current);
+    }
     setSize();
 
     let raf = 0;
