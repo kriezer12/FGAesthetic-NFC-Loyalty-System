@@ -1,0 +1,54 @@
+# ================================
+# FG Aesthetic NFC Loyalty System
+# Production Docker Compose Configuration
+# ================================
+#
+# Usage:
+#   Build & Run: docker-compose -f docker-compose.prod.yml up --build -d
+#   Stop:        docker-compose -f docker-compose.prod.yml down
+#
+# Environment variables should be set in .env file at project root
+
+services:
+  # ==================== Backend API ====================
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fgaesthetic-backend
+    # No volumes for production - code is baked into the image
+    ports:
+      - "5000:5000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - FRONTEND_URL=http://localhost
+    # Run with Gunicorn in production
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 2 "app.main:create_app()"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==================== Frontend App ====================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+        - VITE_JWT_SECRET=${VITE_JWT_SECRET}
+    container_name: fgaesthetic-frontend
+    # No volumes for production - built assets are served by Nginx
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://backend:5000
+    depends_on:
+      - backend
+    restart: unless-stopped

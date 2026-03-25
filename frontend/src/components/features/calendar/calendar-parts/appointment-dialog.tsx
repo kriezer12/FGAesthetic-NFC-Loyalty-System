@@ -479,21 +479,25 @@ export function AppointmentDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0">
-          <div className="grid gap-4 px-5 py-4 pb-8 sm:grid-cols-2">
+          <div className="grid gap-4 px-5 py-4 pb-8 sm:grid-cols-2" id="appt-dialog-form">
+
             {/* Appointment type */}
             <div className="grid gap-1.5">
-              <Label>Appointment Type</Label>
+              <Label htmlFor="appt-type">Appointment Type</Label>
               <Combobox
+                id="appt-type"
                 options={APPOINTMENT_TYPE_OPTIONS}
                 value={appointmentType}
                 onValueChange={(val) => setAppointmentType(val as "consultation" | "treatment" | "followup")}
               />
             </div>
 
+
             {/* Status */}
             <div className="grid gap-1.5">
-              <Label>Status</Label>
+              <Label htmlFor="appt-status">Status</Label>
               <Combobox
+                id="appt-status"
                 options={statusOptions}
                 value={status}
                 onValueChange={(val) => setStatus(val as AppointmentStatus)}
@@ -503,25 +507,30 @@ export function AppointmentDialog({
               />
             </div>
 
+
             {/* Services (only for non-consultation) */}
             {appointmentType !== "consultation" && (
               <div className="grid gap-1.5 sm:col-span-2">
-                <Label>
+                <Label htmlFor="appt-services" className="flex items-center gap-1">
                   Services <span className="text-destructive">*</span>
                 </Label>
+                <div id="appt-services">
                 <ServicePicker
                   value={serviceIds}
                   onChange={setServiceIds}
                   showSelectedBadges
                   compactSelectedPreview
                 />
+                </div>
               </div>
             )}
 
+
             {/* Customer */}
             <div className="grid gap-1.5">
-              <Label>Customer</Label>
+              <Label htmlFor="appt-customer">Customer</Label>
               <Combobox
+                id="appt-customer"
                 options={customerOptions}
                 value={customerId}
                 onValueChange={handleCustomerChange}
@@ -531,35 +540,45 @@ export function AppointmentDialog({
               />
             </div>
 
+
             {/* Staff */}
             <div className="grid gap-1.5">
-              <Label>
+              <Label htmlFor="appt-staff" className="flex items-center gap-1">
                 Staff <span className="text-destructive">*</span>
               </Label>
               <Combobox
+                id="appt-staff"
                 options={staffOptions}
                 value={staffId}
                 onValueChange={setStaffId}
                 placeholder="Select staff member..."
                 searchPlaceholder="Search staff..."
                 emptyMessage="No staff found."
+                aria-required={true}
+                aria-describedby={error ? "appt-form-error" : undefined}
               />
             </div>
 
+
+
             {/* Appointment Date */}
             <div className="grid gap-1.5">
-              <Label>Appointment Date</Label>
+              <Label htmlFor="appt-date">Appointment Date</Label>
+              <div id="appt-date">
               <DatePicker
                 value={appointmentDate}
                 onChange={(date) => date && setAppointmentDate(date)}
                 placeholder="Select appointment date"
               />
+              </div>
             </div>
+
 
             {/* Location */}
             <div className="grid gap-1.5">
-              <Label>Location</Label>
+              <Label htmlFor="appt-location">Location</Label>
               <Combobox
+                id="appt-location"
                 options={locationOptions}
                 value={locationType}
                 onValueChange={(val) => setLocationType(val as "branch" | "home_based")}
@@ -569,31 +588,45 @@ export function AppointmentDialog({
               />
             </div>
 
+
             {/* Start / End times */}
             <div className="grid grid-cols-2 gap-3 sm:col-span-2">
               <div className="grid gap-1.5">
-                <Label>
+                <Label htmlFor="appt-start" className="flex items-center gap-1">
                   Start Time <span className="text-destructive">*</span>
                 </Label>
+                <div id="appt-start">
                 <TimePicker
+                  id="appt-start"
                   value={startTime}
                   onChange={setStartTime}
                   minTime={minutesToTimeInput(clinicHours.open * 60)}
                   maxTime={minutesToTimeInput(clinicHours.close * 60)}
+                  aria-required={true}
+                  aria-describedby={error ? "appt-form-error" : undefined}
                 />
+
+                </div>
               </div>
               <div className="grid gap-1.5">
-                <Label>
+                <Label htmlFor="appt-end" className="flex items-center gap-1">
                   End Time <span className="text-destructive">*</span>
                 </Label>
+                <div id="appt-end">
                 <TimePicker
+                  id="appt-end"
                   value={endTime}
                   onChange={setEndTime}
                   minTime={minutesToTimeInput(clinicHours.open * 60)}
                   maxTime={minutesToTimeInput(clinicHours.close * 60)}
+                  aria-required={true}
+                  aria-describedby={error ? "appt-form-error" : undefined}
                 />
+
+                </div>
               </div>
             </div>
+
 
             {/* Recurrence */}
             {hasPackageSelected && (
@@ -601,8 +634,9 @@ export function AppointmentDialog({
                 <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1.5">
-                    <Label>Days between sessions</Label>
+                    <Label htmlFor="appt-recur-days">Days between sessions</Label>
                     <Input
+                      id="appt-recur-days"
                       type="number"
                       min={1}
                       value={recurrenceInterval ?? ""}
@@ -614,8 +648,9 @@ export function AppointmentDialog({
                     />
                   </div>
                   <div className="grid gap-1.5">
-                    <Label>Total sessions</Label>
+                    <Label htmlFor="appt-recur-count">Total sessions</Label>
                     <Input
+                      id="appt-recur-count"
                       type="number"
                       min={1}
                       value={recurrenceCount ?? ""}
@@ -628,6 +663,7 @@ export function AppointmentDialog({
                 </div>
               </div>
             )}
+
 
             {/* Notes */}
             <div className="grid gap-1.5 sm:col-span-2">
@@ -658,10 +694,15 @@ export function AppointmentDialog({
 
             {/* Validation error */}
             {error && (
-              <p className="sm:col-span-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <p 
+                id="appt-form-error"
+                role="alert"
+                className="sm:col-span-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
                 {error}
               </p>
             )}
+
           </div>
         </ScrollArea>
 

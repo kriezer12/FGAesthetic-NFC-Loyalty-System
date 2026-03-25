@@ -36,6 +36,30 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   )
 }
 
+function ChartDataTable({ data, title }: { data: Array<{ label: string; count: number }>; title: string }) {
+  return (
+    <div className="sr-only">
+      <table aria-label={`${title} tabular data`}>
+        <thead>
+          <tr>
+            <th scope="col">Time Period</th>
+            <th scope="col">Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr key={row.label}>
+              <td>{row.label}</td>
+              <td>{row.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+
 interface ModalChartProps {
   type: "customers" | "cards" | "visits" | "activity"
   data: ChartPoint[]
@@ -53,11 +77,13 @@ export function DashboardModalCharts({ type, data, filter, onFilterChange, stats
   if (type === "customers") {
     return (
       <div className="space-y-4 pt-2">
-        <div className="flex items-baseline justify-between">
-          <p className="text-sm text-muted-foreground">New Registrations Over Time</p>
+        <div className="flex items-baseline justify-between mb-1">
+          <h3 className="text-sm font-semibold text-muted-foreground">New Registrations Over Time</h3>
           <FilterToggle value={filter} onChange={onFilterChange} />
         </div>
+        <ChartDataTable data={data} title="New Registrations Over Time" />
         <ResponsiveContainer width="100%" height={300}>
+
           <AreaChart data={data}>
             <defs>
               <linearGradient id="regGradientModal" x1="0" y1="0" x2="0" y2="1">
@@ -108,8 +134,10 @@ export function DashboardModalCharts({ type, data, filter, onFilterChange, stats
           </div>
         </div>
         <div>
-          <p className="text-sm text-muted-foreground mb-3">Cards Added Over Time</p>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3">Cards Added Over Time</h3>
+          <ChartDataTable data={data} title="Cards Added Over Time" />
           <ResponsiveContainer width="100%" height={250}>
+
             <BarChart data={data} barCategoryGap="30%">
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
@@ -138,10 +166,12 @@ export function DashboardModalCharts({ type, data, filter, onFilterChange, stats
         </div>
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-muted-foreground">Daily Activity</p>
+            <h3 className="text-sm font-semibold text-muted-foreground">Daily Activity</h3>
             <FilterToggle value={filter} onChange={onFilterChange} />
           </div>
+          <ChartDataTable data={data} title="Daily Activity" />
           <ResponsiveContainer width="100%" height={250}>
+
             <BarChart data={data} barCategoryGap="30%">
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
@@ -165,10 +195,12 @@ export function DashboardModalCharts({ type, data, filter, onFilterChange, stats
         </div>
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-muted-foreground">Check-ins This Week</p>
+            <h3 className="text-sm font-semibold text-muted-foreground">Check-ins This Week</h3>
             <FilterToggle value={filter} onChange={onFilterChange} />
           </div>
+          <ChartDataTable data={data} title="Check-ins This Week" />
           <ResponsiveContainer width="100%" height={250}>
+
             <BarChart data={data} barCategoryGap="30%">
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />

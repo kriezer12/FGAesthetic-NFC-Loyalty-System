@@ -94,21 +94,28 @@ export function AppNavbar() {
               <div className="flex items-center gap-1">
                 {userProfile.role === "super_admin" && (
                   <button
+                    type="button"
                     onClick={() => setAnnouncementModalOpen(true)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-200"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
                     title="Broadcast Announcement"
+                    aria-label="Broadcast Announcement"
                   >
                     <Megaphone className="h-5 w-5" />
                   </button>
+
                 )}
                 <NavbarAdminDropdown />
                 <button
+                  type="button"
                   onClick={() => setAddAccountOpen(true)}
                   onMouseEnter={() => setIsAddButtonHovered(true)}
                   onMouseLeave={() => setIsAddButtonHovered(false)}
-                  className={`hidden md:flex items-center gap-2 text-primary transition-all duration-300 px-3 py-1.5 rounded-lg ${
+                  onFocus={() => setIsAddButtonHovered(true)}
+                  onBlur={() => setIsAddButtonHovered(false)}
+                  className={`hidden md:flex items-center gap-2 text-primary transition-all duration-300 px-3 py-1.5 rounded-lg focus-visible:ring-2 focus-visible:ring-primary/20 ${
                     isAddButtonHovered ? "gap-3 add-account-gradient" : "gap-2"
                   }`}
+                  aria-label="Add New Account"
                 >
                   <Plus className="h-5 w-5 shrink-0" />
                   {isAddButtonHovered && (
@@ -119,17 +126,20 @@ export function AppNavbar() {
                     </span>
                   )}
                 </button>
+
               </div>
             )}
             <NavbarNotificationBell />
             <button
+              type="button"
               onClick={() => navigate("/dashboard/checkout")}
-              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 focus-visible:text-foreground focus-visible:bg-muted/50 transition-all duration-200"
               title="Checkout"
               aria-label="Go to checkout"
             >
               <ShoppingCart className="h-5 w-5" />
             </button>
+
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary">
               <Clock className="h-3.5 w-3.5 shrink-0" />
               <div className="flex flex-col leading-none">

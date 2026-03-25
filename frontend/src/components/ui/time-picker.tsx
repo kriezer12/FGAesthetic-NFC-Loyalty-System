@@ -27,7 +27,11 @@ interface TimePickerProps {
   minuteStep?: number
   minTime?: string // HH:MM
   maxTime?: string // HH:MM
+  id?: string
+  "aria-required"?: boolean
+  "aria-describedby"?: string
 }
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -185,7 +189,11 @@ export function TimePicker({
   minuteStep = 1,
   minTime,
   maxTime,
+  id,
+  "aria-required": ariaRequired,
+  "aria-describedby": ariaDescribedby,
 }: TimePickerProps) {
+
   const { hour12, minute, period } = parse24(value)
 
   // Text input state
@@ -371,7 +379,10 @@ export function TimePicker({
         disabled && "pointer-events-none opacity-50",
         className,
       )}
+      aria-required={ariaRequired}
+      aria-describedby={ariaDescribedby}
     >
+
       {/* Clock icon — click to enter text input mode */}
       <button
         type="button"
@@ -395,7 +406,11 @@ export function TimePicker({
           placeholder="e.g. 2:30 PM"
           className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
           style={manrope}
+          id={id}
+          aria-required={ariaRequired}
+          aria-describedby={ariaDescribedby}
         />
+
       ) : (
         /* ---- Segmented display ---- */
         <div className="flex items-center gap-0.5">
@@ -413,9 +428,13 @@ export function TimePicker({
               onFocus={() => setOpenSegment("hour")}
               className={cn(segBase, openSegment === "hour" && segActive)}
               style={manrope}
+              id={id}
+              aria-required={ariaRequired}
+              aria-describedby={ariaDescribedby}
             >
               {displayHour}
             </div>
+
             <SegmentDropdown
               open={openSegment === "hour"}
               onOpenChange={(o) => setOpenSegment(o ? "hour" : null)}

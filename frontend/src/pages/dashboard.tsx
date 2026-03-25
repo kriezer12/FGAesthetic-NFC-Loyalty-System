@@ -198,7 +198,10 @@ export default function Dashboard() {
   const sectionMap: Record<SectionId, React.ReactNode> = useMemo(() => ({
     stats: (
       /* ── Stat Cards ─────────────────────────────────────────────────── */
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-3">
+        <h2 className="sr-only">Statistical Overview</h2>
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+
         {statCards.map(({ title, value, sub, icon: Icon, id }) => (
           <Card 
             key={title} 
@@ -219,27 +222,35 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         ))}
+        </div>
       </div>
     ),
 
+
+
     charts: (
-      <Suspense fallback={<ChartLoader />}>
-        <DashboardCharts
-          dailyActivity={dailyActivity}
-          monthlyGrowth={monthlyGrowth}
-          activityFilter={activityFilter}
-          registrationsFilter={registrationsFilter}
-          onActivityFilterChange={setActivityFilter}
-          onRegistrationsFilterChange={setRegistrationsFilter}
-        />
-      </Suspense>
+      <div className="space-y-3">
+        <h2 className="sr-only">Performance Charts</h2>
+        <Suspense fallback={<ChartLoader />}>
+          <DashboardCharts
+            dailyActivity={dailyActivity}
+            monthlyGrowth={monthlyGrowth}
+            activityFilter={activityFilter}
+            registrationsFilter={registrationsFilter}
+            onActivityFilterChange={setActivityFilter}
+            onRegistrationsFilterChange={setRegistrationsFilter}
+          />
+        </Suspense>
+      </div>
     ),
+
 
     "quick-actions": (
       /* ── Quick Actions ───────────────────────────────────────────────── */
       <Card className="border border-border shadow-sm">
         <CardHeader className="pb-2 pt-4 px-5">
-          <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+          <CardTitle as="h2" className="text-base font-semibold">Quick Actions</CardTitle>
+
           <p className="text-xs text-muted-foreground">Jump to common tasks</p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 pb-4 px-5">
