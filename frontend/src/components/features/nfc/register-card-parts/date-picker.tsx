@@ -59,7 +59,6 @@ export function DatePicker({ label, value, onChange, required = false, id = "dat
   const [year, setYear] = useState(new Date().getFullYear())
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const [containerWidth, setContainerWidth] = useState(0)
 
   const daysInMonth = (m: number, y: number) => new Date(y, m + 1, 0).getDate()
   const firstDayOfMonth = new Date(year, month, 1).getDay()
@@ -128,12 +127,6 @@ export function DatePicker({ label, value, onChange, required = false, id = "dat
   }, [value])
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setContainerWidth(inputRef.current.offsetWidth)
-    }
-  }, [isOpen])
-
-  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
         setIsOpen(false)
@@ -175,8 +168,7 @@ export function DatePicker({ label, value, onChange, required = false, id = "dat
         />
         {isOpen && (
           <div 
-            className="absolute top-full left-0 mt-2 z-50 bg-card border border-input rounded-md shadow-lg p-4"
-            style={{ width: containerWidth || "auto" }}
+            className="absolute top-full left-0 mt-2 z-50 w-full bg-card border border-input rounded-md shadow-lg p-4"
           >
             <div className="space-y-4">
               {/* Month/Year Navigation */}

@@ -689,7 +689,7 @@ export default function CustomersPage() {
       const paths = photos.map(f => `customer-gallery/${customerId}/appointment-${appointmentId}/${f.name}`)
       const { data: signedData } = await supabase.storage
         .from("customer-picture")
-        .createSignedUrls(paths, 3600)
+        .createSignedUrls(paths, 604800)
 
       const signedMap = new Map(
         (signedData ?? []).map((s) => [s.path ?? "", s.signedUrl ?? ""])
@@ -741,7 +741,7 @@ export default function CustomersPage() {
       if (consentFiles.length > 0) {
         const mostRecentFile = consentFiles[0]
         const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentFile.name}`
-        const signedUrl = await getSignedUrl("customer-picture", path, 3600)
+        const signedUrl = await getSignedUrl("customer-picture", path, 604800)
         setTreatmentConsentPath(path)
         setTreatmentConsentUrl(signedUrl)
         setTreatmentConsentUploaded(true)

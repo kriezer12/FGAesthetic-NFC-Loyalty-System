@@ -74,7 +74,7 @@ const AccountAvatarCell = ({ account }: { account: Account }) => {
           const pathMatch = account.avatar_url.match(/user-pictures\/(.*?)(\?|$)/)
           if (pathMatch) {
             const path = pathMatch[1]
-            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 604800)
             setAvatarUrl(signedUrl || account.avatar_url)
           }
         } catch (error) {

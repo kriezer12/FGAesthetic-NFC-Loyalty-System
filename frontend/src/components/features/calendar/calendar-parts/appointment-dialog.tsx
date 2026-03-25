@@ -326,8 +326,16 @@ export function AppointmentDialog({
 
   useEffect(() => {
     if (!open || !notesRef.current) return
-    notesRef.current.style.height = "auto"
-    notesRef.current.style.height = `${Math.min(notesRef.current.scrollHeight, 180)}px`
+    const textArea = notesRef.current
+
+    const resize = () => {
+      textArea.style.height = "auto"
+      const newHeight = Math.min(textArea.scrollHeight, 180)
+      textArea.style.height = `${newHeight}px`
+    }
+
+    const frame = requestAnimationFrame(resize)
+    return () => cancelAnimationFrame(frame)
   }, [notes, open])
 
   // sync interval when package selection changes; default to 7 (weekly) if service has no interval set
