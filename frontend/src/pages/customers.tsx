@@ -1553,10 +1553,11 @@ export default function CustomersPage() {
                       <Card className="border-primary/20 bg-primary/5">
                         <CardContent className="p-6">
                           <div className="flex items-center justify-between">
-                            <div className="space-y-1">
+                            <div className="space-y-1" aria-live="polite" aria-atomic="true">
                               <p className="text-sm font-medium text-muted-foreground">Available Points</p>
                               <p className="text-4xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
                             </div>
+
                             <Award className="h-12 w-12 text-primary opacity-50" />
                           </div>
                         </CardContent>
@@ -1873,43 +1874,60 @@ export default function CustomersPage() {
         <ScrollArea className="flex-1 h-full min-h-0 px-6 py-4">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">First Name</label>
+              <label htmlFor="first_name" className="text-sm font-medium">First Name <span className="text-destructive">*</span></label>
               <Input
+                id="first_name"
                 value={profileForm.first_name}
+                autoComplete="given-name"
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))}
+                aria-required="true"
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Middle Name</label>
+              <label htmlFor="middle_name" className="text-sm font-medium">Middle Name</label>
               <Input
+                id="middle_name"
                 value={profileForm.middle_name}
+                autoComplete="additional-name"
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, middle_name: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Last Name</label>
+              <label htmlFor="last_name" className="text-sm font-medium">Last Name <span className="text-destructive">*</span></label>
               <Input
+                id="last_name"
                 value={profileForm.last_name}
+                autoComplete="family-name"
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))}
+                aria-required="true"
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+              <label htmlFor="email" className="text-sm font-medium">Email</label>
               <Input
+                id="email"
                 type="email"
                 value={profileForm.email}
+                autoComplete="email"
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Phone</label>
+              <label htmlFor="phone" className="text-sm font-medium">Phone</label>
               <Input
+                id="phone"
                 value={profileForm.phone}
+                autoComplete="tel"
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Date of Birth</label>
+              <label id="label-dob" className="text-sm font-medium">Date of Birth</label>
               <DatePicker
                 value={profileForm.date_of_birth ? new Date(profileForm.date_of_birth) : undefined}
                 onChange={(date) =>
@@ -1920,59 +1938,76 @@ export default function CustomersPage() {
                 }
                 captionLayout="dropdown"
                 enableManualInput
+                aria-labelledby="label-dob"
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Gender</label>
+              <label htmlFor="gender" className="text-sm font-medium">Gender</label>
               <Input
+                id="gender"
                 value={profileForm.gender}
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, gender: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Skin Type</label>
+              <label htmlFor="skin_type" className="text-sm font-medium">Skin Type</label>
               <Input
+                id="skin_type"
                 value={profileForm.skin_type}
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, skin_type: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-medium">Address</label>
+              <label htmlFor="address" className="text-sm font-medium">Address</label>
               <Input
+                id="address"
                 value={profileForm.address}
+                autoComplete="street-address"
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, address: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-medium">Emergency Contact</label>
+              <label htmlFor="emergency_contact" className="text-sm font-medium">Emergency Contact</label>
               <Input
+                id="emergency_contact"
                 value={profileForm.emergency_contact}
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, emergency_contact: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-medium">NFC Card</label>
+              <label htmlFor="nfc_uid" className="text-sm font-medium">NFC Card</label>
               <Input
+                id="nfc_uid"
                 value={selectedCustomer?.nfc_uid || ""}
                 readOnly
               />
             </div>
+
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-medium">Allergies</label>
+              <label htmlFor="allergies" className="text-sm font-medium">Allergies</label>
               <Textarea
+                id="allergies"
                 rows={3}
                 value={profileForm.allergies}
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, allergies: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-medium">Notes</label>
+              <label htmlFor="notes" className="text-sm font-medium">Notes</label>
               <Textarea
+                id="notes"
                 rows={4}
                 value={profileForm.notes}
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, notes: e.target.value }))}
               />
             </div>
+
           </div>
         </ScrollArea>
 

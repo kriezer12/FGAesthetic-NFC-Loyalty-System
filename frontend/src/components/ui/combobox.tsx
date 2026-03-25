@@ -48,7 +48,11 @@ interface ComboboxProps {
   disabled?: boolean
   /** Width of the popover content (default: match trigger width) */
   popoverWidth?: string
+  id?: string
+  "aria-required"?: boolean
+  "aria-describedby"?: string
 }
+
 
 // ---------------------------------------------------------------------------
 // Component
@@ -64,7 +68,11 @@ export function Combobox({
   className,
   disabled = false,
   popoverWidth,
+  id,
+  "aria-required": ariaRequired,
+  "aria-describedby": ariaDescribedby,
 }: ComboboxProps) {
+
   const [open, setOpen] = React.useState(false)
 
   const selectedOption = options.find((opt) => opt.value === value)
@@ -73,11 +81,15 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-required={ariaRequired}
+          aria-describedby={ariaDescribedby}
           disabled={disabled}
           className={cn(
+
             "w-full justify-between font-normal",
             !value && "text-muted-foreground",
             className

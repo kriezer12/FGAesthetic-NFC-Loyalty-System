@@ -39,6 +39,30 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   )
 }
 
+function ChartDataTable({ data, title }: { data: Array<{ label: string; count: number }>; title: string }) {
+  return (
+    <div className="sr-only">
+      <table aria-label={`${title} tabular data`}>
+        <thead>
+          <tr>
+            <th scope="col">Time Period</th>
+            <th scope="col">Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr key={row.label}>
+              <td>{row.label}</td>
+              <td>{row.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+
 interface DashboardChartsProps {
   dailyActivity: ChartPoint[]
   monthlyGrowth: ChartPoint[]
@@ -62,14 +86,17 @@ export function DashboardCharts({
         <CardHeader className="pb-2 pt-4 px-5">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <div>
-              <CardTitle className="text-sm font-semibold">Daily Activity</CardTitle>
+              <CardTitle as="h3" className="text-base font-semibold">Daily Activity</CardTitle>
               <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.activity[activityFilter]}</p>
             </div>
+
             <FilterToggle value={activityFilter} onChange={onActivityFilterChange} />
           </div>
         </CardHeader>
         <CardContent className="px-2 pb-4">
+          <ChartDataTable data={dailyActivity} title="Daily Activity" />
           <ResponsiveContainer width="100%" height={200}>
+
             <BarChart data={dailyActivity} barCategoryGap="30%">
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="label" tick={{ fontSize: "12px", fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
@@ -85,14 +112,17 @@ export function DashboardCharts({
         <CardHeader className="pb-2 pt-4 px-5">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <div>
-              <CardTitle className="text-sm font-semibold">New Registrations</CardTitle>
+              <CardTitle as="h3" className="text-base font-semibold">New Registrations</CardTitle>
               <p className="text-xs text-muted-foreground">{FILTER_SUBTITLES.registrations[registrationsFilter]}</p>
             </div>
+
             <FilterToggle value={registrationsFilter} onChange={onRegistrationsFilterChange} />
           </div>
         </CardHeader>
         <CardContent className="px-2 pb-4">
+          <ChartDataTable data={monthlyGrowth} title="New Registrations" />
           <ResponsiveContainer key={`registrations-${registrationsFilter}`} width="100%" height={200}>
+
             <AreaChart data={monthlyGrowth}>
               <defs>
                 <linearGradient id="regGradient" x1="0" y1="0" x2="0" y2="1">
