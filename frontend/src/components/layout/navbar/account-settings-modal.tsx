@@ -88,7 +88,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             const pathMatch = avatarUrl.match(/user-pictures\/(.*?)(\?|$)/)
             if (pathMatch) {
               const path = pathMatch[1]
-              const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+              const signedUrl = await getAvatarSignedUrl("user-pictures", path, 604800)
               if (signedUrl) {
                 setDisplayAvatarUrl(signedUrl)
               } else {
