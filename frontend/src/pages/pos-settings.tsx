@@ -157,7 +157,7 @@ export default function PosSettingsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/inventory")}> 
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/checkout?view=inventory")}> 
               <Box className="mr-2 h-4 w-4" />
               Inventory
             </Button>
