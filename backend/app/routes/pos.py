@@ -13,6 +13,7 @@ This is intentionally kept simple; in the future you can add
 
 from datetime import datetime, timezone
 import uuid
+import json
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, request, jsonify
@@ -142,7 +143,7 @@ def create_transaction():
             .maybe_single()
             .execute()
         )
-        receipt_prefix = (prefix_resp.data or {}).get("receipt_prefix") or ""
+        receipt_prefix = (getattr(prefix_resp, 'data', None) or {}).get("receipt_prefix") or ""
     except Exception:
         receipt_prefix = ""
     receipt_number = f"{receipt_prefix}{str(receipt_sequence).zfill(6)}"
@@ -240,7 +241,7 @@ def create_transaction():
                 )
 
                 current_qty = 0
-                if stock_resp.data:
+                if stock_resp and getattr(stock_resp, 'data', None):
                     current_qty = stock_resp.data.get("quantity", 0) or 0
 
                 new_qty = int(current_qty) - int(item_payload["quantity"])
@@ -405,7 +406,7 @@ def create_z_reading():
         .maybe_single()\
         .execute()
 
-    if existing.data:
+    if existing and getattr(existing, 'data', None):
         return jsonify({"error": "Z-Reading already exists for this business date", "business_date": payload.get("business_date")}), 409
 
     payment_breakdown = payload.get("payment_breakdown")

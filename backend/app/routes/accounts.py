@@ -43,7 +43,7 @@ def get_user_from_token():
             raise ValueError('Token does not contain user ID')
         
         return user_id
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise ValueError(f'Invalid token format: {str(e)}')
 
 

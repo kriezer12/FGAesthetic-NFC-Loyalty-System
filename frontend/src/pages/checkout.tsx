@@ -1665,30 +1665,6 @@ export default function CheckoutPage() {
                 </tbody>
               </table>
             </div>
-            <Dialog open={zConfirmOpen} onOpenChange={setZConfirmOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Generate Final Z-Reading Report?</DialogTitle>
-                  <DialogDescription className="space-y-3 block">
-                    <span className="block">
-                      <strong>Business Date:</strong> {zBusinessDate}
-                    </span>
-                    <span className="block">
-                      This action signifies the end of the operational business day. 
-                      Final Z-Reading reports finalize sales records for the day and can only be executed once.
-                    </span>
-                    <span className="block font-semibold text-destructive">
-                      Are you sure you want to end the operational day?
-                    </span>
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setZConfirmOpen(false)}>Cancel</Button>
-                  <Button type="button" variant="secondary" onClick={() => { setZConfirmOpen(false); generateXReading() }}>X-Reading (Preview)</Button>
-                  <Button type="button" onClick={generateZReading}>Finalize Day & Print</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -1920,6 +1896,31 @@ export default function CheckoutPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={zConfirmOpen} onOpenChange={setZConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Final Z-Reading Report?</DialogTitle>
+            <DialogDescription className="space-y-3 block">
+              <span className="block">
+                <strong>Business Date:</strong> {zBusinessDate}
+              </span>
+              <span className="block">
+                This action signifies the end of the operational business day. 
+                Final Z-Reading reports finalize sales records for the day and can only be executed once.
+              </span>
+              <span className="block font-semibold text-destructive">
+                Are you sure you want to end the operational day?
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setZConfirmOpen(false)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => { setZConfirmOpen(false); generateXReading() }}>X-Reading (Preview)</Button>
+            <Button type="button" onClick={generateZReading}>Finalize Day & Print</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
