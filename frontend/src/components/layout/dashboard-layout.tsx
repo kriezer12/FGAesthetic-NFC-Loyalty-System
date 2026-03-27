@@ -63,23 +63,16 @@ export function DashboardLayout() {
   const location = useLocation()
 
   useEffect(() => {
-    // Ensure no leftover overlay state blocks interaction when routes change.
-    try {
-      document.body.style.pointerEvents = ""
-      document.body.style.overflow = ""
-      document
-        .querySelectorAll(
-          "[data-radix-dialog-overlay],[data-radix-context-menu-overlay],[data-radix-dropdown-menu-overlay],[data-radix-popover-overlay]",
-        )
-        .forEach((el) => el.remove())
-    } catch {
-      // ignore if document not available
-    }
+    // Ensure body styles are clean when route changes
+    if (typeof document === "undefined") return
+    document.body.style.pointerEvents = ""
+    document.body.style.overflow = ""
   }, [location.pathname])
 
   useEffect(() => {
-    // Defensive: if body is left unclickable for any reason, reset it immediately.
+    // Basic cleanup on mount to ensure a clean state
     if (typeof document === "undefined") return
+    
     const cleanup = () => {
       if (document.body.style.pointerEvents === "none") {
         document.body.style.pointerEvents = ""
@@ -87,25 +80,9 @@ export function DashboardLayout() {
       if (document.body.style.overflow === "hidden") {
         document.body.style.overflow = ""
       }
-      document
-        .querySelectorAll(
-          "[data-radix-dialog-overlay],[data-radix-context-menu-overlay],[data-radix-dropdown-menu-overlay],[data-radix-popover-overlay]",
-        )
-        .forEach((el) => el.remove())
     }
 
-    // Run once immediately
     cleanup()
-
-    // Also observe body style changes and auto-fix if it becomes unclickable.
-    const observer = new MutationObserver(() => {
-      if (document.body.style.pointerEvents === "none") {
-        cleanup()
-      }
-    })
-    observer.observe(document.body, { attributes: true, attributeFilter: ["style"] })
-
-    return () => observer.disconnect()
   }, [])
 
   useEffect(() => {

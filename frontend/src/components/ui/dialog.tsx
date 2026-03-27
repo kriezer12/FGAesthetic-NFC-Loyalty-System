@@ -33,7 +33,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-150",
+        "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out duration-150",
         blurClass,
         className
       )}
@@ -55,7 +55,9 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "bg-background fixed top-[50%] left-[50%] z-50 flex flex-col w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border p-6 shadow-lg sm:rounded-lg max-h-[calc(100vh-2rem)] overflow-hidden",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-150",
+          "data-[state=open]:animate-in data-[state=open]:[--tw-enter-opacity:0] data-[state=open]:[--tw-enter-scale:0.95] data-[state=open]:[--tw-enter-translate-x:-50%] data-[state=open]:[--tw-enter-translate-y:-50%]",
+          "data-[state=closed]:animate-out data-[state=closed]:[--tw-exit-opacity:0] data-[state=closed]:[--tw-exit-scale:0.95] data-[state=closed]:[--tw-exit-translate-x:-50%] data-[state=closed]:[--tw-exit-translate-y:-50%]",
+          "duration-200",
           className
         )}
         {...props}

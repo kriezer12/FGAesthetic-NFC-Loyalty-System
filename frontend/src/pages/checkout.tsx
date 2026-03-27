@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate, useLocation } from "react-router-dom"
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { apiCall } from "@/lib/api"
 import { openInvoiceA4Landscape, type ReceiptTemplateData } from "@/lib/receipt-templates"
@@ -75,7 +75,6 @@ export default function CheckoutPage() {
 
   const [selectedAdjustment, setSelectedAdjustment] = useState<AdjustmentOption | null>(null)
   const [adjustmentOptions, setAdjustmentOptions] = useState<AdjustmentOption[]>(defaultAdjustments)
-  const [activeView, setActiveView] = useState<"checkout" | "logs" | "inventory">("checkout")
   const [logTransactions, setLogTransactions] = useState<LogTx[]>([])
   const [logItemsByTx, setLogItemsByTx] = useState<Record<string, LogTxItem[]>>({})
   const [logCustomerMap, setLogCustomerMap] = useState<Record<string, string>>({})
@@ -113,6 +112,12 @@ export default function CheckoutPage() {
   const [lastReceiptSnapshot, setLastReceiptSnapshot] = useState<ReceiptSnapshot | null>(null)
   const [branchMeta, setBranchMeta] = useState<BranchMeta | null>(null)
   const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const activeView = (searchParams.get("view") || "checkout") as "checkout" | "inventory" | "logs"
+  const setActiveView = (view: string) => {
+    setSearchParams({ view }, { replace: true })
+  }
 
   useEffect(() => {
     document.title = "Checkout - FG Aesthetic Centre"
@@ -139,6 +144,28 @@ export default function CheckoutPage() {
       setAdjustmentOptions(defaultAdjustments)
     }
   }, [])
+
+  useEffect(() => {
+    if (errorMessage) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Action Failed",
+        message: errorMessage,
+        type: "warning",
+      })
+    }
+  }, [errorMessage])
+
+  useEffect(() => {
+    if (successMessage) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Success",
+        message: successMessage,
+        type: "success",
+      })
+    }
+  }, [successMessage])
 
   useEffect(() => {
     const loadData = async () => {
