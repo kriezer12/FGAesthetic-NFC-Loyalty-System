@@ -2,28 +2,17 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   Award,
-  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
-  CreditCard,
-  Edit,
-  Eye,
-  Filter,
-  Mail,
-  MapPin,
-  Phone,
-  Search,
-  Users,
-  X,
-  Archive,
-  ArchiveRestore,
-  Image,
-  FileText,
-  Trash2,
   Download,
+  Filter,
+  Image,
   Plus,
+  Search,
+  Trash2,
+  X,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -32,46 +21,29 @@ import { useAppointments } from "@/hooks/use-appointments"
 import { useBranches } from "@/hooks/use-branches"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
-import { NFCScanner } from "@/components/features/nfc"
-import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
-import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
-import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
-import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
-import { convertToWebP, downloadImageAsJpeg } from "@/lib/image-utils"
-import { calculateChanges } from "@/lib/activity-logger"
+import { downloadImageAsJpeg } from "@/lib/image-utils"
 import { logUserAction } from "@/lib/user-log"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu"
 import type { Customer } from "@/types/customer"
 import type { Appointment, IntervalMinutes } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
+
+// Refactored Components
+import { CustomerMetrics } from "@/components/features/customers/customer-metrics"
+import { CustomerFilters } from "@/components/features/customers/customer-filters"
+import { CustomerList } from "@/components/features/customers/customer-list"
+import { CustomerProfileEditor } from "@/components/features/customers/customer-profile-editor"
+import { AssignNfcModal } from "@/components/features/customers/assign-nfc-modal"
+import { TreatmentDocModal } from "@/components/features/customers/treatment-doc-modal"
+import { CustomerDetailsModal } from "@/components/features/customers/customer-details-modal"
 
 export default function CustomersPage() {
   const navigate = useNavigate()
@@ -271,37 +243,6 @@ export default function CustomersPage() {
   }
 
   // generic dropdown builder for radio options
-  function renderFilter<T extends string>(
-    label: string,
-    value: T,
-    onChange: (val: T) => void,
-    options: Array<{ label: string; value: T }>,
-    disabled?: boolean,
-  ) {
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            className="flex items-center justify-between h-9 text-sm"
-            disabled={disabled}
-          >
-            {label}: {options.find((o) => o.value === value)?.label || options[0].label}
-            <ChevronDown className="ml-2 h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as T)}>
-            {options.map((opt) => (
-              <DropdownMenuRadioItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    )
-  }
 
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -375,6 +316,50 @@ export default function CustomersPage() {
     () => new Map(services.map((s) => [s.id, s])),
     [services],
   )
+  const groupedAppointments = useMemo(() => {
+    if (!selectedCustomer) return []
+    const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer?.id)
+    const displayAppts = customerAppts
+      .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
+      .flatMap((a) => {
+        if (a.service_ids && a.service_ids.length > 1) {
+          return a.service_ids.map((sid) => ({
+            ...a,
+            virtualServiceId: sid,
+            title: serviceMap.get(sid)?.name || a.title,
+            service_ids: [sid],
+          }))
+        }
+        return [a]
+      })
+
+    const grouped = displayAppts.reduce((acc, a) => {
+      const keyBase = a.recurrence_group_id || a.id
+      const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
+      const key = `${keyBase}:${svcSuffix}`
+      if (!acc[key]) {
+        acc[key] = {
+          id: key,
+          isPackage: !!a.recurrence_group_id,
+          sessions: [a],
+          primaryAppointment: a,
+        }
+      } else {
+        acc[key].sessions.push(a)
+      }
+      return acc
+    }, {} as Record<string, any>)
+
+    const groupList = Object.values(grouped).map((g: any) => {
+      g.sessions.sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      g.primaryAppointment = g.sessions[0]
+      return g
+    })
+
+    groupList.sort((a: any, b: any) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime())
+    return groupList
+  }, [appointments, selectedCustomer, serviceMap])
+
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from("services").select("*")
@@ -928,7 +913,7 @@ export default function CustomersPage() {
   useEffect(() => {
     filterCustomers()
     setCurrentPage(1)
-  }, [filterCustomers])
+  }, [filterCustomers, searchQuery, skinTypeFilter, genderFilter, statusFilter, sortMetric, sortOrder, branchFilter])
 
   // open the customer modal when arriving from the NFC scanner page
   useEffect(() => {
@@ -1013,1614 +998,167 @@ export default function CustomersPage() {
 
   return (
     <div>
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalClientsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Points Issued</CardTitle>
-                <Award className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalPointsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalVisitsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Registered Cards</CardTitle>
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{registeredCardsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-          </div>
+      <CustomerMetrics
+        totalClientsCount={totalClientsCount}
+        totalPointsCount={totalPointsCount}
+        totalVisitsCount={totalVisitsCount}
+        registeredCardsCount={registeredCardsCount}
+      />
+
+      <CustomerFilters
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        showFilters={showFilters}
+        setShowFilters={setShowFilters}
+        hasActiveFilters={hasActiveFilters}
+        skinTypeFilter={skinTypeFilter}
+        setSkinTypeFilter={setSkinTypeFilter}
+        genderFilter={genderFilter}
+        setGenderFilter={setGenderFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        branchFilter={branchFilter}
+        setBranchFilter={setBranchFilter}
+        sortMetric={sortMetric}
+        setSortMetric={setSortMetric}
+        sortOrder={sortOrder}
+        setSortOrder={setSortOrder}
+        branches={branches}
+        clearFilters={clearFilters}
+      />
+
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-muted-foreground mt-6">
+        <div>Showing {paginatedCustomers.length} of {filteredCustomers.length} clients</div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate("/dashboard/scan", { state: { mode: "register" } })}
+        >
+          Add New Customer
+        </Button>
+      </div>
+
+      <CustomerList
+        isLoading={isLoading}
+        paginatedCustomers={paginatedCustomers}
+        filteredCustomers={filteredCustomers}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        setCurrentPage={setCurrentPage}
+        setSelectedCustomer={setSelectedCustomer}
+        setPrefillCustomer={setPrefillCustomer}
+        setAppointmentDialogOpen={setAppointmentDialogOpen}
+        openProfileEditor={openProfileEditor}
+        toggleArchive={toggleArchive}
+        isArchivedClient={isArchivedClient}
+        isInactiveClient={isInactiveClient}
+        formatDate={formatDate}
+      />
+
+      <CustomerDetailsModal
+        open={!!selectedCustomer && !profileEditorOpen}
+        onOpenChange={(open) => !open && setSelectedCustomer(null)}
+        customer={selectedCustomer}
+        modalView={modalView}
+        setModalView={setModalView}
+        formatDate={formatDate}
+        isInactiveClient={isInactiveClient}
+        inactiveDate={inactiveDate}
+        onBookAppointment={(cust) => {
+          setPrefillCustomer(cust)
+          setAppointmentDialogOpen(true)
+          setSelectedCustomer(null)
+        }}
+        onEditProfile={(cust) => openProfileEditor(cust)}
+        isUpdating={isUpdating}
+        showPointsHistory={showPointsHistory}
+        setShowPointsHistory={setShowPointsHistory}
+        historyRefreshKey={historyRefreshKey}
+        redeemReward={redeemReward}
+        earnPoints={earnPoints}
+        customerAppointments={groupedAppointments}
+        getAppointmentStatusVariant={getAppointmentStatusVariant}
+        onOpenTreatmentDoc={(appt) => {
+          const group = groupedAppointments.find((g: any) => g.sessions.some((s: any) => s.id === appt.id))
+          setSelectedAppointment(appt)
+          setSelectedAppointmentGroup(group || { sessions: [appt], isPackage: false, primaryAppointment: appt })
+          setUploadSectionOpen({
+            beforeAfter: false,
+            forms: false,
+            miscellaneous: false,
+          })
+          setTreatmentPhotos([])
+          setTreatmentConsentUrl("")
+          setTreatmentConsentUploaded(false)
+          setTreatmentConsentPath("")
+          loadTreatmentPhotos(appt.id, appt.customer_id)
+          loadTreatmentConsentForm(appt.id, appt.customer_id)
+          setTreatmentDocModalOpen(true)
+        }}
+      />
+
+      <CustomerProfileEditor
+        open={profileEditorOpen}
+        onOpenChange={setProfileEditorOpen}
+        profileForm={profileForm}
+        setProfileForm={setProfileForm}
+        savingProfile={savingProfile}
+        onSave={handleSaveProfile}
+        selectedCustomer={selectedCustomer}
+        setScanMessage={setScanMessage}
+        setReassignPrompt={setReassignPrompt}
+        setAssignNfcModalOpen={setAssignNfcModalOpen}
+        setShouldReopenProfileEditor={setShouldReopenProfileEditor}
+      />
+
+      <AssignNfcModal
+        open={assignNfcModalOpen}
+        onOpenChange={setAssignNfcModalOpen}
+        selectedCustomer={selectedCustomer}
+        scanMessage={scanMessage}
+        setScanMessage={setScanMessage}
+        isAssigningNfc={isAssigningNfc}
+        setIsAssigningNfc={setIsAssigningNfc}
+        reassignPrompt={reassignPrompt}
+        setReassignPrompt={setReassignPrompt}
+        handleAssignNfcCard={handleAssignNfcCard}
+        handleConfirmReassign={handleConfirmReassign}
+        handleCancelReassign={handleCancelReassign}
+        shouldReopenProfileEditor={shouldReopenProfileEditor}
+        setProfileEditorOpen={setProfileEditorOpen}
+        setShouldReopenProfileEditor={setShouldReopenProfileEditor}
+        assignSuccessMessage={assignSuccessMessage}
+      />
+
+      <TreatmentDocModal
+        open={treatmentDocModalOpen}
+        onOpenChange={setTreatmentDocModalOpen}
+        selectedAppointment={selectedAppointment}
+        treatmentGalleryUploading={treatmentGalleryUploading}
+        handleTreatmentPhotoUpload={handleTreatmentPhotoUpload}
+        treatmentConsentUploading={treatmentConsentUploading}
+        handleTreatmentConsentFormUpload={handleTreatmentConsentFormUpload}
+        treatmentGalleryError={treatmentGalleryError}
+        treatmentConsentError={treatmentConsentError}
+        treatmentGroupIsPackage={treatmentGroupIsPackage}
+        treatmentGroupTotalSessions={treatmentGroupTotalSessions}
+        treatmentGroupCompletedSessions={treatmentGroupCompletedSessions}
+        treatmentGroupRemainingSessions={treatmentGroupRemainingSessions}
+        treatmentGroupSessionsSorted={treatmentGroupSessionsSorted}
+        getAppointmentStatusVariant={getAppointmentStatusVariant}
+        openRescheduleAppointment={openRescheduleAppointment}
+        uploadSectionOpen={uploadSectionOpen}
+        setUploadSectionOpen={setUploadSectionOpen}
+        treatmentPhotos={treatmentPhotos}
+        setEnlargedImage={setEnlargedImage}
+        downloadImageAsJpeg={downloadImageAsJpeg}
+        handleDeleteTreatmentPhoto={handleDeleteTreatmentPhoto}
+        treatmentConsentUploaded={treatmentConsentUploaded}
+        treatmentConsentUrl={treatmentConsentUrl}
+        handleDeleteTreatmentConsentForm={handleDeleteTreatmentConsentForm}
+        navigate={navigate}
+      />
 
-          <div className="mb-6 flex flex-col gap-4 md:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, email, phone, or NFC ID..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button variant={showFilters ? "secondary" : "outline"} onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="mr-2 h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">Active</span>
-              )}
-            </Button>
-          </div>
-
-          {showFilters && (
-            <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-muted/50 p-4">
-              <div>
-                {renderFilter(
-                  "Skin Type",
-                  skinTypeFilter,
-                  setSkinTypeFilter,
-                  [
-                    { label: "All Types", value: "" },
-                    { label: "Normal", value: "normal" },
-                    { label: "Dry", value: "dry" },
-                    { label: "Oily", value: "oily" },
-                    { label: "Combination", value: "combination" },
-                    { label: "Sensitive", value: "sensitive" },
-                  ],
-                )}
-              </div>
-              <div>
-                {renderFilter(
-                  "Gender",
-                  genderFilter,
-                  setGenderFilter,
-                  [
-                    { label: "All Genders", value: "" },
-                    { label: "Female", value: "female" },
-                    { label: "Male", value: "male" },
-                    { label: "Other", value: "other" },
-                  ],
-                )}
-              </div>
-              <div>
-                {renderFilter(
-                  "Status",
-                  statusFilter,
-                  setStatusFilter as any,
-                  [
-                    { label: "All Statuses", value: "" },
-                    { label: "Active", value: "active" },
-                    { label: "Inactive", value: "inactive" },
-                    { label: "Archived", value: "archived" },
-                  ],
-                )}
-              </div>
-              <div>
-                {renderFilter(
-                  "Branch",
-                  branchFilter,
-                  setBranchFilter,
-                  [
-                    { label: "All Branches", value: "" },
-                    ...branches.map((branch) => ({
-                      label: branch.name,
-                      value: branch.id,
-                    })),
-                  ],
-                )}
-              </div>
-              <div>
-                {renderFilter(
-                  "Sort Metric",
-                  sortMetric,
-                  setSortMetric as any,
-                  [
-                    { label: "None", value: "" },
-                    { label: "Points", value: "points" },
-                    { label: "Visits", value: "visits" },
-                  ],
-                )}
-              </div>
-              <div>
-                {renderFilter(
-                  "Sort Order",
-                  sortOrder,
-                  setSortOrder as any,
-                  [
-                    { label: "Ascending", value: "asc" },
-                    { label: "Descending", value: "desc" },
-                  ],
-                  !sortMetric, // disable until metric chosen
-                )}
-              </div>
-              {hasActiveFilters && (
-                <div className="flex items-end">
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    <X className="mr-1 h-4 w-4" />
-                    Clear Filters
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-muted-foreground">
-            <div>Showing {paginatedCustomers.length} of {filteredCustomers.length} clients</div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/dashboard/scan", { state: { mode: "register" } })}
-            >
-              Add New Customer
-            </Button>
-          </div>
-
-          <div className="rounded-lg border bg-card">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="p-4 text-left font-medium">Client</th>
-                    <th className="p-4 text-left font-medium">Contact</th>
-                    <th className="p-4 text-left font-medium">NFC Card</th>
-                    <th className="p-4 text-left font-medium">Branch</th>
-                    <th className="p-4 text-left font-medium">Points</th>
-                    <th className="p-4 text-left font-medium">Visits</th>
-                    <th className="p-4 text-left font-medium">Last Visit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                        Loading clients...
-                      </td>
-                    </tr>
-                  ) : paginatedCustomers.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                        No clients found
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedCustomers.map((customer) => (
-                      <ContextMenu key={customer.id}>
-                        <ContextMenuTrigger asChild>
-                          <tr
-                            onClick={() => setSelectedCustomer(customer)}
-                            className={
-                              "border-b transition-colors hover:bg-muted/30 cursor-pointer" +
-                              ((isArchivedClient(customer) || isInactiveClient(customer)) ? " opacity-50" : "") +
-                              (isArchivedClient(customer) ? " italic" : "")
-                            }
-                          >
-                            <td className="p-4">
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                                  <span className="text-sm font-medium text-primary">
-                                    {customer.first_name?.[0] || customer.name?.[0] || "?"}
-                                    {customer.last_name?.[0] || ""}
-                                  </span>
-                                </div>
-                                <div>
-                                  <div className="font-medium">
-                                    {(() => {
-                                      let displayName = customer.name || 'Unknown'
-                                      if (customer.first_name || customer.last_name) {
-                                        displayName = customer.first_name || ''
-                                        if (customer.middle_name) {
-                                          displayName += ` ${customer.middle_name.charAt(0)}.`
-                                        }
-                                        if (customer.last_name) {
-                                          displayName += ` ${customer.last_name}`
-                                        }
-                                        displayName = displayName.trim()
-                                      }
-                                      return displayName
-                                    })()}
-                                  </div>
-                                  <div className="text-xs capitalize text-muted-foreground">
-                                    {customer.skin_type && `${customer.skin_type} skin`}
-                                    {customer.gender && customer.skin_type && " • "}
-                                    {customer.gender}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <div className="space-y-1">
-                                {customer.phone && (
-                                  <div className="flex items-center gap-2 text-sm">
-                                    <Phone className="h-3 w-3 text-muted-foreground" />
-                                    {customer.phone}
-                                  </div>
-                                )}
-                                {customer.email && (
-                                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Mail className="h-3 w-3" />
-                                    {customer.email}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
-                            </td>
-                            <td className="p-4">
-                              {customer.branch_name ? (
-                                <div className="flex items-center gap-2">
-                                  <MapPin className="h-3 w-3 text-muted-foreground" />
-                                  <span className="text-sm">{customer.branch_name}</span>
-                                </div>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">-</span>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              <span className="font-semibold text-primary">{customer.points || 0}</span>
-                            </td>
-                            <td className="p-4">{customer.visits || 0}</td>
-                            <td className="p-4 text-sm text-muted-foreground relative">
-                              {formatDate(customer.last_visit)}
-                              {(isArchivedClient(customer) || isInactiveClient(customer)) && (
-                                <div className="absolute top-1 right-2 flex items-center space-x-1 text-xs">
-                                  {isArchivedClient(customer) ? (
-                                    <Archive className="h-4 w-4 text-red-600" />
-                                  ) : (
-                                    <Clock className="h-4 w-4 text-gray-500" />
-                                  )}
-                                  <span className={isArchivedClient(customer) ? "text-red-600" : "text-gray-500"}>
-                                    {isArchivedClient(customer) ? "Archived" : "Inactive"}
-                                  </span>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuItem onClick={() => setSelectedCustomer(customer)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </ContextMenuItem>
-                          <ContextMenuItem onClick={() => {
-                            setPrefillCustomer(customer)
-                            setAppointmentDialogOpen(true)
-                          }}>
-                            <Calendar className="mr-2 h-4 w-4" />
-                            Set Appointment
-                          </ContextMenuItem>
-                          <ContextMenuItem onClick={() => {
-                            setSelectedCustomer(customer)
-                            openProfileEditor(customer)
-                          }}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </ContextMenuItem>
-                          <ContextMenuItem onClick={() => toggleArchive(customer)}>
-                            {isArchivedClient(customer) ? (
-                              <ArchiveRestore className="mr-2 h-4 w-4" />
-                            ) : (
-                              <Archive className="mr-2 h-4 w-4" />
-                            )}
-                            {isArchivedClient(customer) ? "Unarchive" : "Archive"}
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t p-4">
-                <div className="text-sm text-muted-foreground">
-                  Page {currentPage} of {totalPages}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-      <Dialog open={!!selectedCustomer} onOpenChange={(open) => !open && setSelectedCustomer(null)}>
-        <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-2 border-b">
-            <DialogTitle className="text-2xl">
-              {selectedCustomer?.name || `${selectedCustomer?.first_name || ''} ${selectedCustomer?.middle_name || ''} ${selectedCustomer?.last_name || ''}`.trim()}
-            </DialogTitle>
-            <p className="text-sm text-muted-foreground">Client since {formatDate(selectedCustomer?.created_at)}</p>
-          </DialogHeader>
-
-          <div className="flex h-[calc(90vh-5.25rem)]">
-            <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/20 p-4">
-              <h4 className="text-sm font-semibold text-muted-foreground">Quick Actions</h4>
-              <Button
-                variant={modalView === "details" ? "default" : "outline"}
-                className="justify-start"
-                onClick={() => setModalView("details")}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Details
-              </Button>
-              <Button
-                variant={modalView === "treatments" ? "default" : "outline"}
-                className="justify-start"
-                onClick={() => setModalView("treatments")}
-              >
-                <Award className="mr-2 h-4 w-4" />
-                Treatments
-              </Button>
-              <Button
-                variant={modalView === "loyalty" ? "default" : "outline"}
-                className="justify-start"
-                onClick={() => setModalView("loyalty")}
-              >
-                <Award className="mr-2 h-4 w-4" />
-                Rewards & Points
-              </Button>
-              <Separator className="my-1" />
-              <Button
-                variant="outline"
-                className="justify-start"
-                onClick={() => {
-                  setPrefillCustomer(selectedCustomer)
-                  setAppointmentDialogOpen(true)
-                  setSelectedCustomer(null)
-                }}
-              >
-                <Calendar className="mr-2 h-4 w-4" />
-                Book Appointment
-              </Button>
-              <Button
-                variant="outline"
-                className="justify-start"
-                onClick={() => openProfileEditor(selectedCustomer)}
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                Edit Profile
-              </Button>
-            </div>
-
-            <ScrollArea className="flex-1 px-6">
-              <div className="space-y-6 py-4">
-              {modalView === "details" ? (
-                <> {/* details view */}
-                  {/* Stats Cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card className="border-primary/20 bg-primary/5">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Points</p>
-                            <p className="text-3xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
-                          </div>
-                          <Award className="h-10 w-10 text-primary" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Visits</p>
-                            <p className="text-3xl font-bold">{selectedCustomer?.visits || 0}</p>
-                          </div>
-                          <Calendar className="h-10 w-10 text-muted-foreground" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <Separator />
-
-                  {/* Contact Information */}
-                  <div className="space-y-4">
-                    <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Phone className="h-4 w-4" />
-                      Contact Information
-                    </h4>
-                    <div className="space-y-3 pl-6">
-                      {selectedCustomer?.phone && (
-                        <div className="flex items-center gap-3">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedCustomer.phone}</span>
-                        </div>
-                      )}
-                      {selectedCustomer?.email && (
-                        <div className="flex items-center gap-3">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedCustomer.email}</span>
-                        </div>
-                      )}
-                      {selectedCustomer?.address && (
-                        <div className="flex items-start gap-3">
-                          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                          <span className="text-sm text-muted-foreground">{selectedCustomer.address}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Profile Details */}
-                  <div className="space-y-4">
-                    <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Profile Details
-                    </h4>
-                    <div className="grid grid-cols-2 gap-4 pl-6">
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground">NFC Card</p>
-                        <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer?.nfc_uid}</code>
-                      </div>
-
-                      {selectedCustomer?.date_of_birth && (
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Birthday</p>
-                          <p className="text-sm">{formatDate(selectedCustomer.date_of_birth)}</p>
-                        </div>
-                      )}
-
-                      {selectedCustomer?.gender && (
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Gender</p>
-                          <p className="text-sm capitalize">{selectedCustomer.gender}</p>
-                        </div>
-                      )}
-
-                      {selectedCustomer?.skin_type && (
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground">Skin Type</p>
-                          <p className="text-sm capitalize">{selectedCustomer.skin_type}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Allergies */}
-                  {selectedCustomer?.allergies && (
-                    <div className="space-y-3">
-                      <h4 className="text-base font-semibold text-destructive">Allergies</h4>
-                      <div className="rounded-lg border bg-destructive/10 border-destructive/30 dark:bg-destructive/20 dark:border-destructive/40 p-4">
-                        <p className="text-sm text-destructive/80 font-medium whitespace-pre-wrap">
-                          {selectedCustomer.allergies}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* timestamps */}
-                  <div className="text-xs text-muted-foreground pt-2 flex flex-wrap items-center gap-4">
-                    <div>Last visit: {formatDate(selectedCustomer?.last_visit)}</div>
-                    {selectedCustomer && isInactiveClient(selectedCustomer) && (
-                      <>
-                        <div>Inactive since: {formatDate(inactiveDate(selectedCustomer) || undefined)}</div>
-                      </>
-                    )}
-                    {selectedCustomer?.archived_at && (
-                      <div>Archived on: {formatDate(selectedCustomer.archived_at)}</div>
-                    )}
-                  </div>
-                </>
-              ) : modalView === "loyalty" ? (
-                <> {/* Loyalty tab view */}
-                  <div className="space-y-6">
-                    <h4 className="text-xl font-semibold flex items-center gap-2">
-                      <Award className="h-5 w-5 text-primary" />
-                      Loyalty Points & Rewards
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="border-primary/20 bg-primary/5">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1" aria-live="polite" aria-atomic="true">
-                              <p className="text-sm font-medium text-muted-foreground">Available Points</p>
-                              <p className="text-4xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
-                            </div>
-
-                            <Award className="h-12 w-12 text-primary opacity-50" />
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardContent className="p-6 text-center flex flex-col items-center justify-center">
-                          <p className="text-sm font-medium text-muted-foreground mb-1">Total Visits</p>
-                          <p className="text-2xl font-bold">{selectedCustomer?.visits || 0}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Client since {formatDate(selectedCustomer?.created_at)}</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <CustomerPointsDashboard
-                        customerId={selectedCustomer?.id || ''}
-                        isUpdating={isUpdating}
-                        currentPoints={selectedCustomer?.points || 0}
-                        showHistory={showPointsHistory}
-                        onRedeemReward={redeemReward}
-                        onEarnPoints={earnPoints}
-                        onToggleHistory={() => setShowPointsHistory(!showPointsHistory)}
-                      />
-                      
-                      {showPointsHistory && selectedCustomer && (
-                        <div className="mt-4 pt-4 border-t">
-                          <h5 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                             <Clock className="h-4 w-4" />
-                             Transaction History
-                          </h5>
-                          <PointsHistory customerId={selectedCustomer.id} refreshKey={historyRefreshKey} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : modalView === "treatments" ? (
-                <> {/* treatments view */}
-                  {selectedCustomer && (
-                    <>
-                      {/* appointment log list */}
-                      <div className="space-y-3">
-                        <h4 className="text-lg font-semibold">Appointment History</h4>
-                        {appointments
-                          .filter((a) => a.customer_id === selectedCustomer?.id)
-                          .length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No appointments found.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {(() => {
-                              const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer?.id);
-
-                              // Hide standalone cancelled appointments from history (they shouldn't be stored there)
-                              // Packages still show cancelled sessions so they can be rescheduled.
-                              const displayAppts = customerAppts
-                                .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
-                                .flatMap((a) => {
-                                  if (a.service_ids && a.service_ids.length > 1) {
-                                    return a.service_ids.map((sid) => ({
-                                      ...a,
-                                      virtualServiceId: sid,
-                                      title: serviceMap.get(sid)?.name || a.title,
-                                      service_ids: [sid],
-                                    }))
-                                  }
-                                  return [a]
-                                })
-
-                              // Group by recurrence_group_id + service, or just appointment + service
-                              const grouped = displayAppts.reduce((acc, a) => {
-                                const keyBase = a.recurrence_group_id || a.id
-                                const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
-                                const key = `${keyBase}:${svcSuffix}`
-                                if (!acc[key]) {
-                                  acc[key] = {
-                                    id: key,
-                                    isPackage: !!a.recurrence_group_id,
-                                    sessions: [a],
-                                    primaryAppointment: a,
-                                  };
-                                } else {
-                                  acc[key].sessions.push(a);
-                                }
-                                return acc;
-                              }, {} as Record<string, { id: string; isPackage: boolean; sessions: typeof displayAppts; primaryAppointment: (typeof displayAppts)[0] }>);
-
-                              const groupList = Object.values(grouped).map(g => {
-                                // sort sessions ascending by date
-                                g.sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-                                // set the primary to the first session, so docs are always stored against the first session's ID
-                                g.primaryAppointment = g.sessions[0];
-                                return g;
-                              });
-
-                              // Sort groups by the start time of their primary appointment (descending for history)
-                              groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
-
-                              const openTreatmentDocForGroup = (g: { sessions: any[]; isPackage: boolean; primaryAppointment: any }) => {
-                                const a = g.primaryAppointment
-                                if (a.customer_id && a.id) {
-                                  setSelectedAppointment(a)
-                                  setSelectedAppointmentGroup(g)
-                                  setUploadSectionOpen({
-                                    beforeAfter: false,
-                                    forms: false,
-                                    miscellaneous: false,
-                                  })
-                                  setTreatmentPhotos([])
-                                  setTreatmentConsentUrl("")
-                                  setTreatmentConsentUploaded(false)
-                                  setTreatmentConsentPath("")
-                                  loadTreatmentPhotos(a.id, a.customer_id)
-                                  loadTreatmentConsentForm(a.id, a.customer_id)
-                                  setTreatmentDocModalOpen(true)
-                                }
-                              }
-
-                              return groupList.map((g) => {
-                                const a = g.primaryAppointment
-                                const totalSessions = g.sessions.length
-                                const completedCount = g.sessions.filter((s) => s.status === "completed").length
-                                const remainingCount = totalSessions - completedCount
-
-                                const isPackage = g.isPackage
-                                const isPackageFinished =
-                                  isPackage &&
-                                  g.sessions.every((s) => s.status === "completed" || s.status === "cancelled")
-                                const statusVariant = isPackage
-                                  ? isPackageFinished
-                                    ? "success"
-                                    : "warning"
-                                  : getAppointmentStatusVariant(a.status)
-                                const statusLabel = isPackage
-                                  ? isPackageFinished
-                                    ? "Completed"
-                                    : "In progress"
-                                  : a.status
-                                  ? a.status.replace("-", " ")
-                                  : "Unknown"
-
-                                return (
-                                  <ContextMenu key={g.id}>
-                                    <ContextMenuTrigger asChild>
-                                      <Card
-                                        className="py-0 gap-0 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary hover:border-l-primary/80"
-                                        onClick={() => openTreatmentDocForGroup(g)}
-                                      >
-                                        <CardContent className="p-4">
-                                          <div className="flex items-start justify-between">
-                                            <div className="space-y-1 flex-1">
-                                              <div className="flex items-center gap-2">
-                                                <p className="font-medium text-sm">
-                                                  {a.title}
-                                                </p>
-                                                <Badge variant={statusVariant} className="capitalize">
-                                                  {statusLabel}
-                                                </Badge>
-                                              </div>
-                                              {g.isPackage && (
-                                                <p className="text-xs text-muted-foreground">
-                                                  Package: {totalSessions} sessions • {completedCount} done • {remainingCount} left
-                                                </p>
-                                              )}
-                                              {a.treatment_name && (
-                                                <p className="text-xs text-muted-foreground">
-                                                  Treatment: {a.treatment_name}
-                                                </p>
-                                              )}
-                                              {a.staff_name && (
-                                                <p className="text-xs text-muted-foreground">
-                                                  Staff: {a.staff_name}
-                                                </p>
-                                              )}
-                                            </div>
-                                            <div className="text-right space-y-1 flex-shrink-0 ml-4">
-                                              <p className="text-sm font-medium">
-                                                {new Date(a.start_time).toLocaleDateString(undefined, {
-                                                  year: "numeric",
-                                                  month: "short",
-                                                  day: "numeric",
-                                                })}
-                                              </p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {new Date(a.start_time).toLocaleTimeString(undefined, {
-                                                  hour: "2-digit",
-                                                  minute: "2-digit",
-                                                })}
-                                                {a.end_time && (
-                                                  <>
-                                                    {" – "}
-                                                    {new Date(a.end_time).toLocaleTimeString(undefined, {
-                                                      hour: "2-digit",
-                                                      minute: "2-digit",
-                                                    })}
-                                                  </>
-                                                )}
-                                              </p>
-                                              {g.isPackage && g.sessions.length > 1 && (
-                                                <p className="text-[10px] text-muted-foreground mt-1">
-                                                  Last session: {new Date(g.sessions[g.sessions.length - 1].start_time).toLocaleDateString(undefined, {
-                                                    month: "short",
-                                                    day: "numeric",
-                                                  })}
-                                                </p>
-                                              )}
-                                            </div>
-                                            <div className="ml-4 flex-shrink-0">
-                                              <FileText className="h-5 w-5 text-muted-foreground" />
-                                            </div>
-                                          </div>
-                                          {a.notes && (
-                                            <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
-                                              {a.notes}
-                                            </p>
-                                          )}
-                                        </CardContent>
-                                      </Card>
-                                    </ContextMenuTrigger>
-                                    <ContextMenuContent>
-                                      <ContextMenuItem onSelect={() => openTreatmentDocForGroup(g)}>
-                                        Open
-                                      </ContextMenuItem>
-                                      <ContextMenuItem
-                                        onSelect={() => {
-                                          setTreatmentDocModalOpen(false)
-                                          setTimeout(() => {
-                                            // Ensure any radix overlays are removed before navigation
-                                            document
-                                              .querySelectorAll(
-                                                "[data-radix-dialog-overlay], [data-radix-context-menu-overlay], [data-radix-popover-overlay], [data-radix-dropdown-menu-overlay]",
-                                              )
-                                              .forEach((el) => el.remove())
-
-                                            navigate("/dashboard/appointments", {
-                                              state: { appointmentId: a.id },
-                                            })
-                                          }, 0)
-                                        }}
-                                      >
-                                        Edit appointment
-                                      </ContextMenuItem>
-                                    </ContextMenuContent>
-                                  </ContextMenu>
-                                )
-                              })
-
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : null}
-
-              <div className="space-y-3 pb-2 md:hidden">
-                <Separator />
-                <h4 className="text-base font-semibold">Quick Actions</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setModalView("details")}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    Details
-                  </Button>
-                  <Button
-                    variant={modalView === "treatments" ? "default" : "outline"}
-                    onClick={() => setModalView("treatments")}
-                  >
-                    <Award className="mr-2 h-4 w-4" />
-                    Treatments
-                  </Button>
-                  <Button
-                    variant={modalView === "loyalty" ? "default" : "outline"}
-                    onClick={() => setModalView("loyalty")}
-                  >
-                    <Award className="mr-2 h-4 w-4" />
-                    Rewards
-                  </Button>
-              <Button
-                    variant="outline"
-                    onClick={() => {
-                      setPrefillCustomer(selectedCustomer)
-                      setAppointmentDialogOpen(true)
-                      setSelectedCustomer(null)
-                    }}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Book Appointment
-                  </Button>
-                  <Button variant="outline" onClick={() => openProfileEditor(selectedCustomer)}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit Profile
-                  </Button>
-                </div>
-              </div>
-            </div>
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={profileEditorOpen} onOpenChange={setProfileEditorOpen}>
-        <DialogContent className="max-w-2xl h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Edit Profile</DialogTitle>
-          <DialogDescription>Update the selected customer's profile information.</DialogDescription>
-        </DialogHeader>
-
-        <ScrollArea className="flex-1 h-full min-h-0 px-6 py-4">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label htmlFor="first_name" className="text-sm font-medium">First Name <span className="text-destructive">*</span></label>
-              <Input
-                id="first_name"
-                value={profileForm.first_name}
-                autoComplete="given-name"
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))}
-                aria-required="true"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="middle_name" className="text-sm font-medium">Middle Name</label>
-              <Input
-                id="middle_name"
-                value={profileForm.middle_name}
-                autoComplete="additional-name"
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, middle_name: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="last_name" className="text-sm font-medium">Last Name <span className="text-destructive">*</span></label>
-              <Input
-                id="last_name"
-                value={profileForm.last_name}
-                autoComplete="family-name"
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))}
-                aria-required="true"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">Email</label>
-              <Input
-                id="email"
-                type="email"
-                value={profileForm.email}
-                autoComplete="email"
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="phone" className="text-sm font-medium">Phone</label>
-              <Input
-                id="phone"
-                value={profileForm.phone}
-                autoComplete="tel"
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label id="label-dob" className="text-sm font-medium">Date of Birth</label>
-              <DatePicker
-                value={profileForm.date_of_birth ? new Date(profileForm.date_of_birth) : undefined}
-                onChange={(date) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    date_of_birth: date ? date.toISOString().slice(0, 10) : "",
-                  }))
-                }
-                captionLayout="dropdown"
-                enableManualInput
-                aria-labelledby="label-dob"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="gender" className="text-sm font-medium">Gender</label>
-              <Input
-                id="gender"
-                value={profileForm.gender}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, gender: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="skin_type" className="text-sm font-medium">Skin Type</label>
-              <Input
-                id="skin_type"
-                value={profileForm.skin_type}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, skin_type: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="address" className="text-sm font-medium">Address</label>
-              <Input
-                id="address"
-                value={profileForm.address}
-                autoComplete="street-address"
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, address: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="emergency_contact" className="text-sm font-medium">Emergency Contact</label>
-              <Input
-                id="emergency_contact"
-                value={profileForm.emergency_contact}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, emergency_contact: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="nfc_uid" className="text-sm font-medium">NFC Card</label>
-              <Input
-                id="nfc_uid"
-                value={selectedCustomer?.nfc_uid || ""}
-                readOnly
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="allergies" className="text-sm font-medium">Allergies</label>
-              <Textarea
-                id="allergies"
-                rows={3}
-                value={profileForm.allergies}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, allergies: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="notes" className="text-sm font-medium">Notes</label>
-              <Textarea
-                id="notes"
-                rows={4}
-                value={profileForm.notes}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
-
-          </div>
-        </ScrollArea>
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setScanMessage(null)
-              setReassignPrompt(null)
-              setAssignNfcModalOpen(true)
-              setProfileEditorOpen(false)
-              setShouldReopenProfileEditor(true)
-            }}
-            disabled={savingProfile}
-          >
-            Tag New Card
-          </Button>
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setProfileEditorOpen(false)} disabled={savingProfile}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveProfile} disabled={savingProfile}>
-              {savingProfile ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-      </Dialog>
-
-      <Dialog open={assignNfcModalOpen} onOpenChange={setAssignNfcModalOpen}>
-        <DialogContent className="max-w-2xl h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <DialogTitle>Tag New NFC Card</DialogTitle>
-                <DialogDescription>
-                  Scan a new NFC card to assign it to this customer.
-                </DialogDescription>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setAssignNfcModalOpen(false)
-                  setReassignPrompt(null)
-                  setIsAssigningNfc(false)
-                  if (shouldReopenProfileEditor) {
-                    setProfileEditorOpen(true)
-                    setShouldReopenProfileEditor(false)
-                  }
-                }}
-                className="rounded-full p-2 text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-                aria-label="Close"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          </DialogHeader>
-
-          <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto p-6">
-            {scanMessage && (
-              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-4">
-                <p className="font-medium text-destructive">Card already assigned</p>
-                <p className="text-sm text-destructive/80 mt-2">{scanMessage}</p>
-                <div className="mt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => setScanMessage(null)}
-                    disabled={isAssigningNfc}
-                  >
-                    Scan another card
-                  </Button>
-                </div>
-              </div>
-            )}
-            {assignSuccessMessage && (
-              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                <p className="font-medium text-emerald-700">Card assigned</p>
-                <p className="text-sm text-emerald-700 mt-2">{assignSuccessMessage}</p>
-              </div>
-            )}
-
-            <div className="w-full max-w-md">
-              <NFCScanner
-                onCustomerFound={(cardCustomer) => {
-                  if (!selectedCustomer) return
-                  handleAssignNfcCard(cardCustomer.nfc_uid)
-                }}
-                onNewCard={(uid) => handleAssignNfcCard(uid)}
-              />
-            </div>
-
-            {isAssigningNfc && (
-              <p className="mt-4 text-sm text-muted-foreground">Assigning card…</p>
-            )}
-            {reassignPrompt && (
-              <div className="sticky top-0 z-10 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/10 p-4">
-                <p className="font-medium text-destructive">Card already assigned</p>
-                <p className="text-sm text-destructive/80 mt-2">
-                  This card is currently assigned to <span className="font-semibold">{reassignPrompt.ownerName}</span>.
-                </p>
-                <div className="mt-4 flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleCancelReassign}
-                    disabled={isAssigningNfc}
-                  >
-                    Scan another card
-                  </Button>
-                  <Button
-                    onClick={handleConfirmReassign}
-                    disabled={isAssigningNfc}
-                  >
-                    Reassign to this customer
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Treatment Documentation Modal */}
-      <Dialog open={treatmentDocModalOpen} onOpenChange={setTreatmentDocModalOpen}>
-        <DialogContent className="max-w-3xl h-[90vh] min-h-0 flex flex-col p-0">
-          <div className="px-6 pt-6 pb-4 border-b">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                Treatment Documentation - {selectedAppointment?.title}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedAppointment?.treatment_name && `Treatment: ${selectedAppointment.treatment_name}`}
-                {selectedAppointment?.start_time && (
-                  <span className="block text-sm text-muted-foreground">
-                    <span className="block">
-                      {new Date(selectedAppointment.start_time).toLocaleDateString(undefined, {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                    <span className="text-xs block">
-                      {new Date(selectedAppointment.start_time).toLocaleDateString(undefined, {
-                        month: "numeric",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </span>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-
-          <ScrollArea
-            className="flex-1 h-full min-h-0 w-full pr-3 overflow-auto scrollbar-thin scrollbar-thumb-primary/50 scrollbar-track-transparent"
-            onWheel={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-6 px-6 py-4">
-              {/* Hidden file inputs */}
-              <input
-                id="treatment-before-input"
-                type="file"
-                accept="image/*"
-                title="Upload before photo"
-                aria-label="Upload before photo"
-                className="hidden"
-                disabled={treatmentGalleryUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleTreatmentPhotoUpload(file, 'before')
-                  }
-                  e.currentTarget.value = ''
-                }}
-              />
-              <input
-                id="treatment-after-input"
-                type="file"
-                accept="image/*"
-                title="Upload after photo"
-                aria-label="Upload after photo"
-                className="hidden"
-                disabled={treatmentGalleryUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleTreatmentPhotoUpload(file, 'after')
-                  }
-                  e.currentTarget.value = ''
-                }}
-              />
-              <input
-                id="treatment-other-input"
-                type="file"
-                accept="image/*"
-                title="Upload other photo"
-                aria-label="Upload other photo"
-                className="hidden"
-                disabled={treatmentGalleryUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleTreatmentPhotoUpload(file, 'other')
-                  }
-                  e.currentTarget.value = ''
-                }}
-              />
-              <input
-                id="treatment-consent-form-input"
-                type="file"
-                accept="image/*"
-                title="Upload consent form"
-                aria-label="Upload consent form"
-                className="hidden"
-                disabled={treatmentConsentUploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleTreatmentConsentFormUpload(file)
-                  }
-                  e.currentTarget.value = ''
-                }}
-              />
-
-              {/* Error Messages */}
-              {treatmentGalleryError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="text-sm text-red-700">{treatmentGalleryError}</p>
-                </div>
-              )}
-              {treatmentConsentError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="text-sm text-red-700">{treatmentConsentError}</p>
-                </div>
-              )}
-
-              {/* Treatment session summary (for packages) */}
-              {treatmentGroupIsPackage && treatmentGroupTotalSessions > 0 && (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold">Package history</p>
-                      <p className="text-xs text-muted-foreground">
-                        {treatmentGroupCompletedSessions} of {treatmentGroupTotalSessions} sessions completed • {treatmentGroupRemainingSessions} remaining
-                      </p>
-                    </div>
-                    <Badge 
-                      variant={treatmentGroupCompletedSessions === treatmentGroupTotalSessions ? "success" : "warning"} 
-                      className="capitalize"
-                    >
-                      {treatmentGroupCompletedSessions === treatmentGroupTotalSessions
-                        ? "Complete"
-                        : "In progress"}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    {treatmentGroupSessionsSorted.map((s) => (
-                      <ContextMenu key={s.id}>
-                        <ContextMenuTrigger asChild>
-                          <div
-                            title="Right click for options"
-                            className="cursor-context-menu grid grid-cols-[1fr_auto] gap-3 rounded-lg border px-3 py-2 bg-background hover:bg-muted/30 transition-colors"
-                          >
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-medium">
-                                    {new Date(s.start_time).toLocaleDateString(undefined, {
-                                      weekday: "short",
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(s.start_time).toLocaleTimeString(undefined, {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </p>
-                                </div>
-                                <Badge variant={getAppointmentStatusVariant(s.status)} className="capitalize">
-                                  {s.status?.replace("-", " ") || "Unknown"}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground line-clamp-2">
-                                {s.notes ? s.notes : "No notes"}
-                              </p>
-                            </div>
-
-                            <div className="flex items-start justify-end gap-2">
-                              {s.status === "cancelled" && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openRescheduleAppointment(s)}
-                                >
-                                  Reschedule
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </ContextMenuTrigger>
-
-                        <ContextMenuContent>
-                          <ContextMenuItem
-                            onSelect={() => {
-                              setTreatmentDocModalOpen(false)
-                              setTimeout(() => {
-                                document
-                                  .querySelectorAll(
-                                    "[data-radix-dialog-overlay], [data-radix-context-menu-overlay], [data-radix-popover-overlay], [data-radix-dropdown-menu-overlay]",
-                                  )
-                                  .forEach((el) => el.remove())
-
-                                navigate("/dashboard/appointments", {
-                                  state: { appointmentId: s.id },
-                                })
-                              }, 0)
-                            }}
-                          >
-                            Edit appointment
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Upload sections (collapsible) */}
-              <div className="space-y-4">
-                {/* Before & After */}
-                <div className="rounded-lg border bg-muted/10">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3"
-                    onClick={() =>
-                      setUploadSectionOpen((prev) => ({
-                        ...prev,
-                        beforeAfter: !prev.beforeAfter,
-                      }))
-                    }
-                  >
-                    <div className="flex items-center gap-2">
-                      <Image className="h-4 w-4 text-primary" />
-                      <div className="text-left">
-                        <p className="text-sm font-medium">Before &amp; After</p>
-                        <p className="text-xs text-muted-foreground">
-                          Upload photos from the treatment session.
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronDown
-                      className={`h-4 w-4 transition ${
-                        uploadSectionOpen.beforeAfter ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {uploadSectionOpen.beforeAfter && (
-                    <div className="border-t px-4 py-4">
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        {['before', 'after'].map((type) => {
-                          const photos = treatmentPhotos.filter((p) => p.type === type)
-                          const label = type === 'before' ? 'Before' : 'After'
-                          return (
-                            <div key={type} className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium">{label}</p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    document
-                                      .getElementById(`treatment-${type}-input`)
-                                      ?.click()
-                                  }
-                                  disabled={treatmentGalleryUploading}
-                                >
-                                  Upload
-                                </Button>
-                              </div>
-                              {photos.length > 0 ? (
-                                <div className="grid grid-cols-2 gap-3">
-                                  {photos.map((photo) => (
-                                    <div
-                                      key={photo.id}
-                                      className="relative overflow-hidden rounded-xl border bg-muted"
-                                    >
-                                      <button
-                                        type="button"
-                                        className="absolute inset-0"
-                                        onClick={() => setEnlargedImage(photo.url)}
-                                      />
-                                      <img
-                                        src={photo.url}
-                                        alt={type}
-                                        className="h-24 w-full object-cover"
-                                      />
-                                      <div className="absolute bottom-1 right-1 flex gap-1">
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-8 w-8 p-0"
-                                          onClick={() =>
-                                            downloadImageAsJpeg(photo.url, `${type}-photo`)
-                                          }
-                                        >
-                                          <Download className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-8 w-8 p-0"
-                                          onClick={() => handleDeleteTreatmentPhoto(photo)}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-xs text-muted-foreground">No photos added yet.</p>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Consent Form */}
-                <div className="rounded-lg border bg-muted/10">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3"
-                    onClick={() =>
-                      setUploadSectionOpen((prev) => ({
-                        ...prev,
-                        forms: !prev.forms,
-                      }))
-                    }
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-blue-600" />
-                      <div className="text-left">
-                        <p className="text-sm font-medium">Consent Form</p>
-                        <p className="text-xs text-muted-foreground">
-                          Upload a signed consent form or treatment notes.
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronDown
-                      className={`h-4 w-4 transition ${
-                        uploadSectionOpen.forms ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {uploadSectionOpen.forms && (
-                    <div className="border-t px-4 py-4">
-                      {treatmentConsentUploaded && treatmentConsentUrl ? (
-                        <div className="flex flex-col gap-3">
-                          <div className="relative overflow-hidden rounded-xl border bg-muted">
-                            <button
-                              type="button"
-                              className="absolute inset-0"
-                              onClick={() => setEnlargedImage(treatmentConsentUrl)}
-                            />
-                            <img
-                              src={treatmentConsentUrl}
-                              alt="Consent Form"
-                              className="h-40 w-full object-cover"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')}
-                            >
-                              Download
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={handleDeleteTreatmentConsentForm}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground">No consent form uploaded yet.</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
-                            disabled={treatmentConsentUploading}
-                          >
-                            Upload
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Miscellaneous Photos */}
-                <div className="rounded-lg border bg-muted/10">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3"
-                    onClick={() =>
-                      setUploadSectionOpen((prev) => ({
-                        ...prev,
-                        miscellaneous: !prev.miscellaneous,
-                      }))
-                    }
-                  >
-                    <div className="flex items-center gap-2">
-                      <Plus className="h-4 w-4 text-primary" />
-                      <div className="text-left">
-                        <p className="text-sm font-medium">Miscellaneous</p>
-                        <p className="text-xs text-muted-foreground">
-                          Upload other reference images or notes.
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronDown
-                      className={`h-4 w-4 transition ${
-                        uploadSectionOpen.miscellaneous ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {uploadSectionOpen.miscellaneous && (
-                    <div className="border-t px-4 py-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {treatmentPhotos
-                          .filter((p) => p.type === 'other')
-                          .map((photo) => (
-                            <div
-                              key={photo.id}
-                              className="relative overflow-hidden rounded-xl border bg-muted"
-                            >
-                              <button
-                                type="button"
-                                className="absolute inset-0"
-                                onClick={() => setEnlargedImage(photo.url)}
-                              />
-                              <img
-                                src={photo.url}
-                                alt="Misc"
-                                className="h-24 w-full object-cover"
-                              />
-                              <div className="absolute bottom-1 right-1 flex gap-1">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() =>
-                                    downloadImageAsJpeg(photo.url, `other-photo-${photo.id}`)
-                                  }
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleDeleteTreatmentPhoto(photo)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        <button
-                          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
-                          onClick={() => document.getElementById('treatment-other-input')?.click()}
-                          disabled={treatmentGalleryUploading}
-                        >
-                          <Plus className="h-5 w-5 text-primary" />
-                          Add Photo
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      {/* Enlarged Image Dialog */}
       <Dialog open={!!enlargedImage} onOpenChange={(open) => !open && setEnlargedImage(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
@@ -2638,7 +1176,6 @@ export default function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Appointment Dialog */}
       <AppointmentDialog
         open={appointmentDialogOpen}
         onOpenChange={(open) => {
@@ -2659,11 +1196,8 @@ export default function CustomersPage() {
             await updateAppointment(appointmentToEdit.id, appointment)
           } else {
             await addAppointment(appointment)
-
-            // If this was a reward redemption, deduct points now
             if (pendingReward && prefillCustomer) {
               const newPoints = (prefillCustomer.points || 0) - pendingReward.points_required
-              
               const { data: updatedCust, error: updateErr } = await supabase
                 .from("customers")
                 .update({ points: newPoints })
@@ -2681,12 +1215,10 @@ export default function CustomersPage() {
                     type: "redeem",
                     appointment_id: appointment.id,
                   })
-                
                 setCustomers((prev) => prev.map((c) => (c.id === updatedCust.id ? updatedCust : c)))
               }
             }
           }
-
           setAppointmentDialogOpen(false)
           setAppointmentToEdit(null)
           setPrefillCustomer(null)

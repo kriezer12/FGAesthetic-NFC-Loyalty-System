@@ -1,166 +1,37 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Clock3, Download, Settings2, ShoppingCart } from "lucide-react"
 import { useNavigate, useLocation } from "react-router-dom"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Combobox } from "@/components/ui/combobox"
 import { supabase } from "@/lib/supabase"
 import { apiCall } from "@/lib/api"
 import { openInvoiceA4Landscape, type ReceiptTemplateData } from "@/lib/receipt-templates"
 import { NotificationToast } from "@/components/ui/notification-toast"
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { useAuth } from "@/contexts/auth-context"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
+import { ShoppingCart, Box, Settings2, Clock3 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+
 import type { Appointment } from "@/types/appointment"
 import type { Service } from "@/types/service"
+import {
+  type Customer,
+  type CartItem,
+  type CreatedTransaction,
+  type BranchMeta,
+  type BusinessSettings,
+  type ReceiptSnapshot,
+  type AdjustmentOption,
+  type LogTx,
+  type LogTxItem,
+  type PosInventoryItem,
+  type ZReadingSnapshot,
+} from "@/components/features/checkout/types"
 
-type Customer = {
-  id: string
-  name: string
-  phone?: string | null
-}
-
-type InventoryProduct = {
-  id: string
-  name: string
-  sku?: string
-  unit_price: number
-}
-
-type CartItem = {
-  id: string
-  type: "service" | "product"
-  description: string
-  service_id?: string
-  inventory_product_id?: string
-  quantity: number
-  unit_price: number
-  line_total: number
-}
-
-type CreatedTransaction = {
-  id: string
-  receipt_number: string
-  payment_method?: string | null
-  vatable_sales?: number | null
-  vat_amount?: number | null
-  vat_exempt_sales?: number | null
-  subtotal?: number | null
-  discount_amount?: number | null
-  amount_paid?: number | null
-  change_amount?: number | null
-  total_due: number
-  created_at: string
-}
-
-type BranchMeta = {
-  id: string
-  name?: string | null
-  address?: string | null
-}
-
-type BusinessSettings = {
-  business_name?: string | null
-  tin?: string | null
-  vat_reg_tin?: string | null
-  ptu_no?: string | null
-  date_issued?: string | null
-  pos_serial_no?: string | null
-  address?: string | null
-}
-
-type ReceiptSnapshot = {
-  transaction: CreatedTransaction
-  cartItems: CartItem[]
-  subtotal: number
-  discountAmount: number
-  totalDue: number
-  amountPaid: number
-  changeAmount: number
-  paymentMethodLabel: string
-  paymentReference: string
-  adjustmentLabel: string
-  seniorPwdDiscount: number
-  customerName: string
-  branchAddress: string
-  branchName: string
-  businessSettings: BusinessSettings | null
-}
-
-type AdjustmentOption = {
-  id: string
-  name: string
-  percent: number
-  enabled?: boolean
-  isSystem?: boolean
-}
-
-type LogTx = {
-  id: string
-  receipt_number: string
-  payment_method?: string | null
-  notes?: string | null
-  status?: string | null
-  subtotal?: number | null
-  discount_amount?: number | null
-  vatable_sales?: number | null
-  vat_amount?: number | null
-  vat_exempt_sales?: number | null
-  total_due: number
-  amount_paid?: number | null
-  change_amount?: number | null
-  created_at: string
-  customer_id?: string | null
-  branch_id?: string | null
-}
-
-type LogTxItem = {
-  transaction_id: string
-  description: string
-  quantity: number
-  line_total: number
-}
-
-type PosInventoryItem = {
-  id: string
-  name: string
-  sku?: string | null
-  unit_price: number
-  is_active?: boolean | null
-  min_stock_level: number
-  reorder_level: number
-  danger_level: number
-  stock_qty: number
-}
-
-type ZReadingSnapshot = {
-  readingNo: number
-  branchName: string
-  businessDate: string
-  generatedAt: string
-  txCount: number
-  grossSales: number
-  discountTotal: number
-  netSales: number
-  vatableSales: number
-  vatAmount: number
-  paymentBreakdown: Record<string, number>
-}
+import { PosControls } from "@/components/features/checkout/pos-controls"
+import { PosCart } from "@/components/features/checkout/pos-cart"
+import { CheckoutActions } from "@/components/features/checkout/checkout-actions"
+import { PosInventoryView } from "@/components/features/checkout/pos-inventory-view"
+import { PosLogView } from "@/components/features/checkout/pos-log-view"
+import { ZReadingPanel } from "@/components/features/checkout/z-reading-panel"
+import { ZReadingConfirmModal } from "@/components/features/checkout/z-reading-confirm-modal"
+import { VoidConfirmModal } from "@/components/features/checkout/void-confirm-modal"
 
 const toAmount = (value: string | number) => {
   const n = typeof value === "number" ? value : parseFloat(value)
@@ -193,7 +64,6 @@ export default function CheckoutPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [billedAppointmentIds, setBilledAppointmentIds] = useState<Set<string>>(new Set())
   const [services, setServices] = useState<Service[]>([])
-  const [products, setProducts] = useState<InventoryProduct[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("")
@@ -279,7 +149,6 @@ export default function CheckoutPage() {
         const [
           { data: appointmentsData, error: appointmentsError },
           { data: servicesData, error: servicesError },
-          { data: productsData, error: productsError },
           { data: billedData, error: billedError },
           { data: settingsData, error: settingsError },
           { data: customersData, error: customersError },
@@ -293,10 +162,6 @@ export default function CheckoutPage() {
           supabase
             .from("services")
             .select("id, category_id, name, sort_order, uses_equipment, equipment, uses_product, product, inventory_product_id, price, is_package, session_count, recurrence_days"),
-          supabase
-            .from("inventory_products")
-            .select("id, name, sku, unit_price")
-            .order("name", { ascending: true }),
           supabase
             .from("transactions")
             .select("appointment_id")
@@ -315,14 +180,12 @@ export default function CheckoutPage() {
 
         if (appointmentsError) throw appointmentsError
         if (servicesError) throw servicesError
-        if (productsError) throw productsError
         if (billedError) throw billedError
         if (settingsError) throw settingsError
         if (customersError) throw customersError
 
         setAppointments((appointmentsData || []) as Appointment[])
         setServices((servicesData || []) as Service[])
-        setProducts((productsData || []) as InventoryProduct[])
         setBilledAppointmentIds(new Set((billedData || []).map((row: { appointment_id?: string | null }) => row.appointment_id).filter(Boolean) as string[]))
         setBusinessSettings((settingsData || null) as BusinessSettings | null)
         setCustomers((customersData || []) as Customer[])
@@ -1079,7 +942,7 @@ export default function CheckoutPage() {
               <tr><td>Total Discounts</td><td style="text-align:right;">${formatMoney(z.discountTotal)}</td></tr>
               <tr><td>Net Sales</td><td style="text-align:right;">${formatMoney(z.netSales)}</td></tr>
               <tr><td>Vatable Sales</td><td style="text-align:right;">${formatMoney(z.vatableSales)}</td></tr>
-              <tr><td>VAT Amount</td><td style="text-align:right;">${formatMoney(z.vatAmount)}</td></tr>
+              <tr><td>VAT Amount</td><td style="text-align:right;">${formatMoney(z.vatAmount || z.vat_amount || 0)}</td></tr>
             </tbody>
           </table>
 
@@ -1367,559 +1230,124 @@ export default function CheckoutPage() {
         </div>
 
         {activeView === "checkout" ? (
-        <div className="grid gap-0 xl:grid-cols-[1.35fr_0.95fr]">
-          <Card className="rounded-none border-0 border-r shadow-none">
-          <CardHeader>
-            <CardTitle>Cart Builder</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Load from Appointment</p>
-              <Combobox
-                options={appointmentOptions}
-                value={selectedAppointmentId}
-                onValueChange={addAppointmentServicesToCart}
-                placeholder="Select appointment"
-                emptyMessage="No unbilled appointments found"
+          <div className="grid gap-0 xl:grid-cols-[1.35fr_0.95fr]">
+            <div className="flex flex-col border-r">
+              <PosControls
+                appointmentOptions={appointmentOptions}
+                selectedAppointmentId={selectedAppointmentId}
+                onAppointmentChange={addAppointmentServicesToCart}
+                customerOptions={customerOptions}
+                selectedCustomerId={selectedCustomerId}
+                onCustomerChange={setSelectedCustomerId}
+                productOptions={productOptions}
+                selectedProductId={selectedProductId}
+                onProductChange={setSelectedProductId}
+                productQty={productQty}
+                onProductQtyChange={setProductQty}
+                onAddProduct={addProductToCart}
               />
-              <p className="text-xs text-muted-foreground">
-                Recurring/package schedules are billed once. Follow-up occurrences in the same package are excluded after billing.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Customer <span>(Retail-only)</span></p>
-              <Combobox
-                options={customerOptions}
-                value={selectedCustomerId}
-                onValueChange={setSelectedCustomerId}
-                placeholder="Walk-in checkout or select profile"
-                emptyMessage="No customers found"
-              />
-              <p className="text-xs text-muted-foreground">
-                Automatically selected if loading from an appointment. Use for pure retail walk-in checkouts.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Add Retail Product</p>
-              <div className="grid gap-2 md:grid-cols-[1fr_120px_140px]">
-                <Combobox
-                  options={productOptions}
-                  value={selectedProductId}
-                  onValueChange={setSelectedProductId}
-                  placeholder="Select product"
-                  emptyMessage="No products found"
-                />
-                <Input type="number" min={1} value={productQty} onChange={(e) => setProductQty(e.target.value)} placeholder="Qty" />
-                <Button type="button" variant="outline" onClick={addProductToCart}>Add Product</Button>
-              </div>
-            </div>
-
-            <div className="rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Item</th>
-                    <th className="px-3 py-2 text-right font-medium">Qty</th>
-                    <th className="px-3 py-2 text-right font-medium">Unit</th>
-                    <th className="px-3 py-2 text-right font-medium">Total</th>
-                    <th className="px-3 py-2 text-right font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cartItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">Cart is empty.</td>
-                    </tr>
-                  ) : (
-                    cartItems.map((item) => (
-                      <tr key={item.id} className="border-t">
-                        <td className="px-3 py-2">{item.description}</td>
-                        <td className="px-3 py-2 text-right">{item.quantity}</td>
-                        <td className="px-3 py-2 text-right">{formatMoney(item.unit_price)}</td>
-                        <td className="px-3 py-2 text-right">{formatMoney(item.line_total)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeCartItem(item.id)}>Remove</Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-          </Card>
-
-          <Card className="rounded-none border-0 shadow-none">
-          <CardHeader>
-            <CardTitle>{isCheckoutStage ? "Payment Pad" : "Checkout Adjustments"}</CardTitle>
-          </CardHeader>
-
-          <CardContent className="flex min-h-[700px] flex-col gap-4">
-            {!isCheckoutStage && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-muted-foreground">Adjustments (Discounts / Promos)</p>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => navigate("/dashboard/pos-settings")}>
-                      Configure in Settings
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant={!selectedAdjustment ? "default" : "outline"}
-                      onClick={() => applyAdjustment(null)}
-                    >
-                      No Adjustment
-                    </Button>
-                    {visibleAdjustments.map((option) => (
-                      <Button
-                        key={option.id}
-                        type="button"
-                        variant={selectedAdjustment?.id === option.id ? "default" : "outline"}
-                        onClick={() => applyAdjustment(option)}
-                      >
-                        {option.name} ({option.percent}%)
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button type="button" className="w-full" onClick={proceedToCheckout}>
-                  Checkout
-                </Button>
-              </>
-            )}
-
-            {isCheckoutStage && (
-              <>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Payment Method</p>
-              <Combobox
-                options={paymentMethodOptions}
-                value={paymentMethod}
-                onValueChange={setPaymentMethod}
-                placeholder="Choose payment method"
-                emptyMessage="No payment methods"
-              />
-            </div>
-
-            {(requiresPaymentReference || supportsOptionalReference) && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">{referenceLabel}</p>
-                <Input
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  placeholder={requiresPaymentReference ? "Required" : "Optional"}
+              <div className="px-6 pb-6">
+                <PosCart
+                  cartItems={cartItems}
+                  onRemoveItem={removeCartItem}
+                  formatMoney={formatMoney}
                 />
               </div>
-            )}
-
-            <div className="grid gap-1">
-              <p className="text-xs text-muted-foreground">Cash Input</p>
-              <Input readOnly value={amountPaidInput} className="text-right text-lg font-semibold" />
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              {['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', 'DEL'].map((token) => (
-                <Button key={token} type="button" variant={token === 'DEL' ? 'outline' : 'secondary'} onClick={() => appendCashDigit(token)}>
-                  {token}
-                </Button>
-              ))}
-              <Button type="button" variant="outline" className="col-span-3" onClick={() => appendCashDigit('C')}>Clear</Button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {[500, 1000, 2000].map((amount) => (
-                <Button key={amount} type="button" variant="ghost" onClick={() => applyQuickCash(amount)}>
-                  {formatMoney(amount)}
-                </Button>
-              ))}
-            </div>
-
-            <Button type="button" variant="ghost" onClick={() => setIsCheckoutStage(false)}>
-              Back to Adjustments
-            </Button>
-
-              </>
-            )}
-
-            <div className="space-y-1 rounded-md border p-3 text-sm">
-              <div className="flex items-center justify-between"><span>Payment</span><span>{paymentMethodLabel}</span></div>
-              <div className="flex items-center justify-between"><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
-              <div className="flex items-center justify-between">
-                <span>Discount Applied</span>
-                <span>
-                  {selectedAdjustment
-                    ? `${selectedAdjustment.name} (${selectedAdjustment.percent}%)`
-                    : 'None'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between"><span>Discount Amount</span><span>{formatMoney(discount)}</span></div>
-              <div className="flex items-center justify-between font-semibold"><span>Total Due</span><span>{formatMoney(totalDue)}</span></div>
-              <div className="flex items-center justify-between"><span>Amount Paid</span><span>{formatMoney(paid)}</span></div>
-              <div className="flex items-center justify-between"><span>Change</span><span>{formatMoney(change)}</span></div>
-            </div>
-
-            {isCheckoutStage && (
-              <div className="grid grid-cols-1 gap-2 pt-1">
-                <Button type="button" disabled={isLoading} onClick={completeSale}>{isLoading ? 'Processing...' : 'Confirm'}</Button>
-              </div>
-            )}
-
-            {lastTransaction && (
-              <div className="rounded-md border bg-muted/30 p-3 text-xs">
-                <p className="font-medium">Last transaction</p>
-                <p>Transaction Ref: {lastTransaction.receipt_number}</p>
-                <p>Total: {formatMoney(toAmount(lastTransaction.total_due))}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Internal tracking copy only. Issue a manual BIR-approved receipt separately.</p>
-                <div className="mt-2 flex gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={printInvoiceA4}>
-                    <Download className="mr-1 h-3.5 w-3.5" />
-                    Internal Invoice A4 PDF
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-          </Card>
-        </div>
-        ) : activeView === "inventory" ? (
-          <div className="p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg font-semibold">POS Inventory</h2>
-                <p className="text-sm text-muted-foreground">Live stock visibility for selling decisions in checkout.</p>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={inventorySearch}
-                  onChange={(e) => setInventorySearch(e.target.value)}
-                  placeholder="Search product or SKU"
-                  className="w-64"
-                />
-                <Button type="button" variant="outline" onClick={() => void loadInventory()} disabled={inventoryLoading}>
-                  {inventoryLoading ? "Refreshing..." : "Refresh"}
-                </Button>
-              </div>
-            </div>
-
-            {inventoryError && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                {inventoryError}
-              </div>
-            )}
-
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Product</th>
-                    <th className="px-3 py-2 text-left">SKU</th>
-                    <th className="px-3 py-2 text-right">Unit Price</th>
-                    <th className="px-3 py-2 text-right">Stock</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventoryLoading ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">Loading inventory...</td>
-                    </tr>
-                  ) : filteredInventoryRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No inventory items found.</td>
-                    </tr>
-                  ) : (
-                    filteredInventoryRows.map((row) => {
-                      const qty = row.stock_qty;
-                      let statusNode = null;
-                      
-                      if (!row.is_active) {
-                        statusNode = <span className="rounded-md bg-muted px-2 py-1 text-xs whitespace-nowrap">Inactive</span>
-                      } else if (qty <= 0) {
-                        statusNode = <span className="rounded-md bg-red-100 px-2 py-1 text-xs text-red-900 font-semibold whitespace-nowrap">No Stock</span>
-                      } else if (row.danger_level > 0 && qty <= row.danger_level) {
-                        statusNode = <span className="rounded-md bg-red-100 px-2 py-1 text-xs text-red-900 font-semibold whitespace-nowrap">Danger</span>
-                      } else if (row.min_stock_level > 0 && qty <= row.min_stock_level) {
-                        statusNode = <span className="rounded-md bg-orange-100 px-2 py-1 text-xs text-orange-900 font-semibold whitespace-nowrap">Warning</span>
-                      } else if (row.reorder_level > 0 && qty <= row.reorder_level) {
-                        statusNode = <span className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 font-semibold whitespace-nowrap">Reorder</span>
-                      } else {
-                        statusNode = <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-900 font-medium whitespace-nowrap">Healthy</span>
-                      }
-
-                      return (
-                        <tr key={row.id} className="border-t">
-                          <td className="px-3 py-2 font-medium">{row.name}</td>
-                          <td className="px-3 py-2">{row.sku || "-"}</td>
-                          <td className="px-3 py-2 text-right">{formatMoney(row.unit_price)}</td>
-                          <td className="px-3 py-2 text-right font-bold">{qty}</td>
-                          <td className="px-3 py-2">{statusNode}</td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <Dialog open={zConfirmOpen} onOpenChange={setZConfirmOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Generate Final Z-Reading Report?</DialogTitle>
-                  <DialogDescription className="space-y-3 block">
-                    <span className="block">
-                      <strong>Business Date:</strong> {zBusinessDate}
-                    </span>
-                    <span className="block">
-                      This action signifies the end of the operational business day. 
-                      Final Z-Reading reports finalize sales records for the day and can only be executed once.
-                    </span>
-                    <span className="block font-semibold text-destructive">
-                      Are you sure you want to end the operational day?
-                    </span>
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setZConfirmOpen(false)}>Cancel</Button>
-                  <Button type="button" variant="secondary" onClick={() => { setZConfirmOpen(false); generateXReading() }}>X-Reading (Preview)</Button>
-                  <Button type="button" onClick={generateZReading}>Finalize Day & Print</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <CheckoutActions
+              isCheckoutStage={isCheckoutStage}
+              setIsCheckoutStage={setIsCheckoutStage}
+              visibleAdjustments={visibleAdjustments}
+              selectedAdjustment={selectedAdjustment}
+              onApplyAdjustment={applyAdjustment}
+              onNavigateSettings={() => navigate("/dashboard/pos-settings")}
+              onProceedToCheckout={proceedToCheckout}
+              paymentMethodOptions={paymentMethodOptions}
+              paymentMethod={paymentMethod}
+              onPaymentMethodChange={setPaymentMethod}
+              requiresPaymentReference={requiresPaymentReference}
+              supportsOptionalReference={supportsOptionalReference}
+              referenceLabel={referenceLabel}
+              paymentReference={paymentReference}
+              onPaymentReferenceChange={setPaymentReference}
+              amountPaidInput={amountPaidInput}
+              onAppendCashDigit={appendCashDigit}
+              onApplyQuickCash={applyQuickCash}
+              paymentMethodLabel={paymentMethodLabel}
+              subtotal={subtotal}
+              discount={discount}
+              totalDue={totalDue}
+              paid={paid}
+              change={change}
+              formatMoney={formatMoney}
+              isLoading={isLoading}
+              onCompleteSale={completeSale}
+              lastTransaction={lastTransaction}
+              onPrintInvoice={printInvoiceA4}
+            />
           </div>
+        ) : activeView === "inventory" ? (
+          <PosInventoryView
+            inventorySearch={inventorySearch}
+            onInventorySearchChange={setInventorySearch}
+            onRefresh={() => void loadInventory()}
+            inventoryLoading={inventoryLoading}
+            inventoryError={inventoryError}
+            filteredInventoryRows={filteredInventoryRows}
+            formatMoney={formatMoney}
+          />
         ) : (
           <div className="p-5 space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-lg font-semibold">POS Logs</h2>
-                <p className="text-sm text-muted-foreground">Internal transaction tracking for the current branch scope.</p>
-              </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => void loadLogs()} disabled={logsLoading}>
-                  {logsLoading ? "Refreshing..." : "Refresh"}
-                </Button>
-              </div>
-            </div>
+            <ZReadingPanel
+              zPanelOpen={zPanelOpen}
+              setZPanelOpen={setZPanelOpen}
+              zBusinessDate={zBusinessDate}
+              setZBusinessDate={setZBusinessDate}
+              onXReading={generateXReading}
+              onZReadingTrigger={triggerZReadingConfirm}
+              zReadingReport={zReadingReport}
+              onPrintZReading={printZReading}
+              zReadingHistory={zReadingHistory}
+              paginatedZReadings={paginatedZReadings}
+              zHistoryPage={zHistoryPage}
+              totalZHistoryPages={totalZHistoryPages}
+              setZHistoryPage={setZHistoryPage}
+              formatMoney={formatMoney}
+            />
 
-            <div className="rounded-md border p-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">End-of-Day Z-Reading</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => setZPanelOpen((prev) => !prev)}>
-                  {zPanelOpen ? "Close" : "Open"}
-                </Button>
-              </div>
-
-              {zPanelOpen && (
-                <>
-                  <div className="flex flex-wrap items-end gap-2">
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Business Date</p>
-                      <Input type="date" value={zBusinessDate} onChange={(e) => setZBusinessDate(e.target.value)} className="w-48" />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button type="button" variant="outline" onClick={generateXReading}>X-Reading (Preview)</Button>
-                      <Button type="button" onClick={triggerZReadingConfirm}>Final Z-Reading</Button>
-                    </div>
-                    {zReadingReport && (
-                      <Button type="button" variant="ghost" onClick={() => printZReading(zReadingReport)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Print Z-Reading
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground italic">
-                    X-Reading is a preview of the day's sales. Final Z-Reading signifies the end of the operational day and can only be done once.
-                  </p>
-
-                  {zReadingReport && (
-                    <div className="grid gap-2 md:grid-cols-3 text-sm">
-                      <div className="rounded border p-2"><span className="text-muted-foreground">Reading</span><div className="font-medium">#{zReadingReport.readingNo}</div></div>
-                      <div className="rounded border p-2"><span className="text-muted-foreground">Net Sales</span><div className="font-medium">{formatMoney(zReadingReport.netSales)}</div></div>
-                      <div className="rounded border p-2"><span className="text-muted-foreground">Transactions</span><div className="font-medium">{zReadingReport.txCount}</div></div>
-                    </div>
-                  )}
-
-                  {zReadingHistory.length > 0 && (
-                    <>
-                      <div className="rounded-md border overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/50">
-                            <tr>
-                              <th className="px-3 py-2 text-left">Reading No</th>
-                              <th className="px-3 py-2 text-left">Branch</th>
-                              <th className="px-3 py-2 text-left">Business Date</th>
-                              <th className="px-3 py-2 text-right">Net Sales</th>
-                              <th className="px-3 py-2 text-right">Tx Count</th>
-                              <th className="px-3 py-2 text-right">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {paginatedZReadings.map((z) => (
-                              <tr key={`${z.readingNo}-${z.generatedAt}`} className="border-t">
-                                <td className="px-3 py-2 font-medium">#{z.readingNo}</td>
-                                <td className="px-3 py-2">{z.branchName || branchMeta?.name || "Branch"}</td>
-                                <td className="px-3 py-2">{z.businessDate}</td>
-                                <td className="px-3 py-2 text-right">{formatMoney(z.netSales)}</td>
-                                <td className="px-3 py-2 text-right">{z.txCount}</td>
-                                <td className="px-3 py-2 text-right">
-                                  <Button type="button" size="sm" variant="outline" onClick={() => printZReading(z)}>
-                                    Print
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Page {zHistoryPage} of {totalZHistoryPages}</span>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={zHistoryPage <= 1}
-                            onClick={() => setZHistoryPage((prev) => Math.max(1, prev - 1))}
-                          >
-                            Previous
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={zHistoryPage >= totalZHistoryPages}
-                            onClick={() => setZHistoryPage((prev) => Math.min(totalZHistoryPages, prev + 1))}
-                          >
-                            Next
-                          </Button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Transaction Ref</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Payment</th>
-                    <th className="px-3 py-2 text-right">Total</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logsLoading ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">Loading logs...</td>
-                    </tr>
-                  ) : logTransactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No transactions found.</td>
-                    </tr>
-                  ) : (
-                    paginatedTransactions.map((tx) => (
-                      <ContextMenu key={tx.id}>
-                        <ContextMenuTrigger asChild>
-                          <tr className="border-t cursor-context-menu hover:bg-muted/50 transition-colors">
-                            <td className="px-3 py-2 font-medium">
-                              {tx.receipt_number}
-                              {tx.status === "voided" && <span className="ml-[8px] rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-red-800 uppercase">Voided</span>}
-                            </td>
-                            <td className="px-3 py-2">{new Date(tx.created_at).toLocaleString()}</td>
-                            <td className="px-3 py-2">{tx.payment_method || "cash"}</td>
-                            <td className="px-3 py-2 text-right">{formatMoney(Number(tx.total_due || 0))}</td>
-                            <td className="px-3 py-2 text-right text-muted-foreground text-xs italic">
-                              Right-click row
-                            </td>
-                          </tr>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent className="w-48">
-                          <ContextMenuItem onClick={() => openInvoiceA4Landscape(buildLogTemplateData(tx, "INTERNAL DUPLICATE"))}>
-                            View Invoice
-                          </ContextMenuItem>
-                          {tx.status !== "voided" && (
-                            <>
-                              <ContextMenuSeparator />
-                              <ContextMenuItem 
-                                className="text-red-600 focus:text-red-600 font-medium" 
-                                onClick={() => triggerVoidTransaction(tx)}
-                              >
-                                Void Transaction
-                              </ContextMenuItem>
-                            </>
-                          )}
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {logTransactions.length > 0 && (
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Page {transactionPage} of {totalTransactionPages}</span>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={transactionPage <= 1}
-                    onClick={() => setTransactionPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={transactionPage >= totalTransactionPages}
-                    onClick={() => setTransactionPage((prev) => Math.min(totalTransactionPages, prev + 1))}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {voidTarget && (
-              <Dialog open={voidConfirmOpen} onOpenChange={setVoidConfirmOpen}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Void Transaction: {voidTarget.receipt_number}</DialogTitle>
-                    <DialogDescription className="space-y-4 pt-2 block">
-                       <span className="block font-medium text-destructive">
-                         Warning: Voiding this transaction will mark it as invalid and will restock any associated inventory products. This action cannot be reversed.
-                       </span>
-                       <span className="block space-y-2">
-                         <span className="block text-sm font-semibold text-foreground">Reason for voiding:</span>
-                         <Input 
-                            value={voidReason} 
-                            onChange={(e) => setVoidReason(e.target.value)}
-                            placeholder="e.g. Test, Wrong Input, Customer Refund..." 
-                            autoFocus
-                         />
-                       </span>
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter className="gap-2 sm:gap-0">
-                    <Button type="button" variant="outline" onClick={() => setVoidConfirmOpen(false)}>Cancel</Button>
-                    <Button type="button" variant="destructive" onClick={confirmVoidTransaction}>
-                       Confirm Void
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
+            <PosLogView
+              logsLoading={logsLoading}
+              logTransactions={logTransactions}
+              paginatedTransactions={paginatedTransactions}
+              onRefresh={() => void loadLogs()}
+              formatMoney={formatMoney}
+              onViewInvoice={(tx) => openInvoiceA4Landscape(buildLogTemplateData(tx, "INTERNAL DUPLICATE"))}
+              onTriggerVoid={triggerVoidTransaction}
+              transactionPage={transactionPage}
+              totalTransactionPages={totalTransactionPages}
+              onPageChange={setTransactionPage}
+            />
           </div>
         )}
       </div>
+
+      <ZReadingConfirmModal
+        open={zConfirmOpen}
+        onOpenChange={setZConfirmOpen}
+        zBusinessDate={zBusinessDate}
+        onXReading={generateXReading}
+        onZReading={generateZReading}
+      />
+
+      <VoidConfirmModal
+        open={voidConfirmOpen}
+        onOpenChange={setVoidConfirmOpen}
+        voidTarget={voidTarget}
+        voidReason={voidReason}
+        onVoidReasonChange={setVoidReason}
+        onConfirm={confirmVoidTransaction}
+      />
     </div>
   )
 }
