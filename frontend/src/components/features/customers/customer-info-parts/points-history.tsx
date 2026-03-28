@@ -2,6 +2,7 @@ import * as React from "react"
 import { Calendar, Clock } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { formatCheckinDate, formatCheckinTime } from "../checkin-history-parts/checkin-history-format"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface PointsTransaction {
   id: string
@@ -64,33 +65,37 @@ export function PointsHistory({ customerId, refreshKey = 0 }: PointsHistoryProps
   }
 
   return (
-    <div className="space-y-2 max-h-48 overflow-y-auto mt-4 px-1">
-      <h4 className="text-sm font-semibold mb-2">Points History</h4>
-      {logs.map((log) => (
-        <div
-          key={log.id}
-          className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm"
-        >
-          <div className="flex flex-col">
-          <div className="font-medium">{log.reason}</div>
-            <div className="flex items-center gap-1 mt-1 text-xs">
-              <Calendar className="h-3 w-3 text-muted-foreground" />
-              <span className="text-muted-foreground">{formatCheckinDate(log.created_at)}</span>
-              <span className="text-muted-foreground">•</span>
-              <Clock className="h-3 w-3 text-muted-foreground" />
-              <span className="text-muted-foreground">{formatCheckinTime(log.created_at)}</span>
-            </div>
-          </div>
-          <span className={`font-medium ${log.points_change > 0 ? "text-green-500" : "text-destructive"}`}>
-            {log.points_change > 0 ? "+" : ""}{log.points_change} pts
-            {log.type === 'earn' && log.expires_at && (
-              <div className="text-[10px] text-muted-foreground font-normal text-right">
-                Exp: {new Date(log.expires_at).toLocaleDateString()}
+    <div className="mt-4">
+      <h4 className="text-sm font-semibold mb-2 px-1">Points History</h4>
+      <ScrollArea className="h-48 px-1">
+        <div className="space-y-2">
+          {logs.map((log) => (
+            <div
+              key={log.id}
+              className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm"
+            >
+              <div className="flex flex-col">
+              <div className="font-medium">{log.reason}</div>
+                <div className="flex items-center gap-1 mt-1 text-xs">
+                  <Calendar className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">{formatCheckinDate(log.created_at)}</span>
+                  <span className="text-muted-foreground">•</span>
+                  <Clock className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground">{formatCheckinTime(log.created_at)}</span>
+                </div>
               </div>
-            )}
-          </span>
+              <span className={`font-medium ${log.points_change > 0 ? "text-green-500" : "text-destructive"}`}>
+                {log.points_change > 0 ? "+" : ""}{log.points_change} pts
+                {log.type === 'earn' && log.expires_at && (
+                  <div className="text-[10px] text-muted-foreground font-normal text-right">
+                    Exp: {new Date(log.expires_at).toLocaleDateString()}
+                  </div>
+                )}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      </ScrollArea>
     </div>
   )
 }
