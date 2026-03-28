@@ -107,8 +107,8 @@ export function Combobox({
       >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <ScrollArea className="max-h-60">
-            <CommandList className="max-h-none overflow-visible">
+          <CommandList className="max-h-none overflow-hidden">
+            <ScrollArea className="h-60">
               <CommandEmpty>{emptyMessage}</CommandEmpty>
               <CommandGroup>
                 {options.map((option) => (
@@ -139,8 +139,8 @@ export function Combobox({
                   </CommandItem>
                 ))}
               </CommandGroup>
-            </CommandList>
-          </ScrollArea>
+            </ScrollArea>
+          </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
