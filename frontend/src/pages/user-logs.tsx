@@ -39,6 +39,7 @@ type CanonicalAction =
   | "managed_branches"
   | "managed_services"
   | "processed_transaction"
+  | "check_in_scanned"
 
 interface UserLogRow {
   id: string
@@ -73,6 +74,7 @@ const ACTION_LABELS: Record<CanonicalAction, string> = {
   managed_branches: "Managed Branches",
   managed_services: "Managed Services",  "completed_sale": "Completed Sale",
   "refunded_sale": "Refunded Sale",  processed_transaction: "Processed Transaction",
+  check_in_scanned: "Check In",
 }
 
 const ACTION_KEYS = Object.keys(ACTION_LABELS) as CanonicalAction[]
@@ -92,6 +94,7 @@ const ACTION_ALIASES: Record<CanonicalAction, string[]> = {
   completed_sale: ["completed_sale", "sale_completed", "transaction_completed", "checkout_completed"],
   refunded_sale: ["refunded_sale", "sale_refunded", "transaction_refunded"],
   processed_transaction: ["processed_transaction", "transaction_processed", "checkout", "payment"],
+  check_in_scanned: ["check_in_scanned", "check_in", "scan_nfc", "customer_checked_in"],
 }
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -106,6 +109,7 @@ const CATEGORY_DEFINITIONS = [
   {
     id: "Clients",
     actions: [
+      { id: "check_in_scanned", label: "Check In" },
       { id: "registered_new_client", label: "Registered New Client" },
       { id: "edited_client_data", label: "Edited Client Data" },
     ]
