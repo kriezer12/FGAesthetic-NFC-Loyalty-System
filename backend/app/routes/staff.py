@@ -35,7 +35,7 @@ def list_staff():
         caller_branch_id = caller_profile.data.get('branch_id')
         
         # Calendar roles we want to display
-        calendar_roles = ["super_admin", "branch_admin", "staff"]
+        calendar_roles = ["staff"]
         
         query = supabase.table('user_profiles').select('id, full_name, role, avatar_url').in_('role', calendar_roles)
         
