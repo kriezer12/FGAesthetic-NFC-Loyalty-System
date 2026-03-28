@@ -4,6 +4,7 @@
 # ================================
 
 # Web Framework
+# Web Framework
 Flask==3.0.0
 flask-cors==4.0.0
 
@@ -14,10 +15,10 @@ python-dotenv==1.0.0
 supabase==2.0.2
 
 # Data Validation
-pydantic==2.5.3
+pydantic>=2.5.3
 email-validator==2.1.0
 # JWT Token Handling
 PyJWT==2.11.0
 
 # Production Server
-gunicorn==21.2.0
+gunicorn==21.2.0 ; sys_platform != 'win32'

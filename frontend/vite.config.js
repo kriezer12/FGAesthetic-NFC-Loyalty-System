@@ -36,7 +36,8 @@ export default defineConfig({
   },
   // Keep the pre-bundled dep cache outside node_modules so it
   // survives container rebuilds via its own Docker volume.
-  cacheDir: "/vite-cache",
+  // Changed for local dev: use relative path
+  cacheDir: "node_modules/.vite-cache",
   server: {
     host: true,
     port: 5173,

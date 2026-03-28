@@ -93,9 +93,10 @@ def create_account():
         # authorization: branch_admin cannot create super_admin or branch_admin
         try:
             supabase_admin = get_supabase_admin()
-            caller_profile = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', admin_user_id).single().execute()
-            caller_role = caller_profile.data.get('role') if caller_profile.data else None
-            caller_branch_id = caller_profile.data.get('branch_id')
+            caller_response = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', admin_user_id).execute()
+            caller_prof_data = caller_response.data[0] if caller_response.data else None
+            caller_role = caller_prof_data.get('role') if caller_prof_data else None
+            caller_branch_id = caller_prof_data.get('branch_id') if caller_prof_data else None
 
             if caller_role == 'branch_admin':
                 if data.get('role') != 'staff':
@@ -204,13 +205,13 @@ def list_accounts():
         supabase = get_supabase_admin()
         
         # Get caller's profile to check role and branch
-        caller_profile = supabase.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
+        caller_response = supabase.table('user_profiles').select('role, branch_id').eq('id', caller_id).execute()
         
-        if not caller_profile.data:
+        if not caller_response.data:
             return jsonify({'error': 'User profile not found'}), 404
             
-        caller_role = caller_profile.data.get('role')
-        caller_branch_id = caller_profile.data.get('branch_id')
+        caller_role = caller_response.data[0].get('role')
+        caller_branch_id = caller_response.data[0].get('branch_id')
         
         # Build query based on role
         query = supabase.table('user_profiles').select('*')
@@ -287,17 +288,19 @@ def update_account(user_id):
         try:
             caller_id = get_user_from_token()
             supabase_admin = get_supabase_admin()
-            caller_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
-            caller_role = caller_prof.data.get('role') if caller_prof.data else None
-            caller_branch_id = caller_prof.data.get('branch_id')
+            caller_response = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).execute()
+            caller_prof_data = caller_response.data[0] if caller_response.data else None
+            caller_role = caller_prof_data.get('role') if caller_prof_data else None
+            caller_branch_id = caller_prof_data.get('branch_id') if caller_prof_data else None
 
             if caller_role == 'branch_admin':
-                target_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).single().execute()
-                if not target_prof.data:
+                target_response = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).execute()
+                target_prof_data = target_response.data[0] if target_response.data else None
+                if not target_prof_data:
                     return jsonify({'error': 'Target user not found'}), 404
                 
-                target_role = target_prof.data.get('role')
-                target_branch_id = target_prof.data.get('branch_id')
+                target_role = target_prof_data.get('role')
+                target_branch_id = target_prof_data.get('branch_id')
 
                 if target_role != 'staff':
                     return jsonify({'error': 'Branch admin may only edit staff accounts'}), 403
@@ -368,17 +371,19 @@ def delete_account(user_id):
         try:
             caller_id = get_user_from_token()
             supabase_admin = get_supabase_admin()
-            caller_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
-            caller_role = caller_prof.data.get('role') if caller_prof.data else None
-            caller_branch_id = caller_prof.data.get('branch_id')
+            caller_response = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).execute()
+            caller_prof_data = caller_response.data[0] if caller_response.data else None
+            caller_role = caller_prof_data.get('role') if caller_prof_data else None
+            caller_branch_id = caller_prof_data.get('branch_id') if caller_prof_data else None
 
             if caller_role == 'branch_admin':
-                target_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).single().execute()
-                if not target_prof.data:
+                target_response = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).execute()
+                target_prof_data = target_response.data[0] if target_response.data else None
+                if not target_prof_data:
                     return jsonify({'error': 'Target user not found'}), 404
                 
-                target_role = target_prof.data.get('role')
-                target_branch_id = target_prof.data.get('branch_id')
+                target_role = target_prof_data.get('role')
+                target_branch_id = target_prof_data.get('branch_id')
 
                 if target_role != 'staff':
                     return jsonify({'error': 'Branch admin may only delete staff accounts'}), 403

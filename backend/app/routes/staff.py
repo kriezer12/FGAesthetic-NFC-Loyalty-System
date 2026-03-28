@@ -26,13 +26,13 @@ def list_staff():
 
         supabase = get_supabase_admin()
         
-        caller_profile = supabase.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
+        caller_response = supabase.table('user_profiles').select('role, branch_id').eq('id', caller_id).execute()
         
-        if not caller_profile.data:
+        if not caller_response.data:
             return jsonify({'error': 'User profile not found'}), 404
             
-        caller_role = caller_profile.data.get('role')
-        caller_branch_id = caller_profile.data.get('branch_id')
+        caller_role = caller_response.data[0].get('role')
+        caller_branch_id = caller_response.data[0].get('branch_id')
         
         # Calendar roles we want to display
         calendar_roles = ["super_admin", "branch_admin", "staff"]
