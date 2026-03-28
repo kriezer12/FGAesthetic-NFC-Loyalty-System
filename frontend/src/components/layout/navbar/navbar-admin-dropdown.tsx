@@ -39,7 +39,6 @@ const adminCategories: AdminCategory[] = [
     links: [
       { title: "Manage Accounts", url: "/dashboard/accounts", icon: Users },
       { title: "User Logs", url: "/dashboard/user-logs", icon: FileText },
-      { title: "Check-in Logs", url: "/dashboard/checkin-logs", icon: Clock },
     ],
   },
   {
