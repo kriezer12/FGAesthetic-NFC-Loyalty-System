@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { LogOut, Settings, User, Sun, Moon, Bell } from "lucide-react"
+import { LogOut, Settings, User, Sun, Moon, Bell, Building2, Check } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { getAvatarSignedUrl } from "@/lib/supabase-storage"
 import {
@@ -9,10 +9,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { AccountSettingsModal } from "./account-settings-modal"
 import { NotificationSettingsModal } from "./notification-settings-modal"
+import { useBranches } from "@/hooks/use-branches"
 
 type NavbarProfileMenuProps = {
   userEmail: string
@@ -26,6 +31,25 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  const { branches, fetchAll } = useBranches()
+  const [activeBranchId, setActiveBranchId] = useState(() => sessionStorage.getItem("superadmin_branch") || "NA")
+
+  useEffect(() => {
+    if (userProfile?.role === "super_admin") {
+      fetchAll()
+    }
+  }, [userProfile, fetchAll])
+
+  const setAdminBranch = (id: string) => {
+    setActiveBranchId(id)
+    if (id === "NA") {
+      sessionStorage.removeItem("superadmin_branch")
+    } else {
+      sessionStorage.setItem("superadmin_branch", id)
+    }
+    window.dispatchEvent(new Event('superadmin_branch_changed'))
+  }
 
   // Convert public avatar URL to signed URL immediately for faster display
   useEffect(() => {
@@ -97,6 +121,38 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+
+        {userProfile?.role === "super_admin" && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="cursor-pointer">
+              <Building2 className="mr-2 h-4 w-4" />
+              <span>Admin Settings</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem 
+                  onClick={() => setAdminBranch("NA")}
+                  className="cursor-pointer flex justify-between"
+                >
+                  <span>N/A</span>
+                  {activeBranchId === "NA" && <Check className="h-4 w-4 ml-2" />}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {branches.map(b => (
+                  <DropdownMenuItem 
+                    key={b.id} 
+                    onClick={() => setAdminBranch(b.id)}
+                    className="cursor-pointer flex justify-between"
+                  >
+                    <span>{b.name}</span>
+                    {activeBranchId === b.id && <Check className="h-4 w-4 ml-2" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuPortal>
+          </DropdownMenuSub>
+        )}
+
         <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="cursor-pointer">
           <Settings className="mr-2 h-4 w-4" />
           <span>Account Settings</span>
