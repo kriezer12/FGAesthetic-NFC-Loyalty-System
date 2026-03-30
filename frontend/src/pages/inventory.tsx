@@ -23,7 +23,13 @@ import { format } from "date-fns"
 import { supabase } from "@/lib/supabase"
 import { ProductModal } from "@/components/features/inventory/product-modal"
 import { StockAdjustmentModal } from "@/components/features/inventory/stock-adjustment-modal"
-import { SelectNative } from "@/components/ui/select-native"
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -274,17 +280,19 @@ export default function InventoryPage() {
           <div className="flex flex-1 items-center justify-end gap-2 w-full md:w-auto">
             {userProfile.role === 'super_admin' && (
               <div className="relative">
-                <ChevronDown className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <SelectNative 
-                  className="max-w-[200px] pr-8"
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                >
-                  <option value="all">All Branches</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </SelectNative>
+                <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All Branches" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
             <div className="relative w-full max-w-xs">

@@ -476,7 +476,7 @@ export function AppointmentDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl p-0 gap-0 flex flex-col max-h-[85vh]">
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 flex flex-col h-[min(85vh,1000px)]">
         <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0 bg-background">
           <DialogTitle>{isEdit ? "Edit Appointment" : "New Appointment"}</DialogTitle>
           <DialogDescription>
