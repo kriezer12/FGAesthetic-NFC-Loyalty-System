@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
-import { useBranches, Branch } from "@/hooks/use-branches"
+import { useBranches } from "@/hooks/use-branches"
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,9 @@ export function EditAccountModal({
   const [branch, setBranch] = useState(account?.branch_id || "")
   const [isActive, setIsActive] = useState(account?.is_active ?? true)
   const [isSaving, setIsSaving] = useState(false)
+
+  const isSuperAdminAccount = account?.role === "super_admin"
+  const canChangeRole = !isSuperAdminAccount
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -102,7 +105,13 @@ export function EditAccountModal({
               value={role}
               onValueChange={(val) => setRole(val as "staff" | "branch_admin" | "super_admin")}
               placeholder="Select a role"
+              disabled={!canChangeRole}
             />
+            {isSuperAdminAccount && (
+              <p className="text-sm text-amber-600">
+                Super admin privileges cannot be downgraded or removed.
+              </p>
+            )}
           </div>
 
           {isSuper && (
