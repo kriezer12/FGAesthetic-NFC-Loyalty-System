@@ -18,7 +18,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
+import { useBranches } from "@/hooks/use-branches"
 
 interface CheckinLogWithCustomer {
   id: string
@@ -44,9 +53,15 @@ interface PreviousLog {
 const LOGS_PER_PAGE = 10
 
 export default function CheckinLogsPage() {
+  const { userProfile } = useAuth()
+  const { branches, fetchAll } = useBranches()
+  const isSuperAdmin = userProfile?.role === "super_admin"
+
   const [logs, setLogs] = useState<CheckinLogWithCustomer[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  // Initialize filter with 'all' for super_admin or user's assigned branch otherwise
+  const [branchFilter, setBranchFilter] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const [selectedLog, setSelectedLog] = useState<CheckinLogWithCustomer | null>(null)
@@ -57,10 +72,18 @@ export default function CheckinLogsPage() {
   const [selectedEmployeeName, setSelectedEmployeeName] = useState("Unknown Employee")
   const [previousLogs, setPreviousLogs] = useState<PreviousLog[]>([])
 
+  useEffect(() => {
+    if (isSuperAdmin) {
+      fetchAll()
+    } else if (userProfile?.branch_id) {
+      setBranchFilter(userProfile.branch_id)
+    }
+  }, [isSuperAdmin, userProfile, fetchAll])
+
   const fetchLogs = useCallback(async () => {
     setIsLoading(true)
     try {
-      const { data, error, count } = await supabase
+      let query = supabase
         .from("checkin_logs")
         .select(`
           id,
@@ -68,12 +91,21 @@ export default function CheckinLogsPage() {
           checked_in_at,
           points_added,
           notes,
+          branch_id,
           customers (
             name,
             first_name,
             last_name
           )
         `, { count: "exact" })
+      
+      if (branchFilter !== "all" && branchFilter !== "NA") {
+        query = query.eq("branch_id", branchFilter)
+      } else if (!isSuperAdmin && userProfile?.branch_id) {
+        query = query.eq("branch_id", userProfile.branch_id)
+      }
+
+      const { data, error, count } = await query
         .order("checked_in_at", { ascending: false })
         .range(currentPage * LOGS_PER_PAGE, (currentPage + 1) * LOGS_PER_PAGE - 1)
 
@@ -86,7 +118,7 @@ export default function CheckinLogsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [currentPage])
+  }, [currentPage, branchFilter, isSuperAdmin, userProfile])
 
   useEffect(() => {
     document.title = "Check-in Logs - FG Aesthetic Centre"
@@ -287,17 +319,41 @@ export default function CheckinLogsPage() {
             </Card>
           </div>
 
-          {/* Search */}
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by customer name..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+{/* Search and Filters */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by customer name..."
+            className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        {isSuperAdmin && (
+          <div className="w-[200px]">
+            <Select
+              value={branchFilter}
+              onValueChange={(val) => {
+                setBranchFilter(val)
+                setCurrentPage(0)
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Branches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Branches</SelectItem>
+                <SelectItem value="NA">No Branch</SelectItem>
+                {branches.map(branch => (
+                  <SelectItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
           </div>
 
           {/* Logs Table */}

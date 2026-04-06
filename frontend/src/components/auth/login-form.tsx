@@ -18,6 +18,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 
 type LoginFormProps = ComponentProps<"form">
 
@@ -149,15 +150,16 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
 
           {/* Feedback messages */}
           {error && (
-            <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md text-center">
+            <div className="text-sm font-medium text-red-800 bg-red-50 dark:text-red-200 dark:bg-red-950/50 p-3 rounded-md text-center border border-red-200 dark:border-red-900/50">
               {error}
             </div>
           )}
           {success && (
-            <div className="text-sm text-green-600 bg-green-50 dark:bg-green-950/50 p-3 rounded-md text-center">
+            <div className="text-sm font-medium text-green-800 bg-green-50 dark:text-green-200 dark:bg-green-950/50 p-3 rounded-md text-center border border-green-200 dark:border-green-900/50">
               {success}
             </div>
           )}
+
 
           {/* Email field */}
           <Field>
@@ -213,17 +215,18 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
 
         {/* Error message display */}
         {error && (
-          <div className="text-sm text-red-500 bg-red-50 dark:bg-red-950/50 p-3 rounded-md text-center">
+          <div className="text-sm font-medium text-red-800 bg-red-50 dark:text-red-200 dark:bg-red-950/50 p-3 rounded-md text-center border border-red-200 dark:border-red-900/50">
             {error}
           </div>
         )}
 
         {/* Success message (e.g. after password reset) */}
         {success && (
-          <div className="text-sm text-green-600 bg-green-50 dark:bg-green-950/50 p-3 rounded-md text-center">
+          <div className="text-sm font-medium text-green-800 bg-green-50 dark:text-green-200 dark:bg-green-950/50 p-3 rounded-md text-center border border-green-200 dark:border-green-900/50">
             {success}
           </div>
         )}
+
 
         {/* Email field */}
         <Field>
@@ -252,13 +255,13 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
               Forgot your password?
             </button>
           </div>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            autoComplete="current-password"
             className="border-border bg-muted/50"
           />
         </Field>

@@ -39,7 +39,8 @@ export async function uploadToSupabase(
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, blob, {
-        cacheControl: "3600",
+        // Set long cache duration for static content to improve repeat visit performance
+        cacheControl: "31536000", // 1 year
         upsert: false,
       })
 
@@ -98,7 +99,7 @@ export async function listFiles(
     const paths = filtered.map((f) => (folder ? `${folder}/${f.name}` : f.name))
     const { data: signedData } = await supabase.storage
       .from(bucket)
-      .createSignedUrls(paths, 3600) // 1 hour
+      .createSignedUrls(paths, 604800) // 7 days (signed URL expiration)
 
     const signedMap = new Map(
       (signedData ?? []).map((s) => [s.path ?? "", s.signedUrl ?? ""])
@@ -197,7 +198,7 @@ export async function fileExists(
 export async function getAvatarSignedUrl(
   bucket: string,
   path: string,
-  expirationSeconds: number = 3600
+  expirationSeconds: number = 604800 // 7 days
 ): Promise<string | null> {
   try {
     const { data, error } = await supabase.storage
@@ -222,7 +223,7 @@ export async function getAvatarSignedUrl(
 export async function getSignedUrl(
   bucket: string,
   path: string,
-  expiresIn: number = 3600 // 1 hour default
+  expiresIn: number = 604800 // 7 days default
 ): Promise<string> {
   try {
     const { data, error } = await supabase.storage

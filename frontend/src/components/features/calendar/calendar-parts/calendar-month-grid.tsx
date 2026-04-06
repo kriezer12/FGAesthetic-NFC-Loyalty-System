@@ -6,7 +6,7 @@
  * counts/summaries. Clicking a day switches to the day view.
  */
 
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
 import type { Appointment, StaffMember } from "@/types/appointment"
 import { cn } from "@/lib/utils"
 import {
@@ -16,8 +16,11 @@ import {
   endOfWeek,
   eachDayOfInterval,
   isSameMonth,
+  isSameDay,
   isToday as isTodayFn,
   format,
+  addDays,
+  subDays,
 } from "date-fns"
 
 // ---------------------------------------------------------------------------
@@ -56,21 +59,54 @@ export function CalendarMonthGrid({
   appointments,
   onDayClick,
 }: CalendarMonthGridProps) {
+  const [focusedDate, setFocusedDate] = useState(selectedDate)
+
+  useEffect(() => {
+    setFocusedDate(selectedDate)
+  }, [selectedDate])
+
+  const handleKeyDown = (e: React.KeyboardEvent, day: Date) => {
+    let nextDate: Date | null = null
+    switch (e.key) {
+      case "ArrowRight":
+        nextDate = addDays(day, 1)
+        break
+      case "ArrowLeft":
+        nextDate = subDays(day, 1)
+        break
+      case "ArrowDown":
+        nextDate = addDays(day, 7)
+        break
+      case "ArrowUp":
+        nextDate = subDays(day, 7)
+        break
+      case "Enter":
+      case " ":
+        e.preventDefault()
+        onDayClick(day)
+        return
+      default:
+        return
+    }
+
+    if (nextDate) {
+      e.preventDefault()
+      setFocusedDate(nextDate)
+      // Focus the new cell
+      const nextKey = format(nextDate, "yyyy-MM-dd")
+      setTimeout(() => {
+        const el = document.querySelector(`[data-day="${nextKey}"]`) as HTMLElement
+        el?.focus()
+      }, 0)
+    }
+  }
+
   // Build a staff color lookup
   const staffColorMap = useMemo(() => {
     const map = new Map<string, string>()
     staff.forEach((s) => map.set(s.id, s.color))
     return map
   }, [staff])
-
-  // Compute the calendar grid days (fill surrounding weeks)
-  const calendarDays = useMemo(() => {
-    const monthStart = startOfMonth(selectedDate)
-    const monthEnd = endOfMonth(selectedDate)
-    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
-    const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-    return eachDayOfInterval({ start: gridStart, end: gridEnd })
-  }, [selectedDate])
 
   // Group appointments by date key
   const appointmentsByDate = useMemo(() => {
@@ -85,6 +121,15 @@ export function CalendarMonthGrid({
     return map
   }, [appointments])
 
+  // Compute the calendar grid days (fill surrounding weeks)
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(selectedDate)
+    const monthEnd = endOfMonth(selectedDate)
+    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+    const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+    return eachDayOfInterval({ start: gridStart, end: gridEnd })
+  }, [selectedDate])
+
   // Split into weeks (rows of 7)
   const weeks = useMemo(() => {
     const rows: Date[][] = []
@@ -95,13 +140,18 @@ export function CalendarMonthGrid({
   }, [calendarDays])
 
   return (
-    <div className="flex flex-1 flex-col h-full overflow-auto p-2">
+    <div 
+      className="flex flex-1 flex-col h-full overflow-auto p-2"
+      role="grid"
+      aria-label="Appointment Calendar"
+    >
       {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 border-b pb-1 mb-1">
+      <div className="grid grid-cols-7 border-b pb-1 mb-1" role="row">
         {DAY_HEADERS.map((d) => (
           <div
             key={d}
             className="text-center text-xs font-medium uppercase text-muted-foreground py-1"
+            role="columnheader"
           >
             {d}
           </div>
@@ -111,22 +161,31 @@ export function CalendarMonthGrid({
       {/* Week rows */}
       <div className="grid flex-1 auto-rows-fr gap-px">
         {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 gap-px">
+          <div key={wi} className="grid grid-cols-7 gap-px" role="row">
             {week.map((day) => {
               const key = format(day, "yyyy-MM-dd")
               const dayAppts = appointmentsByDate.get(key) ?? []
               const isCurrentMonth = isSameMonth(day, selectedDate)
               const today = isTodayFn(day)
+              const isFocused = isSameDay(day, focusedDate)
+              const isSelected = isSameDay(day, selectedDate)
 
               return (
                 <div
                   key={key}
+                  data-day={key}
+                  role="gridcell"
+                  aria-selected={isSelected}
+                  aria-label={`${format(day, "EEEE, MMMM do, yyyy")}. ${dayAppts.length} appointments.`}
+                  tabIndex={isFocused ? 0 : -1}
                   className={cn(
-                    "group relative flex min-h-[80px] flex-col rounded-md border p-1.5 cursor-pointer transition-colors hover:bg-accent/30",
+                    "group relative flex min-h-[80px] flex-col rounded-md border p-1.5 cursor-pointer transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                     !isCurrentMonth && "opacity-40",
                     today && "border-primary/50 bg-primary/[0.03]",
+                    isFocused && "ring-2 ring-primary/30"
                   )}
                   onClick={() => onDayClick(day)}
+                  onKeyDown={(e) => handleKeyDown(e, day)}
                 >
                   {/* Day number */}
                   <span

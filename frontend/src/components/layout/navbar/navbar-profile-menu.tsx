@@ -35,8 +35,8 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
           const pathMatch = userProfile.avatar_url.match(/user-pictures\/(.*?)(\?|$)/)
           if (pathMatch) {
             const path = pathMatch[1]
-            // Generate signed URL with longer expiration (8 hours)
-            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+            // Generate signed URL with longer expiration (7 days)
+            const signedUrl = await getAvatarSignedUrl("user-pictures", path, 604800)
             setAvatarUrl(signedUrl || userProfile.avatar_url)
           }
         } catch (error) {
@@ -97,6 +97,7 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+
         <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="cursor-pointer">
           <Settings className="mr-2 h-4 w-4" />
           <span>Account Settings</span>

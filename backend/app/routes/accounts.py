@@ -43,7 +43,7 @@ def get_user_from_token():
             raise ValueError('Token does not contain user ID')
         
         return user_id
-    except (ValueError, KeyError) as e:
+    except Exception as e:
         raise ValueError(f'Invalid token format: {str(e)}')
 
 
@@ -312,6 +312,16 @@ def update_account(user_id):
             return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
         
         supabase = get_supabase_admin()
+        
+        # Check if trying to change role of a super_admin
+        if 'role' in data and data.get('role') != 'super_admin':
+            target_prof = supabase.table('user_profiles').select('role').eq('id', user_id).single().execute()
+            if target_prof.data:
+                target_role = target_prof.data.get('role')
+                if target_role == 'super_admin':
+                    return jsonify({
+                        'error': 'Cannot downgrade super admin to a lower role. Super admin privileges cannot be removed.'
+                    }), 403
         
         # Prepare update data
         update_data = {}

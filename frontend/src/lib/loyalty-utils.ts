@@ -1,4 +1,5 @@
 import { supabase } from "./supabase"
+import { logUserAction } from "./user-log"
 
 export interface EarningRule {
   id: string
@@ -17,7 +18,12 @@ export interface EarningRule {
  * @param treatmentId - Optional specific treatment being performed
  * @returns Object with success status and points added
  */
-export async function applyAutomatedPoints(customerId: string, treatmentId?: string) {
+export async function applyAutomatedPoints(
+  customerId: string, 
+  treatmentId?: string,
+  branchId?: string,
+  processedBy?: string
+) {
   try {
     // 1. Fetch active rules
     const { data: allRules, error: rulesError } = await supabase
@@ -25,31 +31,32 @@ export async function applyAutomatedPoints(customerId: string, treatmentId?: str
       .select("*")
       .eq("is_active", true)
 
-    if (rulesError || !allRules || allRules.length === 0) {
-      return { success: false, message: "No active earning rules found" }
+    let rules = []
+    if (!rulesError && allRules) {
+      // Filter out expired rules
+      rules = allRules.filter(r => {
+        if (!r.expiration_days || !r.created_at) return true
+        const createdAt = new Date(r.created_at)
+        const expiryDate = new Date(createdAt)
+        expiryDate.setDate(createdAt.getDate() + r.expiration_days)
+        return expiryDate.getTime() > Date.now()
+      })
     }
 
-    // Filter out expired rules
-    const rules = allRules.filter(r => {
-      if (!r.expiration_days || !r.created_at) return true
-      const createdAt = new Date(r.created_at)
-      const expiryDate = new Date(createdAt)
-      expiryDate.setDate(createdAt.getDate() + r.expiration_days)
-      return expiryDate.getTime() > Date.now()
-    })
-
-    if (rules.length === 0) {
-      return { success: false, message: "All matching rules have expired" }
-    }
-
-    // 2. Find the best matching rule
-    // Priority: 
-    //   a) Rule matching specific treatmentId
-    //   b) "Standard Visit" rule (no treatmentId)
-    let selectedRule = rules.find(r => r.treatment_id === treatmentId && treatmentId)
+    let selectedRule = rules?.find(r => r.treatment_id === treatmentId && treatmentId)
     
     if (!selectedRule) {
-      selectedRule = rules.find(r => !r.treatment_id)
+      selectedRule = rules?.find(r => !r.treatment_id)
+    }
+
+    if (!selectedRule && !treatmentId) {
+      // Fallback for generic check-in if no earning rules configure it
+      selectedRule = {
+        id: "default-checkin",
+        points_earned: 10,
+        is_active: true,
+        description: "Check-in",
+      }
     }
 
     if (!selectedRule) {
@@ -60,15 +67,27 @@ export async function applyAutomatedPoints(customerId: string, treatmentId?: str
     // First, get current stats to be safe (or use increment logic if Supabase supports it directly in RPC)
     const { data: customer, error: custError } = await supabase
       .from("customers")
-      .select("points, visits")
+      .select("points, visits, last_visit, first_name, last_name, name")
       .eq("id", customerId)
       .single()
 
     if (custError || !customer) throw new Error("Customer not found")
 
-    const newPoints = (customer.points || 0) + selectedRule.points_earned
-    const newVisits = (customer.visits || 0) + 1
-
+    // Check if the customer has already checked in today
+    if (customer.last_visit) {
+      const lastVisitDate = new Date(customer.last_visit)
+      const today = new Date()
+      // Use local timezone for exact day comparison
+      if (
+        lastVisitDate.getDate() === today.getDate() &&
+        lastVisitDate.getMonth() === today.getMonth() &&
+        lastVisitDate.getFullYear() === today.getFullYear()
+      ) {
+        return { success: false, message: "Customer already checked in today" }
+      }
+    }
+    const newPoints = (customer.points || 0) + selectedRule.points_earned;
+    const newVisits = (customer.visits || 0) + 1;
     const { error: updateError } = await supabase
       .from("customers")
       .update({
@@ -96,10 +115,16 @@ export async function applyAutomatedPoints(customerId: string, treatmentId?: str
         type: "earn",
         expires_at: expiresAt
       }),
-      supabase.from("checkin_logs").insert({
-        customer_id: customerId,
-        checked_in_at: new Date().toISOString(),
-        points_added: selectedRule.points_earned
+      logUserAction({
+        actionType: "check_in_scanned",
+        entityType: "customer",
+        entityId: customerId,
+        entityName: customer.name || `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Unknown Customer",
+        branchId: branchId || null,
+        metadata: {
+          points_added: selectedRule.points_earned,
+          rule: selectedRule.description
+        }
       })
     ])
 

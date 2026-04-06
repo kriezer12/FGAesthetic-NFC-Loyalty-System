@@ -9,6 +9,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
@@ -88,7 +89,7 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
             const pathMatch = avatarUrl.match(/user-pictures\/(.*?)(\?|$)/)
             if (pathMatch) {
               const path = pathMatch[1]
-              const signedUrl = await getAvatarSignedUrl("user-pictures", path, 28800)
+              const signedUrl = await getAvatarSignedUrl("user-pictures", path, 604800)
               if (signedUrl) {
                 setDisplayAvatarUrl(signedUrl)
               } else {
@@ -498,25 +499,20 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
                       <div className="space-y-6">
                         <div className="space-y-2">
                           <Label htmlFor="cur-pw" className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Current Password</Label>
-                          <div className="relative group">
-                            <Input
-                              id="cur-pw"
-                              type="password"
-                              placeholder="••••••••"
-                              value={currentPassword}
-                              onChange={(e) => setCurrentPassword(e.target.value)}
-                              className="h-11 rounded-xl bg-muted/30 focus:bg-background transition-all duration-300"
-                            />
-                            <Key className="absolute right-3 top-3 w-4 h-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-                          </div>
+                          <PasswordInput
+                            id="cur-pw"
+                            placeholder="••••••••"
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            className="h-11 rounded-xl bg-muted/30 focus:bg-background transition-all duration-300"
+                          />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="new-pw" className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">New Password</Label>
-                            <Input
+                            <PasswordInput
                               id="new-pw"
-                              type="password"
                               placeholder="••••••••"
                               value={newPassword}
                               onChange={(e) => setNewPassword(e.target.value)}
@@ -525,9 +521,8 @@ export function AccountSettingsModal({ open, onOpenChange }: AccountSettingsModa
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="confirm-pw" className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Confirm New Password</Label>
-                            <Input
+                            <PasswordInput
                               id="confirm-pw"
-                              type="password"
                               placeholder="••••••••"
                               value={confirmPassword}
                               onChange={(e) => setConfirmPassword(e.target.value)}

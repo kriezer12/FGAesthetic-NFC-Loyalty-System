@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { useAuth } from "@/contexts/auth-context"
 import { NFCScanner, RegisterCard } from "@/components/features/nfc"
 import { supabase } from "@/lib/supabase"
 import { applyAutomatedPoints } from "@/lib/loyalty-utils"
@@ -10,6 +11,7 @@ type ViewState = "scanning" | "register"
 
 export default function NFCScanPage() {
   const navigate = useNavigate()
+  const { userProfile } = useAuth()
   const [viewState, setViewState] = useState<ViewState>("scanning")
   const [pendingNfcUid, setPendingNfcUid] = useState<string | null>(null)
   const [isRegisterMode, setIsRegisterMode] = useState(false)
@@ -28,8 +30,19 @@ export default function NFCScanPage() {
     }
 
     // 1. Automatically apply points for this visit
-    const result = await applyAutomatedPoints(customer.id)
-    
+    let branchId = userProfile?.branch_id
+    if (userProfile?.role === "super_admin") {
+      const savedBranch = sessionStorage.getItem("superadmin_branch")
+      if (savedBranch && savedBranch !== "NA") {
+        branchId = savedBranch
+      } else {
+        branchId = undefined
+      }
+    }
+    const processedBy = userProfile?.id || undefined
+
+    const result = await applyAutomatedPoints(customer.id, undefined, branchId, processedBy)
+
     // 2. Fetch updated customer data after point addition
     const { data: updatedCustomer } = await supabase
       .from("customers")

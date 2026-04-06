@@ -10,8 +10,9 @@ const navLinks: { title: string; url: string; icon: typeof LayoutDashboard; role
 
 export function NavbarLinks() {
   return (
-    <nav className="flex items-center gap-1 flex-1">
+    <nav className="flex items-center gap-1.5 flex-1">
       {navLinks.map((link) => {
+        const Icon = link.icon
         return (
           <NavLink
             key={link.url}
@@ -19,15 +20,16 @@ export function NavbarLinks() {
             end={link.url === "/dashboard"}
             className={({ isActive }) =>
               [
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[0.95rem] font-medium transition-all duration-200 relative group",
+                "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 relative group",
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/80",
+                  ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                  : "text-muted-foreground hover:text-primary hover:bg-primary/5",
               ].join(" ")
             }
           >
+            <Icon className="h-4 w-4" />
             <span className="hidden lg:inline">{link.title}</span>
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
+            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center" />
           </NavLink>
         )
       })}
