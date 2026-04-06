@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Plasma } from "@/components/ui/plasma"
 
 export default function ResetPasswordPage() {
@@ -196,9 +197,8 @@ export default function ResetPasswordPage() {
 
                         <Field>
                           <FieldLabel htmlFor="new-password">New Password</FieldLabel>
-                          <Input
+                          <PasswordInput
                             id="new-password"
-                            type="password"
                             autoComplete="new-password"
                             placeholder="••••••••"
                             value={newPassword}
@@ -209,9 +209,8 @@ export default function ResetPasswordPage() {
 
                         <Field>
                           <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
-                          <Input
+                          <PasswordInput
                             id="confirm-password"
-                            type="password"
                             autoComplete="new-password"
                             placeholder="••••••••"
                             value={confirmPassword}

@@ -28,6 +28,7 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 
 // Minimum password length requirement
 const MIN_PASSWORD_LENGTH = 8
@@ -191,9 +192,9 @@ export function SignupForm({ className, ...props }: SignupFormProps) {
         {/* Password field */}
         <Field>
           <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -206,9 +207,9 @@ export function SignupForm({ className, ...props }: SignupFormProps) {
         {/* Confirm password field */}
         <Field>
           <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
-          <Input
+          <PasswordInput
             id="confirm-password"
-            type="password"
+            placeholder="••••••••"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
