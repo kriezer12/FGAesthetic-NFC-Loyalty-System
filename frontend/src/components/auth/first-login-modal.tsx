@@ -22,6 +22,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { supabase } from "@/lib/supabase"
 
 interface FirstLoginModalProps {
@@ -164,9 +165,8 @@ export function FirstLoginModal({
 
             <Field>
               <FieldLabel htmlFor="password">New Password</FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="Enter a secure password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -180,9 +180,8 @@ export function FirstLoginModal({
 
             <Field>
               <FieldLabel htmlFor="confirmPassword">Confirm Password</FieldLabel>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
                 placeholder="Confirm your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

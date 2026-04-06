@@ -18,6 +18,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 
 type LoginFormProps = ComponentProps<"form">
 
@@ -254,13 +255,13 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
               Forgot your password?
             </button>
           </div>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            autoComplete="current-password"
             className="border-border bg-muted/50"
           />
         </Field>
