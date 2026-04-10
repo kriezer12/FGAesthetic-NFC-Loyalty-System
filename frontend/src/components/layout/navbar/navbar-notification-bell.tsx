@@ -60,8 +60,8 @@ export function NavbarNotificationBell() {
             type="button"
             className={`relative flex items-center justify-center h-9 w-9 rounded-lg transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/20 ${
               count > 0
-                ? "text-primary hover:bg-amber-100/50 focus-visible:bg-amber-100/50"
-                : "text-muted-foreground hover:text-amber-900 hover:bg-amber-100/50 focus-visible:text-amber-900 focus-visible:bg-amber-100/50"
+                ? "text-primary hover:bg-primary/20 focus-visible:bg-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50 focus-visible:text-foreground focus-visible:bg-secondary/50"
             }`}
             aria-label={`Notifications${count > 0 ? ` (${count} missed)` : ""}`}
           >
@@ -127,7 +127,7 @@ export function NavbarNotificationBell() {
                     <div className="flex-shrink-0 mt-0.5">
                       {notification.type === "warning" ? (
                         <div className="flex items-center justify-center h-8 w-8 rounded-full bg-yellow-500/15">
-                          <Clock className="h-4 w-4 text-yellow-600" />
+                          <Clock className="h-4 w-4 text-primary" />
                         </div>
                       ) : (
                         <div className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/15">

@@ -108,13 +108,13 @@ export function AppNavbar() {
         .nav-float-c { animation: navFloatC 5s ease-in-out infinite; animation-delay: -1.5s; }
         .nav-shimmer { animation: navShimmerSweep 4s ease-in-out infinite; animation-delay: 1s; }
       `}</style>
-      <header className="sticky top-0 z-50 w-full border-b border-amber-200/50 bg-white/90 backdrop-blur-md supports-[backdrop-filter]:bg-white/70 shadow-sm relative">
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 shadow-sm relative">
         {/* Background Effects Container */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-[-1]">
           {/* Floating blobs */}
-          <div className="nav-float-a absolute -right-10 -top-10 h-44 w-44 rounded-full bg-amber-50/60 blur-2xl" />
-          <div className="nav-float-b absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-yellow-50/60 blur-xl" />
-          <div className="nav-float-c absolute left-1/3 -top-6 h-16 w-16 rounded-full bg-amber-100/40 blur-lg" />
+          <div className="nav-float-a absolute -right-10 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-2xl" />
+          <div className="nav-float-b absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-secondary/30 blur-xl" />
+          <div className="nav-float-c absolute left-1/3 -top-6 h-16 w-16 rounded-full bg-primary/20 blur-lg" />
         </div>
 
         <div className="flex h-16 items-center px-6 gap-6 relative">
@@ -128,7 +128,7 @@ export function AppNavbar() {
                   <button
                     type="button"
                     onClick={() => setAnnouncementModalOpen(true)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-amber-900 hover:bg-amber-100/50 focus-visible:text-amber-900 focus-visible:bg-amber-100/50 transition-all duration-200"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
                     title="Broadcast Announcement"
                     aria-label="Broadcast Announcement"
                   >
@@ -144,7 +144,7 @@ export function AppNavbar() {
                   onMouseLeave={() => setIsAddButtonHovered(false)}
                   onFocus={() => setIsAddButtonHovered(true)}
                   onBlur={() => setIsAddButtonHovered(false)}
-                  className={`hidden md:flex items-center gap-2 text-muted-foreground transition-all duration-300 px-3 py-1.5 rounded-lg hover:text-amber-900 focus-visible:ring-2 focus-visible:ring-border ${
+                  className={`hidden md:flex items-center gap-2 text-muted-foreground transition-all duration-300 px-3 py-1.5 rounded-lg hover:text-primary focus-visible:ring-2 focus-visible:ring-border ${
                     isAddButtonHovered ? "gap-3 add-account-gradient" : "gap-2"
                   }`}
                   aria-label="Add New Account"
@@ -165,15 +165,15 @@ export function AppNavbar() {
             <button
               type="button"
               onClick={() => navigate("/dashboard/checkout")}
-              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-amber-900 hover:bg-amber-100/50 focus-visible:text-amber-900 focus-visible:bg-amber-100/50 transition-all duration-200"
+              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
               title="Checkout"
               aria-label="Go to checkout"
             >
               <ShoppingCart className="h-5 w-5" />
             </button>
 
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50/80 border border-amber-100 text-amber-900 shadow-sm">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary-foreground shadow-sm">
+              <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
               <div className="flex flex-col leading-none">
                 <span className="text-sm font-semibold tabular-nums">{timeStr}</span>
                 <span className="text-xs text-muted-foreground">{dateStr}</span>

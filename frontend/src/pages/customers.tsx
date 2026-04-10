@@ -1020,11 +1020,11 @@ export default function CustomersPage() {
           { title: "Total Visits", value: totalVisitsCount, icon: <Calendar className="h-5 w-5" /> },
           { title: "Registered Cards", value: registeredCardsCount, icon: <CreditCard className="h-5 w-5" /> }
         ].map((stat, idx) => (
-          <div key={idx} className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/5 to-amber-700/5 p-6 border border-amber-500/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10 hover:-translate-y-1">
-            <div className="absolute -right-6 -top-6 rounded-full bg-amber-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+          <div key={idx} className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-6 border border-primary/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10 hover:-translate-y-1">
+            <div className="absolute -right-6 -top-6 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
             <div className="relative z-10 flex flex-row items-center justify-between mb-4">
-              <span className="text-sm font-semibold tracking-tight text-amber-900/70 dark:text-amber-100/70">{stat.title}</span>
-              <div className="rounded-full bg-amber-100 dark:bg-amber-900/50 p-2 text-amber-600 dark:text-amber-400 shadow-sm">
+              <span className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">{stat.title}</span>
+              <div className="rounded-full bg-primary/20 dark:bg-primary/20 p-2 text-primary dark:text-primary shadow-sm">
                 {stat.icon}
               </div>
             </div>
@@ -1037,23 +1037,23 @@ export default function CustomersPage() {
 
       <div className="flex flex-col gap-4 md:flex-row">
         <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-amber-500" />
+          <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
           <Input
             placeholder="Search by name, email, phone, or NFC ID..."
-            className="pl-12 h-12 rounded-full border-border/50 bg-background/50 backdrop-blur-sm transition-all hover:bg-background focus-visible:ring-amber-500/50 focus-visible:border-amber-500 shadow-sm"
+            className="pl-12 h-12 rounded-full border-border/50 bg-background/50 backdrop-blur-sm transition-all hover:bg-background focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         <Button 
           variant={showFilters ? "default" : "outline"} 
-          className={`h-12 rounded-full px-6 transition-all shadow-sm ${showFilters ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'hover:border-amber-500 hover:text-amber-600'}`}
+          className={`h-12 rounded-full px-6 transition-all shadow-sm ${showFilters ? 'bg-primary hover:bg-primary/80 text-primary-foreground' : 'hover:border-primary hover:text-primary'}`}
           onClick={() => setShowFilters(!showFilters)}
         >
           <Filter className="mr-2 h-4 w-4" />
           Filters
           {hasActiveFilters && (
-            <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${showFilters ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400'}`}>Active</span>
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${showFilters ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary/20 text-primary/80 dark:bg-primary/20 dark:text-primary'}`}>Active</span>
           )}
         </Button>
       </div>
@@ -1195,15 +1195,15 @@ export default function CustomersPage() {
                           <tr
                             onClick={() => setSelectedCustomer(customer)}
                             className={
-                              "border-b transition-all duration-200 hover:bg-amber-500/5 cursor-pointer" +
+                              "border-b transition-all duration-200 hover:bg-primary/5 cursor-pointer" +
                               ((isArchivedClient(customer) || isInactiveClient(customer)) ? " opacity-50" : "") +
                               (isArchivedClient(customer) ? " italic" : "")
                             }
                           >
                             <td className="p-4">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 shadow-sm ring-1 ring-amber-200/50">
-                                  <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/20 dark:bg-foreground/30 shadow-sm ring-1 ring-primary/50">
+                                  <span className="text-sm font-bold text-primary/80 dark:text-primary">
                                     {customer.first_name?.[0] || customer.name?.[0] || "?"}
                                     {customer.last_name?.[0] || ""}
                                   </span>
@@ -1263,7 +1263,7 @@ export default function CustomersPage() {
                               )}
                             </td>
                             <td className="p-4">
-                              <span className="font-semibold text-amber-600 dark:text-amber-400">{customer.points || 0}</span>
+                              <span className="font-semibold text-primary dark:text-primary">{customer.points || 0}</span>
                             </td>
                             <td className="p-4">{customer.visits || 0}</td>
                             <td className="p-4 text-sm text-muted-foreground relative">
@@ -1273,9 +1273,9 @@ export default function CustomersPage() {
                                   {isArchivedClient(customer) ? (
                                     <Archive className="h-4 w-4 text-red-600" />
                                   ) : (
-                                    <Clock className="h-4 w-4 text-gray-500" />
+                                    <Clock className="h-4 w-4 text-muted-foreground" />
                                   )}
-                                  <span className={isArchivedClient(customer) ? "text-red-600" : "text-gray-500"}>
+                                  <span className={isArchivedClient(customer) ? "text-red-600" : "text-muted-foreground"}>
                                     {isArchivedClient(customer) ? "Archived" : "Inactive"}
                                   </span>
                                 </div>
@@ -1411,15 +1411,15 @@ export default function CustomersPage() {
                 <> {/* details view */}
                   {/* Stats Cards */}
                   <div className="grid grid-cols-2 gap-4">
-                    <Card className="group relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10">
-                      <div className="absolute -right-4 -top-4 rounded-full bg-amber-500/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
+                    <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
+                      <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
                       <CardContent className="p-6 relative z-10">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <p className="text-sm tracking-tight font-medium text-amber-900/70 dark:text-amber-100/70">Total Points</p>
-                            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{selectedCustomer?.points || 0}</p>
+                            <p className="text-sm tracking-tight font-medium text-foreground/70 dark:text-foreground/70">Total Points</p>
+                            <p className="text-3xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
                           </div>
-                          <Award className="h-10 w-10 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                          <Award className="h-10 w-10 text-primary drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1443,7 +1443,7 @@ export default function CustomersPage() {
                   {/* Contact Information */}
                   <div className="space-y-4">
                     <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-amber-500" />
+                      <Phone className="h-4 w-4 text-primary" />
                       Contact Information
                     </h4>
                     <div className="space-y-3 pl-6">
@@ -1473,7 +1473,7 @@ export default function CustomersPage() {
                   {/* Profile Details */}
                   <div className="space-y-4">
                     <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Users className="h-4 w-4 text-amber-500" />
+                      <Users className="h-4 w-4 text-primary" />
                       Profile Details
                     </h4>
                     <div className="grid grid-cols-2 gap-4 pl-6">
@@ -1534,21 +1534,21 @@ export default function CustomersPage() {
                 <> {/* Loyalty tab view */}
                   <div className="space-y-6">
                     <h4 className="text-xl font-semibold flex items-center gap-2">
-                      <Award className="h-6 w-6 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                      <Award className="h-6 w-6 text-primary drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                       Loyalty Points & Rewards
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="group relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10">
-                        <div className="absolute -right-4 -top-4 rounded-full bg-amber-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+                      <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
+                        <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
                         <CardContent className="p-6 relative z-10">
                           <div className="flex items-center justify-between">
                             <div className="space-y-1" aria-live="polite" aria-atomic="true">
-                              <p className="text-sm font-semibold tracking-tight text-amber-900/70 dark:text-amber-100/70">Available Points</p>
-                              <p className="text-5xl font-bold text-amber-600 dark:text-amber-500">{selectedCustomer?.points || 0}</p>
+                              <p className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">Available Points</p>
+                              <p className="text-5xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
                             </div>
 
-                            <Award className="h-16 w-16 text-amber-500/30" />
+                            <Award className="h-16 w-16 text-primary/30" />
                           </div>
                         </CardContent>
                       </Card>

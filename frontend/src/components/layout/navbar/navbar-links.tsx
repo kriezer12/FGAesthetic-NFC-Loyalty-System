@@ -22,14 +22,14 @@ export function NavbarLinks() {
               [
                 "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 relative group",
                 isActive
-                  ? "bg-amber-100/50 text-amber-900 shadow-sm ring-1 ring-amber-200"
-                  : "text-muted-foreground hover:text-amber-900 hover:bg-amber-50/50",
+                  ? "bg-primary/20 text-primary-foreground shadow-sm ring-1 ring-primary/40"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
               ].join(" ")
             }
           >
             <Icon className="h-4 w-4" />
             <span className="hidden lg:inline">{link.title}</span>
-            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-amber-400/60 rounded-full scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center" />
+            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary/60 rounded-full scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center" />
           </NavLink>
         )
       })}

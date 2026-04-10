@@ -195,7 +195,7 @@ export default function Dashboard() {
   ], [loading, totalCustomersCount, activeCardsCount, totalVisitsCount, recentActivityCount])
 
   // ── Quick actions config — flat light gold icons ──────────────────────────
-  const quickActionIconBg = "bg-amber-50 border border-amber-100 text-amber-600"
+  const quickActionIconBg = "bg-primary/10 border border-primary/20 text-primary"
 
   // ── Section renderers ────────────────────────────────────────────────────
   const sectionMap: Record<SectionId, React.ReactNode> = useMemo(() => ({
@@ -208,12 +208,12 @@ export default function Dashboard() {
           <div
             key={title}
             onClick={() => setOpenModal(id)}
-            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/5 to-amber-700/5 p-6 border border-amber-500/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10 hover:-translate-y-1 cursor-pointer active:scale-[0.98]"
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-6 border border-primary/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10 hover:-translate-y-1 cursor-pointer active:scale-[0.98]"
           >
-            <div className="absolute -right-6 -top-6 rounded-full bg-amber-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+            <div className="absolute -right-6 -top-6 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
             <div className="relative z-10 flex flex-row items-center justify-between mb-4">
-              <span className="text-sm font-semibold tracking-tight text-amber-900/70 dark:text-amber-100/70">{title}</span>
-              <div className="rounded-full bg-amber-100 dark:bg-amber-900/50 p-2 text-amber-600 dark:text-amber-400 shadow-sm">
+              <span className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">{title}</span>
+              <div className="rounded-full bg-primary/20 dark:bg-primary/20 p-2 text-primary dark:text-primary shadow-sm">
                 <Icon className="h-5 w-5" />
               </div>
             </div>
@@ -276,7 +276,7 @@ export default function Dashboard() {
                   key={label}
                   to={href}
                   state={state}
-                  className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-all duration-200 hover:border-amber-200 hover:bg-amber-50/40 hover:shadow-sm"
+                  className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-all duration-200 hover:border-primary/30 hover:bg-primary/5 hover:shadow-sm"
                 >
                   <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${quickActionIconBg} transition-transform group-hover:scale-110`}>
                     <Icon className="h-4 w-4" />
@@ -299,7 +299,7 @@ export default function Dashboard() {
     <div className="space-y-6 pb-6">
 
       {/* ── Hero Header ─────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-2xl bg-white border border-border shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl bg-background border border-border shadow-sm">
         <style>{`
           @keyframes floatA {
             0%, 100% { transform: translate(0px, 0px) scale(1); }
@@ -333,23 +333,23 @@ export default function Dashboard() {
         `}</style>
 
         {/* Animated shimmer — top border */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden rounded-t-2xl bg-amber-100">
-          <div className="hdr-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden rounded-t-2xl bg-primary/20">
+          <div className="hdr-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
         </div>
 
         {/* Floating blob A — large, top-right */}
-        <div className="hdr-float-a pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-amber-100/30 blur-2xl" />
+        <div className="hdr-float-a pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-primary/50 blur-2xl" />
         {/* Floating blob B — medium, bottom-left */}
-        <div className="hdr-float-b pointer-events-none absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-amber-50/60 blur-xl" />
+        <div className="hdr-float-b pointer-events-none absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-primary/10 blur-xl" />
         {/* Floating blob C — small accent, top-left */}
-        <div className="hdr-float-c pointer-events-none absolute left-1/3 -top-6 h-16 w-16 rounded-full bg-yellow-100/40 blur-lg" />
+        <div className="hdr-float-c pointer-events-none absolute left-1/3 -top-6 h-16 w-16 rounded-full bg-secondary/40/40 blur-lg" />
 
         {/* Animated dot grid — bottom right */}
         <div className="pointer-events-none absolute bottom-3 right-4 grid grid-cols-4 gap-[4px]">
           {Array.from({ length: 16 }).map((_, i) => (
             <span
               key={i}
-              className="hdr-dot h-[3px] w-[3px] rounded-full bg-amber-300/50"
+              className="hdr-dot h-[3px] w-[3px] rounded-full bg-primary/50"
               style={{ animationDelay: `${(i * 0.15) % 3}s` }}
             />
           ))}
@@ -389,7 +389,7 @@ export default function Dashboard() {
                 📍 {userProfile.branch_name}
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 border border-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 capitalize">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-medium text-primary/80 capitalize">
               {userProfile?.role?.replace("_", " ") ?? "Staff"}
             </span>
             <span className="ml-auto text-xs text-muted-foreground hidden sm:block">

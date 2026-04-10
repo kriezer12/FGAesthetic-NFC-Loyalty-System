@@ -1646,7 +1646,7 @@ export default function CheckoutPage() {
                       } else if (row.min_stock_level > 0 && qty <= row.min_stock_level) {
                         statusNode = <span className="rounded-md bg-orange-100 px-2 py-1 text-xs text-orange-900 font-semibold whitespace-nowrap">Warning</span>
                       } else if (row.reorder_level > 0 && qty <= row.reorder_level) {
-                        statusNode = <span className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 font-semibold whitespace-nowrap">Reorder</span>
+                        statusNode = <span className="rounded-md bg-primary/20 px-2 py-1 text-xs text-foreground font-semibold whitespace-nowrap">Reorder</span>
                       } else {
                         statusNode = <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-900 font-medium whitespace-nowrap">Healthy</span>
                       }
