@@ -10,7 +10,7 @@ export function RegisterCardError({ error }: RegisterCardErrorProps) {
   }
 
   return (
-    <div className="flex items-start gap-2.5 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
+    <div className="flex items-start gap-2.5 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg border-l-4 border-l-destructive">
       <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
       <span>{error}</span>
     </div>
