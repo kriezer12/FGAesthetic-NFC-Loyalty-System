@@ -9,11 +9,12 @@
  */
 
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, X } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, X, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import type { ServiceCategory, Service } from "@/types/service"
@@ -51,6 +52,7 @@ export function ServicePicker({
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
   // Pending selection (uncommitted) — initialised from `value` on open
   const [pending, setPending] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
 
   // ---- fetch data ----
   useEffect(() => {
@@ -70,6 +72,7 @@ export function ServicePicker({
     if (open) {
       setPending([...value])
       setActiveCategoryId(null)
+      setSearchQuery("")
     }
   }, [open, value])
 
@@ -78,6 +81,12 @@ export function ServicePicker({
     () => new Map(services.map((s) => [s.id, s])),
     [services],
   )
+
+  const filteredServices = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const query = searchQuery.toLowerCase()
+    return services.filter(s => s.name.toLowerCase().includes(query))
+  }, [services, searchQuery])
 
   const categoryServices = useMemo(
     () => (activeCategoryId ? services.filter((s) => s.category_id === activeCategoryId) : []),
@@ -129,8 +138,85 @@ export function ServicePicker({
           className="w-[360px] max-w-[calc(100vw-2rem)] p-0 overflow-hidden"
           align="start"
         >
-          {/* ------- category list (step 1) ------- */}
-          {activeCategoryId === null ? (
+          <div className="p-2 border-b">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Search services..."
+                className="pl-8 h-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* ------- search results list (takes over) ------- */}
+          {searchQuery.trim().length > 0 ? (
+            <div className="flex flex-col">
+              <ScrollArea className="h-72">
+                {filteredServices.length === 0 ? (
+                  <p className="px-3 py-4 text-sm text-muted-foreground text-center">
+                    No services match your search.
+                  </p>
+                ) : (
+                  filteredServices.map((svc) => {
+                    const isSelected = pending.includes(svc.id)
+                    return (
+                      <button
+                        key={svc.id}
+                        type="button"
+                        onClick={() => toggleService(svc.id)}
+                        className={cn(
+                          "flex w-full items-center justify-between px-3 py-2 text-sm transition-colors",
+                          isSelected ? "bg-accent" : "hover:bg-accent/50",
+                        )}
+                      >
+                        <span className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-input",
+                            )}
+                          >
+                            {isSelected && <Check className="h-3 w-3" />}
+                          </div>
+                          <span className="flex flex-col items-start gap-0.5">
+                            <span className="flex items-center gap-1 leading-none">
+                              {svc.name}
+                              {svc.is_package && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
+                                  pkg{svc.recurrence_days ? `/${svc.recurrence_days}d` : ""}
+                                </Badge>
+                              )}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {categories.find(c => c.id === svc.category_id)?.name}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                          ₱{svc.price.toFixed(2)}
+                        </span>
+                      </button>
+                    )
+                  })
+                )}
+              </ScrollArea>
+
+              {/* Confirm bar */}
+              <div className="border-t px-3 py-2 flex items-center justify-between shrink-0 bg-popover">
+                <span className="text-xs text-muted-foreground">
+                  {pending.length} selected
+                </span>
+                <Button size="sm" onClick={confirm}>
+                  Confirm
+                </Button>
+              </div>
+            </div>
+          ) : activeCategoryId === null ? (
             <div className="flex flex-col">
               <div className="px-3 py-2 text-xs font-medium text-muted-foreground">
                 Select a category

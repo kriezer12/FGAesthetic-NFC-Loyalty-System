@@ -108,7 +108,7 @@ export function Combobox({
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList className="max-h-none overflow-hidden">
-            <ScrollArea className="h-60">
+            <ScrollArea className="max-h-60">
               <CommandEmpty>{emptyMessage}</CommandEmpty>
               <CommandGroup>
                 {options.map((option) => (
