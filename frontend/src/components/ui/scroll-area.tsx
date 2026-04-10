@@ -55,7 +55,7 @@ function ScrollArea({
     <ScrollAreaPrimitive.Root
       ref={rootRef}
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={cn("relative overflow-hidden", className)}
       onWheel={handleWheel}
       {...props}
     >
