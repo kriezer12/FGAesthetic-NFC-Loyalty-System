@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SectionHeader } from "./section-header"
 import { DatePicker } from "./date-picker"
 
@@ -12,21 +13,13 @@ type RegisterCardPersonalSectionProps = {
   setFormData: Dispatch<SetStateAction<RegisterCardFormData>>
 }
 
-const selectClassName = [
-  "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm",
-  "shadow-sm transition-colors text-foreground",
-  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-  "disabled:cursor-not-allowed disabled:opacity-50",
-].join(" ")
-
 export function RegisterCardPersonalSection({ formData, setFormData }: RegisterCardPersonalSectionProps) {
   return (
     <div className="space-y-4">
       <SectionHeader>Personal Information</SectionHeader>
 
       <div
-        className="rounded-lg p-4 space-y-4"
-        style={{ background: "oklch(0.96 0.01 78 / 40%)", border: "1px solid oklch(0.88 0.06 78 / 20%)" }}
+        className="rounded-xl p-5 space-y-4 bg-background border shadow-sm"
       >
         <div className="grid grid-cols-5 gap-4">
           <div className="col-span-2 space-y-1.5">
@@ -70,19 +63,21 @@ export function RegisterCardPersonalSection({ formData, setFormData }: RegisterC
           />
           <div className="space-y-1.5">
             <Label htmlFor="gender">Gender <span className="text-destructive">*</span></Label>
-            <select
-              id="gender"
-              className={selectClassName}
+            <Select
               value={formData.gender}
-              onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+              onValueChange={(value) => setFormData({ ...formData, gender: value })}
               required
             >
-              <option value="">Select gender</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="other">Other</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </select>
+              <SelectTrigger id="gender">
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+                <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>      
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>

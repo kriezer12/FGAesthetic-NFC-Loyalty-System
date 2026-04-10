@@ -11,6 +11,9 @@ import { RegisterCardMedicalSection } from "./register-card-parts/register-card-
 import { RegisterCardPersonalSection } from "./register-card-parts/register-card-personal-section"
 import { initialRegisterCardFormData } from "./register-card-parts/register-card.types"
 import { logUserAction } from "@/lib/user-log"
+import { ScrollArea } from "@/components/ui/scroll-area"
+
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 import type { Customer } from "@/types/customer"
 
@@ -152,30 +155,27 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
   }
 
   return (
-    <div
-      className="w-full max-w-2xl mx-auto flex flex-col rounded-xl overflow-hidden"
-      style={{
-        maxHeight: "85vh",
-        background: "var(--card)",
-        boxShadow: "0 20px 60px oklch(0 0 0 / 18%), 0 6px 20px oklch(0 0 0 / 10%)",
-        border: "1px solid oklch(0.87 0 0 / 60%)",
-      }}
-    >
+    <div className="w-full max-w-2xl mx-auto flex flex-col rounded-2xl bg-card shadow-2xl border max-h-[85vh] overflow-hidden">
       <RegisterCardHeader nfcUid={nfcUid} />
-      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 relative">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden relative bg-card">
         {/* Subtle animated background inside the card */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden rounded-b-2xl">
           <div className="absolute -top-20 -left-20 w-64 h-64 rounded-full bg-primary/[0.04] blur-3xl animate-[float_6s_ease-in-out_infinite]" />
           <div className="absolute top-1/2 -right-20 w-80 h-80 rounded-full bg-primary/[0.03] blur-3xl animate-[float_9s_ease-in-out_infinite_1s]" />
         </div>
+
+        <ScrollArea className="h-[700px] max-h-[65vh]">
+          <div className="px-6 py-5 space-y-6 pb-8 relative z-10">
+            <RegisterCardError error={error} />
+            <RegisterCardPersonalSection formData={formData} setFormData={setFormData} />
+            <RegisterCardContactSection formData={formData} setFormData={setFormData} />
+            <RegisterCardMedicalSection formData={formData} setFormData={setFormData} />
+          </div>
+        </ScrollArea>
         
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 relative z-10">
-          <RegisterCardError error={error} />
-          <RegisterCardPersonalSection formData={formData} setFormData={setFormData} />
-          <RegisterCardContactSection formData={formData} setFormData={setFormData} />
-          <RegisterCardMedicalSection formData={formData} setFormData={setFormData} />
+        <div className="bg-background shrink-0 border-t relative z-20 rounded-b-2xl">
+          <RegisterCardFooterActions isLoading={isLoading} onCancel={onCancel} />
         </div>
-        <RegisterCardFooterActions isLoading={isLoading} onCancel={onCancel} />
       </form>
     </div>
   )

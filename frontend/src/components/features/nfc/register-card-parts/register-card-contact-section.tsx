@@ -65,8 +65,7 @@ export function RegisterCardContactSection({ formData, setFormData }: RegisterCa
       <SectionHeader>Contact Information</SectionHeader>
 
       <div
-        className="rounded-lg p-4 space-y-4"
-        style={{ background: "oklch(0.96 0.01 78 / 40%)", border: "1px solid oklch(0.88 0.06 78 / 20%)" }}
+        className="rounded-xl p-5 space-y-4 bg-background border shadow-sm"
       >
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
