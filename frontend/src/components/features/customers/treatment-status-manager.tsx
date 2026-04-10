@@ -52,38 +52,79 @@ export function TreatmentStatusManager({
     onSave(local)
   }
 
-  return (
-    <div className="space-y-2">
-      <h3 className="text-lg font-semibold">Treatment progress</h3>
-      {local.length === 0 && <p className="text-sm text-muted-foreground">No treatments assigned</p>}
-      {local.map((t) => (
-        <div key={t.id} className="flex items-center gap-2">
-          <span className="flex-1">{t.name}</span>
-          <Input
-            type="number"
-            value={t.remaining_sessions ?? ""}
-            min={0}
-            max={t.total_sessions}
-            className="w-20"
-            onChange={(e) => {
-              const val = e.target.value;
-              handleRemainingChange(t.id, val === "" ? "" : (parseInt(val, 10) || 0))
-            }}
-            disabled={isUpdating}
-          />
-          <span className="text-xs text-muted-foreground">/ {t.total_sessions}</span>
-          {errors[t.id] && (
-            <span className="text-red-500 text-xs">{errors[t.id]}</span>
-          )}
-        </div>
-      ))}
+  const activeTreatments = local.filter(t => t.remaining_sessions > 0)
+  const completedTreatments = local.filter(t => t.remaining_sessions <= 0)
 
-      <Button
-        disabled={isUpdating || local.length === 0 || Object.keys(errors).length > 0}
-        onClick={handleSave}
-      >
-        Save treatments
-      </Button>
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold">Active Treatments</h3>
+        {activeTreatments.length === 0 && <p className="text-sm text-muted-foreground">No active treatments</p>}
+        {activeTreatments.map((t) => (
+          <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-md border bg-card">
+            <span className="font-medium text-sm flex-1">{t.name}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Remaining:</span>
+              <Input
+                type="number"
+                value={t.remaining_sessions ?? ""}
+                min={0}
+                max={t.total_sessions}
+                className="w-20 h-8"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleRemainingChange(t.id, val === "" ? "" : (parseInt(val, 10) || 0))
+                }}
+                disabled={isUpdating}
+              />
+              <span className="text-xs text-muted-foreground w-8">/ {t.total_sessions}</span>
+            </div>
+            {errors[t.id] && (
+              <span className="text-red-500 text-xs w-full block mt-1">{errors[t.id]}</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {completedTreatments.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <h3 className="text-lg font-semibold text-muted-foreground">Completed Treatments</h3>
+          {completedTreatments.map((t) => (
+            <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-md border bg-muted/40 opacity-70">
+              <span className="font-medium text-sm flex-1 line-through">{t.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Remaining:</span>
+                <Input
+                  type="number"
+                  value={t.remaining_sessions ?? ""}
+                  min={0}
+                  max={t.total_sessions}
+                  className="w-20 h-8 bg-transparent"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    handleRemainingChange(t.id, val === "" ? "" : (parseInt(val, 10) || 0))
+                  }}
+                  disabled={isUpdating}
+                />
+                <span className="text-xs text-muted-foreground w-8">/ {t.total_sessions}</span>
+              </div>
+              {errors[t.id] && (
+                <span className="text-red-500 text-xs w-full block mt-1">{errors[t.id]}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {local.length > 0 && (
+        <Button
+          disabled={isUpdating || Object.keys(errors).length > 0}
+          onClick={handleSave}
+          className="w-full mt-4"
+        >
+          Save treatments
+        </Button>
+      )}
     </div>
   )
 }
