@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect, useCallback } from "react"
-import { Camera, X, RefreshCw } from "lucide-react"
+import { useRef, useState, useEffect, useCallback } from "react"
+import { Camera, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

@@ -87,6 +87,52 @@ export function useAppointments(): UseAppointmentsReturn {
     try {
       const existing = appointments.find((a) => a.id === id) || null
 
+      // If status is being updated to 'Completed', award loyalty points
+      if (updates.status === 'Completed' && existing && existing.status !== 'Completed' && existing.customer_id && existing.service_id) {
+        // 1. Get the earning rule for the service
+        const { data: earningRule, error: ruleError } = await supabase
+          .from('earning_rules')
+          .select('points_earned, description, expiration_days')
+          .eq('treatment_id', existing.service_id)
+          .eq('is_active', true)
+          .single()
+
+        if (ruleError && ruleError.code !== 'PGRST116') {
+          console.error('Error fetching earning rule for loyalty points:', ruleError)
+        } else if (earningRule && earningRule.points_earned > 0) {
+          // 2. Add points to the customer's `points` column instead of `loyalty_points`
+          const { data: customer, error: custError } = await supabase
+            .from("customers")
+            .select("points")
+            .eq("id", existing.customer_id)
+            .single()
+
+          if (!custError && customer) {
+            const newPoints = (customer.points || 0) + earningRule.points_earned
+            await supabase
+              .from("customers")
+              .update({ points: newPoints })
+              .eq("id", existing.customer_id)
+            
+            // 3. Log the transaction as done in the loyalty page
+            let expiresAt: string | null = null
+            if (earningRule.expiration_days) {
+              const date = new Date()
+              date.setDate(date.getDate() + earningRule.expiration_days)
+              expiresAt = date.toISOString()
+            }
+
+            await supabase.from("points_transactions").insert({
+              customer_id: existing.customer_id,
+              points_change: earningRule.points_earned,
+              reason: earningRule.description || `Points for appointment ${existing.id}`,
+              type: "earn",
+              expires_at: expiresAt
+            })
+          }
+        }
+      }
+
       const { error: updateError } = await supabase
         .from("appointments")
         .update(updates)
