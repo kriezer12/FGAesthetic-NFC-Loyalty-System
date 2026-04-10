@@ -92,15 +92,25 @@ export default function NFCScanPage() {
 
     // mimic what NFCScanner does when it reads a card
     async function check() {
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("nfc_uid", uid)
-        .single()
-
-      if (customer) {
-        handleCustomerFound(customer)
-      } else {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        
+        if (!token) throw new Error("No active session")
+        
+        const { apiCall } = await import("@/lib/api")
+        const response = await apiCall(`/pos/nfc/${uid}`, { authToken: token })
+        
+        if (response.ok) {
+          const customer = await response.json()
+          if (customer) {
+            handleCustomerFound(customer)
+            return
+          }
+        }
+        handleNewCard(uid)
+      } catch (err) {
+        console.error("Error cross-branch checking NFC card:", err)
         handleNewCard(uid)
       }
     }
