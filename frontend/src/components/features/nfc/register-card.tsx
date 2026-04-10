@@ -152,10 +152,24 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto flex flex-col bg-card text-card-foreground rounded-xl border shadow-sm" style={{ maxHeight: "85vh" }}>
+    <div
+      className="w-full max-w-2xl mx-auto flex flex-col rounded-xl overflow-hidden"
+      style={{
+        maxHeight: "85vh",
+        background: "var(--card)",
+        boxShadow: "0 20px 60px oklch(0 0 0 / 18%), 0 6px 20px oklch(0 0 0 / 10%)",
+        border: "1px solid oklch(0.87 0 0 / 60%)",
+      }}
+    >
       <RegisterCardHeader nfcUid={nfcUid} />
-      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 relative">
+        {/* Subtle animated background inside the card */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+          <div className="absolute -top-20 -left-20 w-64 h-64 rounded-full bg-primary/[0.04] blur-3xl animate-[float_6s_ease-in-out_infinite]" />
+          <div className="absolute top-1/2 -right-20 w-80 h-80 rounded-full bg-primary/[0.03] blur-3xl animate-[float_9s_ease-in-out_infinite_1s]" />
+        </div>
+        
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 relative z-10">
           <RegisterCardError error={error} />
           <RegisterCardPersonalSection formData={formData} setFormData={setFormData} />
           <RegisterCardContactSection formData={formData} setFormData={setFormData} />

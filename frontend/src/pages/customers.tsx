@@ -1012,64 +1012,51 @@ export default function CustomersPage() {
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
 
   return (
-    <div>
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalClientsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Points Issued</CardTitle>
-                <Award className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalPointsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalVisitsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Registered Cards</CardTitle>
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{registeredCardsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mb-6 flex flex-col gap-4 md:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, email, phone, or NFC ID..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        {[
+          { title: "Total Clients", value: totalClientsCount, icon: <Users className="h-5 w-5" /> },
+          { title: "Total Points Issued", value: totalPointsCount, icon: <Award className="h-5 w-5" /> },
+          { title: "Total Visits", value: totalVisitsCount, icon: <Calendar className="h-5 w-5" /> },
+          { title: "Registered Cards", value: registeredCardsCount, icon: <CreditCard className="h-5 w-5" /> }
+        ].map((stat, idx) => (
+          <div key={idx} className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/5 to-amber-700/5 p-6 border border-amber-500/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10 hover:-translate-y-1">
+            <div className="absolute -right-6 -top-6 rounded-full bg-amber-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+            <div className="relative z-10 flex flex-row items-center justify-between mb-4">
+              <span className="text-sm font-semibold tracking-tight text-amber-900/70 dark:text-amber-100/70">{stat.title}</span>
+              <div className="rounded-full bg-amber-100 dark:bg-amber-900/50 p-2 text-amber-600 dark:text-amber-400 shadow-sm">
+                {stat.icon}
+              </div>
             </div>
-            <Button variant={showFilters ? "secondary" : "outline"} onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="mr-2 h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">Active</span>
-              )}
-            </Button>
+            <div className="relative z-10 text-3xl font-bold text-foreground">
+              {stat.value.toLocaleString()}
+            </div>
           </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-4 md:flex-row">
+        <div className="relative flex-1 group">
+          <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-amber-500" />
+          <Input
+            placeholder="Search by name, email, phone, or NFC ID..."
+            className="pl-12 h-12 rounded-full border-border/50 bg-background/50 backdrop-blur-sm transition-all hover:bg-background focus-visible:ring-amber-500/50 focus-visible:border-amber-500 shadow-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Button 
+          variant={showFilters ? "default" : "outline"} 
+          className={`h-12 rounded-full px-6 transition-all shadow-sm ${showFilters ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'hover:border-amber-500 hover:text-amber-600'}`}
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <Filter className="mr-2 h-4 w-4" />
+          Filters
+          {hasActiveFilters && (
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${showFilters ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400'}`}>Active</span>
+          )}
+        </Button>
+      </div>
 
           {showFilters && (
             <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-muted/50 p-4">
@@ -1174,7 +1161,7 @@ export default function CustomersPage() {
             </Button>
           </div>
 
-          <div className="rounded-lg border bg-card">
+          <div className="rounded-2xl border border-border/40 bg-card overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -1208,15 +1195,15 @@ export default function CustomersPage() {
                           <tr
                             onClick={() => setSelectedCustomer(customer)}
                             className={
-                              "border-b transition-colors hover:bg-muted/30 cursor-pointer" +
+                              "border-b transition-all duration-200 hover:bg-amber-500/5 cursor-pointer" +
                               ((isArchivedClient(customer) || isInactiveClient(customer)) ? " opacity-50" : "") +
                               (isArchivedClient(customer) ? " italic" : "")
                             }
                           >
                             <td className="p-4">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                                  <span className="text-sm font-medium text-primary">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 shadow-sm ring-1 ring-amber-200/50">
+                                  <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
                                     {customer.first_name?.[0] || customer.name?.[0] || "?"}
                                     {customer.last_name?.[0] || ""}
                                   </span>
@@ -1276,7 +1263,7 @@ export default function CustomersPage() {
                               )}
                             </td>
                             <td className="p-4">
-                              <span className="font-semibold text-primary">{customer.points || 0}</span>
+                              <span className="font-semibold text-amber-600 dark:text-amber-400">{customer.points || 0}</span>
                             </td>
                             <td className="p-4">{customer.visits || 0}</td>
                             <td className="p-4 text-sm text-muted-foreground relative">
@@ -1368,8 +1355,8 @@ export default function CustomersPage() {
             <p className="text-sm text-muted-foreground">Client since {formatDate(selectedCustomer?.created_at)}</p>
           </DialogHeader>
 
-          <div className="flex h-[calc(90vh-5.25rem)]">
-            <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/20 p-4">
+          <div className="flex h-[calc(90vh-5.25rem)] bg-background">
+            <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/10 p-4">
               <h4 className="text-sm font-semibold text-muted-foreground">Quick Actions</h4>
               <Button
                 variant={modalView === "details" ? "default" : "outline"}
@@ -1424,26 +1411,28 @@ export default function CustomersPage() {
                 <> {/* details view */}
                   {/* Stats Cards */}
                   <div className="grid grid-cols-2 gap-4">
-                    <Card className="border-primary/20 bg-primary/5">
-                      <CardContent className="p-6">
+                    <Card className="group relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10">
+                      <div className="absolute -right-4 -top-4 rounded-full bg-amber-500/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
+                      <CardContent className="p-6 relative z-10">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Points</p>
-                            <p className="text-3xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                            <p className="text-sm tracking-tight font-medium text-amber-900/70 dark:text-amber-100/70">Total Points</p>
+                            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{selectedCustomer?.points || 0}</p>
                           </div>
-                          <Award className="h-10 w-10 text-primary" />
+                          <Award className="h-10 w-10 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                         </div>
                       </CardContent>
                     </Card>
                     
-                    <Card>
-                      <CardContent className="p-6">
+                    <Card className="group relative overflow-hidden border-zinc-500/20 bg-gradient-to-br from-zinc-500/10 to-zinc-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-500/10">
+                      <div className="absolute -right-4 -top-4 rounded-full bg-zinc-500/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
+                      <CardContent className="p-6 relative z-10">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Visits</p>
-                            <p className="text-3xl font-bold">{selectedCustomer?.visits || 0}</p>
+                            <p className="text-sm tracking-tight font-medium text-zinc-500">Total Visits</p>
+                            <p className="text-3xl font-bold text-zinc-700 dark:text-zinc-300">{selectedCustomer?.visits || 0}</p>
                           </div>
-                          <Calendar className="h-10 w-10 text-muted-foreground" />
+                          <Calendar className="h-10 w-10 text-zinc-500 dark:text-zinc-400" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1454,7 +1443,7 @@ export default function CustomersPage() {
                   {/* Contact Information */}
                   <div className="space-y-4">
                     <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Phone className="h-4 w-4" />
+                      <Phone className="h-4 w-4 text-amber-500" />
                       Contact Information
                     </h4>
                     <div className="space-y-3 pl-6">
@@ -1484,7 +1473,7 @@ export default function CustomersPage() {
                   {/* Profile Details */}
                   <div className="space-y-4">
                     <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Users className="h-4 w-4" />
+                      <Users className="h-4 w-4 text-amber-500" />
                       Profile Details
                     </h4>
                     <div className="grid grid-cols-2 gap-4 pl-6">
@@ -1545,29 +1534,31 @@ export default function CustomersPage() {
                 <> {/* Loyalty tab view */}
                   <div className="space-y-6">
                     <h4 className="text-xl font-semibold flex items-center gap-2">
-                      <Award className="h-5 w-5 text-primary" />
+                      <Award className="h-6 w-6 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                       Loyalty Points & Rewards
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="border-primary/20 bg-primary/5">
-                        <CardContent className="p-6">
+                      <Card className="group relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-amber-500/10">
+                        <div className="absolute -right-4 -top-4 rounded-full bg-amber-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+                        <CardContent className="p-6 relative z-10">
                           <div className="flex items-center justify-between">
                             <div className="space-y-1" aria-live="polite" aria-atomic="true">
-                              <p className="text-sm font-medium text-muted-foreground">Available Points</p>
-                              <p className="text-4xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                              <p className="text-sm font-semibold tracking-tight text-amber-900/70 dark:text-amber-100/70">Available Points</p>
+                              <p className="text-5xl font-bold text-amber-600 dark:text-amber-500">{selectedCustomer?.points || 0}</p>
                             </div>
 
-                            <Award className="h-12 w-12 text-primary opacity-50" />
+                            <Award className="h-16 w-16 text-amber-500/30" />
                           </div>
                         </CardContent>
                       </Card>
 
-                      <Card>
-                        <CardContent className="p-6 text-center flex flex-col items-center justify-center">
-                          <p className="text-sm font-medium text-muted-foreground mb-1">Total Visits</p>
-                          <p className="text-2xl font-bold">{selectedCustomer?.visits || 0}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Client since {formatDate(selectedCustomer?.created_at)}</p>
+                      <Card className="group relative overflow-hidden border-zinc-500/20 bg-gradient-to-br from-zinc-500/10 to-zinc-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-500/10">
+                        <div className="absolute -right-4 -top-4 rounded-full bg-zinc-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+                        <CardContent className="p-6 text-center flex flex-col items-center justify-center relative z-10 h-full">
+                          <p className="text-sm font-semibold tracking-tight text-zinc-500 mb-1">Total Visits</p>
+                          <p className="text-4xl font-bold text-zinc-700 dark:text-zinc-300">{selectedCustomer?.visits || 0}</p>
+                          <p className="text-xs text-zinc-500 mt-2 font-medium">Client since {formatDate(selectedCustomer?.created_at)}</p>
                         </CardContent>
                       </Card>
                     </div>

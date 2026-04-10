@@ -112,10 +112,14 @@ export default function NFCScanPage() {
 
   return (
     <div className="relative flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
-      {/* Subtle radial gradient backdrop */}
+      {/* Subtle animated radial gradient backdrop */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-primary/[0.03] blur-3xl" />
-        <div className="absolute left-1/3 bottom-1/4 h-[300px] w-[300px] rounded-full bg-primary/[0.02] blur-3xl" />
+        <div 
+          className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-primary/[0.06] blur-3xl animate-[float_8s_ease-in-out_infinite]"
+        />
+        <div 
+          className="absolute left-1/3 bottom-1/4 h-[300px] w-[300px] rounded-full bg-primary/[0.04] blur-3xl animate-[float_10s_ease-in-out_infinite_2s]"
+        />
       </div>
 
       <div className="relative z-10 w-full">

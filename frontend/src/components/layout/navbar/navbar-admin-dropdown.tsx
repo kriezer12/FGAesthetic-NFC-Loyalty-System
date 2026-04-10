@@ -6,7 +6,6 @@ import {
   Sparkles, 
   Package, 
   Star, 
-  Clock, 
   BarChart3, 
   Building2,
   Wrench
@@ -77,7 +76,7 @@ export function NavbarAdminDropdown() {
               "flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[0.95rem] font-medium transition-all duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
               isAdminActive
                 ? "bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:bg-secondary/60 focus-visible:text-foreground",
+                : "text-muted-foreground hover:text-amber-900 hover:bg-amber-100/50 focus-visible:bg-amber-100/50 focus-visible:text-amber-900",
             ].join(" ")}
             aria-label="Administration Menu"
           >
@@ -112,15 +111,15 @@ export function NavbarAdminDropdown() {
                           className={({ isActive }) => [
                             "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 group/item outline-none",
                             isActive
-                              ? "bg-primary/10 text-primary"
-                              : "text-muted-foreground hover:text-foreground hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:text-foreground",
+                              ? "bg-amber-100/50 text-amber-900"
+                              : "text-muted-foreground hover:text-amber-900 hover:bg-amber-100/50 focus-visible:bg-amber-100/50 focus-visible:text-amber-900",
                           ].join(" ")}
                         >
                           {({ isActive }) => (
                             <>
                               <Icon className={[
                                 "h-4 w-4 shrink-0 transition-colors duration-200",
-                                isActive ? "text-primary" : "text-muted-foreground/70 group-hover/item:text-foreground group-focus-visible/item:text-foreground"
+                                isActive ? "text-amber-900" : "text-muted-foreground/70 group-hover/item:text-amber-900 group-focus-visible/item:text-amber-900"
                               ].join(" ")} />
                               <span>{link.title}</span>
                             </>
@@ -136,10 +135,10 @@ export function NavbarAdminDropdown() {
                       <button
                         type="button"
                         onClick={() => setBranchModalOpen(true)}
-                        className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:text-foreground transition-all duration-200 cursor-pointer text-left group/item outline-none w-full"
+                        className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-amber-900 hover:bg-amber-100/50 focus-visible:bg-amber-100/50 focus-visible:text-amber-900 transition-all duration-200 cursor-pointer text-left group/item outline-none w-full"
                         aria-label="Manage Branches"
                       >
-                        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground/70 transition-colors duration-200 group-hover/item:text-foreground group-focus-visible/item:text-foreground" />
+                        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground/70 transition-colors duration-200 group-hover/item:text-amber-900 group-focus-visible/item:text-amber-900" />
                         <span>Branches</span>
                       </button>
                     </DropdownMenuItem>
