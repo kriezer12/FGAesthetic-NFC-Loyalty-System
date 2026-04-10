@@ -24,6 +24,8 @@ import {
   Trash2,
   Download,
   Plus,
+  Camera,
+  Upload,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -52,6 +54,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
+import { CameraCaptureDialog } from "@/components/ui/camera-capture-dialog"
 import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
@@ -344,6 +347,8 @@ export default function CustomersPage() {
   const [treatmentGalleryUploading, setTreatmentGalleryUploading] = useState(false)
   const [treatmentConsentUploading, setTreatmentConsentUploading] = useState(false)
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
+  const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false)
+  const [cameraCaptureType, setCameraCaptureType] = useState<"before" | "after" | "other" | "consent" | "none">("none")
   
   const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
@@ -2392,18 +2397,33 @@ export default function CustomersPage() {
                             <div key={type} className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm font-medium">{label}</p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    document
-                                      .getElementById(`treatment-${type}-input`)
-                                      ?.click()
-                                  }
-                                  disabled={treatmentGalleryUploading}
-                                >
-                                  Upload
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setCameraCaptureType(type as "before" | "after")
+                                      setCameraCaptureOpen(true)
+                                    }}
+                                    disabled={treatmentGalleryUploading}
+                                  >
+                                    <Camera className="w-4 h-4 mr-2" />
+                                    Camera
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      document
+                                        .getElementById(`treatment-${type}-input`)
+                                        ?.click()
+                                    }
+                                    disabled={treatmentGalleryUploading}
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload
+                                  </Button>
+                                </div>
                               </div>
                               {photos.length > 0 ? (
                                 <div className="grid grid-cols-2 gap-3">
@@ -2519,14 +2539,29 @@ export default function CustomersPage() {
                       ) : (
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-muted-foreground">No consent form uploaded yet.</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
-                            disabled={treatmentConsentUploading}
-                          >
-                            Upload
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setCameraCaptureType("consent")
+                                setCameraCaptureOpen(true)
+                              }}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Camera className="w-4 h-4 mr-2" />
+                              Camera
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Upload className="w-4 h-4 mr-2" />
+                              Upload
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2604,11 +2639,22 @@ export default function CustomersPage() {
                           ))}
                         <button
                           className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
+                          onClick={() => {
+                            setCameraCaptureType("other")
+                            setCameraCaptureOpen(true)
+                          }}
+                          disabled={treatmentGalleryUploading}
+                        >
+                          <Camera className="h-5 w-5 text-primary" />
+                          Camera
+                        </button>
+                        <button
+                          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
                           onClick={() => document.getElementById('treatment-other-input')?.click()}
                           disabled={treatmentGalleryUploading}
                         >
-                          <Plus className="h-5 w-5 text-primary" />
-                          Add Photo
+                          <Upload className="h-5 w-5 text-primary" />
+                          Upload
                         </button>
                       </div>
                     </div>
@@ -2697,6 +2743,18 @@ export default function CustomersPage() {
         prefillCustomerId={prefillCustomer?.id}
         prefillCustomerName={prefillCustomer?.name || `${prefillCustomer?.first_name || ''} ${prefillCustomer?.last_name || ''}`.trim()}
         prefillServiceIds={prefillServiceIds}
+      />
+
+      <CameraCaptureDialog
+        open={cameraCaptureOpen}
+        onOpenChange={setCameraCaptureOpen}
+        onCapture={(file) => {
+          if (cameraCaptureType === "consent") {
+            handleTreatmentConsentFormUpload(file)
+          } else if (cameraCaptureType !== "none") {
+            handleTreatmentPhotoUpload(file, cameraCaptureType)
+          }
+        }}
       />
     </div>
   )
