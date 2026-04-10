@@ -13,9 +13,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from "@/lib/supabase"
 import { generateId } from "@/components/features/calendar/calendar-parts/calendar-utils"
 import type { ServiceCategory, Service } from "@/types/service"
+import type { EarningRule } from "@/pages/loyalty-admin"
 import { useEquipment } from "@/hooks/use-equipment"
 
 const ROOT_SCOPE = "__root__"
+
 
 const getScopeKey = (categoryId: string | null | undefined) => categoryId || ROOT_SCOPE
 
@@ -37,6 +39,7 @@ const compareBySortOrder = (a?: number | null, b?: number | null) => getSortOrde
 export default function TreatmentsPage() {
   const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [earningRules, setEarningRules] = useState<EarningRule[]>([])
   const [inventoryProducts, setInventoryProducts] = useState<{id: string, name: string, sku: string}[]>([])
   const { equipment: equipmentList, fetchEquipment } = useEquipment()
 
@@ -50,6 +53,9 @@ export default function TreatmentsPage() {
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
   const [draggingService, setDraggingService] = useState<{ id: string; scope: string } | null>(null)
   const [dragOverServiceId, setDragOverServiceId] = useState<string | null>(null)
+
+  // Add a temporary state to manage loyalty points in the modal
+  const [currentLoyaltyPoints, setCurrentLoyaltyPoints] = useState<number | string>("")
 
   const createEmptyService = (categoryId: string | null): Service => ({
     id: "",
@@ -91,6 +97,12 @@ export default function TreatmentsPage() {
 
     setServices((data || []) as Service[])
   }
+
+  const fetchEarningRules = async () => {
+    const { data } = await supabase.from("earning_rules").select("*")
+    setEarningRules((data || []) as EarningRule[])
+  }
+
   const fetchInventoryProducts = async () => {
     const { data } = await supabase.from("inventory_products").select("id, name, sku").order("name")
     setInventoryProducts((data || []) as {id: string, name: string, sku: string}[])
@@ -99,6 +111,7 @@ export default function TreatmentsPage() {
   useEffect(() => {
     fetchCategories()
     fetchServices()
+    fetchEarningRules()
     fetchInventoryProducts()
     fetchEquipment()
   }, [])
@@ -120,21 +133,54 @@ export default function TreatmentsPage() {
     setServices((prev) => prev.filter((s) => s.category_id !== id))
   }
 
-  const saveService = async (svc: Service) => {
+  const saveService = async (svc: Service, loyaltyPoints: number | string) => {
+    let serviceId = svc.id
     if (svc.id) {
       await supabase.from("services").update(svc).eq("id", svc.id)
     } else {
       const id = generateId()
+      serviceId = id
       const scopeServices = services.filter((s) => getScopeKey(s.category_id) === getScopeKey(svc.category_id))
       const nextSortOrder = scopeServices.reduce((max, current) => Math.max(max, current.sort_order ?? -1), -1) + 1
       await supabase.from("services").insert({ ...svc, id, sort_order: nextSortOrder })
     }
-    fetchServices()
+    await fetchServices()
+
+    // Now, handle the earning rule
+    const points = typeof loyaltyPoints === 'number' ? loyaltyPoints : parseInt(loyaltyPoints, 10)
+    const existingRule = earningRules.find(r => r.treatment_id === serviceId)
+
+    if (!isNaN(points) && points > 0) {
+      const ruleData: Partial<EarningRule> = {
+        treatment_id: serviceId,
+        points_earned: points,
+        is_active: true,
+        description: `Points for ${svc.name}`,
+      }
+      if (existingRule) {
+        // Update existing rule
+        await supabase.from("earning_rules").update(ruleData).eq("id", existingRule.id)
+      } else {
+        // Create new rule
+        const id = generateId()
+        await supabase.from("earning_rules").insert({ ...ruleData, id })
+      }
+    } else if (existingRule) {
+      // If points are 0 or invalid, delete the rule
+      await supabase.from("earning_rules").delete().eq("id", existingRule.id)
+    }
+    await fetchEarningRules()
   }
 
   const deleteService = async (id: string) => {
     await supabase.from("services").delete().eq("id", id)
+    // Also delete any associated earning rule
+    const ruleToDelete = earningRules.find(r => r.treatment_id === id)
+    if (ruleToDelete) {
+      await supabase.from("earning_rules").delete().eq("id", ruleToDelete.id)
+    }
     fetchServices()
+    fetchEarningRules()
   }
 
   const sortedCategories = useMemo(() => {
@@ -219,67 +265,82 @@ export default function TreatmentsPage() {
   }
 
   const renderServiceRows = (scopedServices: Service[], scope: string) => (
-    scopedServices.map((s) => (
-      <ContextMenu key={s.id}>
-        <ContextMenuTrigger asChild>
-          <TableRow
-            className={`cursor-context-menu ${dragOverServiceId === s.id ? "bg-accent/40" : ""}`}
-            draggable
-            onDragStart={(e) => {
-              e.stopPropagation()
-              setDraggingService({ id: s.id, scope })
-            }}
-            onDragEnd={() => {
-              setDraggingService(null)
-              setDragOverServiceId(null)
-            }}
-            onDragOver={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (draggingService?.scope === scope && draggingService.id !== s.id) {
-                setDragOverServiceId(s.id)
-              }
-            }}
-            onDrop={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              handleServiceDrop(scope, s.id)
-            }}
-          >
-            <TableCell className="font-medium">{s.name}</TableCell>
-            <TableCell className="text-muted-foreground">{s.equipment || "—"}</TableCell>
-            <TableCell className="text-muted-foreground">{s.product || "—"}</TableCell>
-            <TableCell className="text-center">
-              {s.is_package
-                ? ([
-                  s.session_count ? `${s.session_count}×` : null,
-                  s.recurrence_days ? `every ${s.recurrence_days}d` : "weekly",
-                ].filter(Boolean).join(" ") || "Yes")
-                : "—"}
-            </TableCell>
-            <TableCell className="text-right">₱{s.price.toFixed(2)}</TableCell>
-            <TableCell className="text-right">
-              <div className="flex justify-end gap-1">
-                <Button size="icon" variant="ghost" className="size-8" onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
-                  <Pencil className="size-4" />
-                </Button>
-                <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => deleteService(s.id)}>
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onClick={() => { setEditingService(s); setSvcModalOpen(true) }}>
-            <Pencil className="size-4 mr-2" />Edit Service
-          </ContextMenuItem>
-          <ContextMenuItem variant="destructive" onClick={() => deleteService(s.id)}>
-            <Trash2 className="size-4 mr-2" />Delete Service
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    ))
+    scopedServices.map((s) => {
+      const rule = earningRules.find(r => r.treatment_id === s.id)
+      const loyaltyPoints = rule ? rule.points_earned : 0
+      return (
+        <ContextMenu key={s.id}>
+          <ContextMenuTrigger asChild>
+            <TableRow
+              className={`cursor-context-menu ${dragOverServiceId === s.id ? "bg-accent/40" : ""}`}
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation()
+                setDraggingService({ id: s.id, scope })
+              }}
+              onDragEnd={() => {
+                setDraggingService(null)
+                setDragOverServiceId(null)
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (draggingService?.scope === scope && draggingService.id !== s.id) {
+                  setDragOverServiceId(s.id)
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleServiceDrop(scope, s.id)
+              }}
+            >
+              <TableCell className="font-medium">{s.name}</TableCell>
+              <TableCell className="text-muted-foreground">{s.equipment || "—"}</TableCell>
+              <TableCell className="text-muted-foreground">{s.product || "—"}</TableCell>
+              <TableCell className="text-center">
+                {s.is_package
+                  ? ([
+                    s.session_count ? `${s.session_count}×` : null,
+                    s.recurrence_days ? `every ${s.recurrence_days}d` : "weekly",
+                  ].filter(Boolean).join(" ") || "Yes")
+                  : "—"}
+              </TableCell>
+              <TableCell className="text-right">₱{s.price.toFixed(2)}</TableCell>
+              <TableCell className="text-center">{loyaltyPoints}</TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-1">
+                  <Button size="icon" variant="ghost" className="size-8" onClick={() => { 
+                    setEditingService(s)
+                    const rule = earningRules.find(r => r.treatment_id === s.id)
+                    setCurrentLoyaltyPoints(rule ? rule.points_earned : "")
+                    setSvcModalOpen(true) 
+                  }}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => deleteService(s.id)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => { 
+              setEditingService(s)
+              const rule = earningRules.find(r => r.treatment_id === s.id)
+              setCurrentLoyaltyPoints(rule ? rule.points_earned : "")
+              setSvcModalOpen(true) 
+            }}>
+              <Pencil className="size-4 mr-2" />Edit Service
+            </ContextMenuItem>
+            <ContextMenuItem variant="destructive" onClick={() => deleteService(s.id)}>
+              <Trash2 className="size-4 mr-2" />Delete Service
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      )
+    })
   )
 
   return (
@@ -318,6 +379,7 @@ export default function TreatmentsPage() {
                     <TableHead>Product</TableHead>
                     <TableHead className="text-center">Package</TableHead>
                     <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-center">Loyalty Points</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -382,6 +444,7 @@ export default function TreatmentsPage() {
                         <TableHead>Product</TableHead>
                         <TableHead className="text-center">Package</TableHead>
                         <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="text-center">Loyalty Points</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -523,6 +586,35 @@ export default function TreatmentsPage() {
               />
             </div>
 
+            {/* Loyalty Points */}
+            <div className="grid gap-1">
+              <Label>Loyalty Points Earned</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setCurrentLoyaltyPoints(p => Math.max(0, (typeof p === 'number' ? p : parseInt(p, 10) || 0) - 1))}
+                >
+                  -
+                </Button>
+                <Input
+                  type="number"
+                  min={0}
+                  value={currentLoyaltyPoints}
+                  onChange={(e) => setCurrentLoyaltyPoints(e.target.value)}
+                  placeholder="0"
+                  className="text-center"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setCurrentLoyaltyPoints(p => (typeof p === 'number' ? p : parseInt(p, 10) || 0) + 1)}
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+
             {/* Package flag + recurrence */}
             <div className="grid gap-1">
               <div className="flex items-center gap-2">
@@ -571,7 +663,7 @@ export default function TreatmentsPage() {
 
             <Button onClick={() => {
               if (editingService && editingService.name.trim()) {
-                saveService(editingService)
+                saveService(editingService, currentLoyaltyPoints)
                 setSvcModalOpen(false)
               }
             }}>

@@ -35,13 +35,6 @@ type Customer = {
   phone?: string | null
 }
 
-type InventoryProduct = {
-  id: string
-  name: string
-  sku?: string
-  unit_price: number
-}
-
 type CartItem = {
   id: string
   type: "service" | "product"
@@ -193,7 +186,6 @@ export default function CheckoutPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [billedAppointmentIds, setBilledAppointmentIds] = useState<Set<string>>(new Set())
   const [services, setServices] = useState<Service[]>([])
-  const [products, setProducts] = useState<InventoryProduct[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("")
@@ -279,7 +271,6 @@ export default function CheckoutPage() {
         const [
           { data: appointmentsData, error: appointmentsError },
           { data: servicesData, error: servicesError },
-          { data: productsData, error: productsError },
           { data: billedData, error: billedError },
           { data: settingsData, error: settingsError },
           { data: customersData, error: customersError },
@@ -293,10 +284,6 @@ export default function CheckoutPage() {
           supabase
             .from("services")
             .select("id, category_id, name, sort_order, uses_equipment, equipment, uses_product, product, inventory_product_id, price, is_package, session_count, recurrence_days"),
-          supabase
-            .from("inventory_products")
-            .select("id, name, sku, unit_price")
-            .order("name", { ascending: true }),
           supabase
             .from("transactions")
             .select("appointment_id")
@@ -315,14 +302,12 @@ export default function CheckoutPage() {
 
         if (appointmentsError) throw appointmentsError
         if (servicesError) throw servicesError
-        if (productsError) throw productsError
         if (billedError) throw billedError
         if (settingsError) throw settingsError
         if (customersError) throw customersError
 
         setAppointments((appointmentsData || []) as Appointment[])
         setServices((servicesData || []) as Service[])
-        setProducts((productsData || []) as InventoryProduct[])
         setBilledAppointmentIds(new Set((billedData || []).map((row: { appointment_id?: string | null }) => row.appointment_id).filter(Boolean) as string[]))
         setBusinessSettings((settingsData || null) as BusinessSettings | null)
         setCustomers((customersData || []) as Customer[])
@@ -1367,8 +1352,8 @@ export default function CheckoutPage() {
         </div>
 
         {activeView === "checkout" ? (
-        <div className="grid gap-0 xl:grid-cols-[1.35fr_0.95fr]">
-          <Card className="rounded-none border-0 border-r shadow-none">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)] w-full">
+          <Card className="rounded-none border-0 border-r shadow-none min-w-0">
           <CardHeader>
             <CardTitle>Cart Builder</CardTitle>
           </CardHeader>
@@ -1451,7 +1436,7 @@ export default function CheckoutPage() {
           </CardContent>
           </Card>
 
-          <Card className="rounded-none border-0 shadow-none">
+          <Card className="rounded-none border-0 shadow-none min-w-0">
           <CardHeader>
             <CardTitle>{isCheckoutStage ? "Payment Pad" : "Checkout Adjustments"}</CardTitle>
           </CardHeader>

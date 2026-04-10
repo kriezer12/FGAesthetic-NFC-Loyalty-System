@@ -24,6 +24,8 @@ import {
   Trash2,
   Download,
   Plus,
+  Camera,
+  Upload,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -32,7 +34,7 @@ import { useAppointments } from "@/hooks/use-appointments"
 import { useBranches } from "@/hooks/use-branches"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -52,9 +54,12 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
+import { CameraCaptureDialog } from "@/components/ui/camera-capture-dialog"
 import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
+import { TreatmentHistory } from "@/components/features/customers/treatment-history"
+import { TreatmentStatusManager } from "@/components/features/customers/treatment-status-manager"
 import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
@@ -91,7 +96,7 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
   // which panel is shown inside the customer modal
-  const [modalView, setModalView] = useState<"details" | "treatments" | "loyalty">("details")
+  const [modalView, setModalView] = useState<"details" | "appointments" | "treatments" | "loyalty">("details")
   const [profileEditorOpen, setProfileEditorOpen] = useState(false)
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
   const [profileForm, setProfileForm] = useState({
@@ -344,6 +349,8 @@ export default function CustomersPage() {
   const [treatmentGalleryUploading, setTreatmentGalleryUploading] = useState(false)
   const [treatmentConsentUploading, setTreatmentConsentUploading] = useState(false)
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
+  const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false)
+  const [cameraCaptureType, setCameraCaptureType] = useState<"before" | "after" | "other" | "consent" | "none">("none")
   
   const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
@@ -1011,6 +1018,50 @@ export default function CustomersPage() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
 
+  const appointmentGroups = useMemo(() => {
+    if (!selectedCustomer) return []
+    const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer.id)
+    const displayAppts = customerAppts
+      .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
+      .flatMap((a) => {
+        if (a.service_ids && a.service_ids.length > 1) {
+          return a.service_ids.map((sid) => ({
+            ...a,
+            virtualServiceId: sid,
+            title: serviceMap.get(sid)?.name || a.title,
+            service_ids: [sid],
+          }))
+        }
+        return [a]
+      })
+
+    const grouped = displayAppts.reduce((acc, a) => {
+      const keyBase = a.recurrence_group_id || a.id
+      const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
+      const key = `${keyBase}:${svcSuffix}`
+      if (!acc[key]) {
+        acc[key] = {
+          id: key,
+          isPackage: !!a.recurrence_group_id,
+          sessions: [a],
+          primaryAppointment: a,
+        };
+      } else {
+        acc[key].sessions.push(a);
+      }
+      return acc;
+    }, {} as Record<string, { id: string; isPackage: boolean; sessions: typeof displayAppts; primaryAppointment: (typeof displayAppts)[0] }>);
+
+    const groupList = Object.values(grouped).map(g => {
+      g.sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+      g.primaryAppointment = g.sessions[0];
+      return g;
+    });
+
+    groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
+    return groupList
+  }, [appointments, selectedCustomer, serviceMap])
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -1367,12 +1418,20 @@ export default function CustomersPage() {
                 Details
               </Button>
               <Button
+                variant={modalView === "appointments" ? "default" : "outline"}
+                className="justify-start"
+                onClick={() => setModalView("appointments")}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                Appointments
+              </Button>
+              <Button
                 variant={modalView === "treatments" ? "default" : "outline"}
                 className="justify-start"
                 onClick={() => setModalView("treatments")}
               >
                 <Award className="mr-2 h-4 w-4" />
-                Treatments
+                Treatment History
               </Button>
               <Button
                 variant={modalView === "loyalty" ? "default" : "outline"}
@@ -1588,8 +1647,8 @@ export default function CustomersPage() {
                     </div>
                   </div>
                 </>
-              ) : modalView === "treatments" ? (
-                <> {/* treatments view */}
+              ) : modalView === "appointments" ? (
+                <> {/* appointments view */}
                   {selectedCustomer && (
                     <>
                       {/* appointment log list */}
@@ -1602,53 +1661,6 @@ export default function CustomersPage() {
                         ) : (
                           <div className="space-y-2">
                             {(() => {
-                              const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer?.id);
-
-                              // Hide standalone cancelled appointments from history (they shouldn't be stored there)
-                              // Packages still show cancelled sessions so they can be rescheduled.
-                              const displayAppts = customerAppts
-                                .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
-                                .flatMap((a) => {
-                                  if (a.service_ids && a.service_ids.length > 1) {
-                                    return a.service_ids.map((sid) => ({
-                                      ...a,
-                                      virtualServiceId: sid,
-                                      title: serviceMap.get(sid)?.name || a.title,
-                                      service_ids: [sid],
-                                    }))
-                                  }
-                                  return [a]
-                                })
-
-                              // Group by recurrence_group_id + service, or just appointment + service
-                              const grouped = displayAppts.reduce((acc, a) => {
-                                const keyBase = a.recurrence_group_id || a.id
-                                const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
-                                const key = `${keyBase}:${svcSuffix}`
-                                if (!acc[key]) {
-                                  acc[key] = {
-                                    id: key,
-                                    isPackage: !!a.recurrence_group_id,
-                                    sessions: [a],
-                                    primaryAppointment: a,
-                                  };
-                                } else {
-                                  acc[key].sessions.push(a);
-                                }
-                                return acc;
-                              }, {} as Record<string, { id: string; isPackage: boolean; sessions: typeof displayAppts; primaryAppointment: (typeof displayAppts)[0] }>);
-
-                              const groupList = Object.values(grouped).map(g => {
-                                // sort sessions ascending by date
-                                g.sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-                                // set the primary to the first session, so docs are always stored against the first session's ID
-                                g.primaryAppointment = g.sessions[0];
-                                return g;
-                              });
-
-                              // Sort groups by the start time of their primary appointment (descending for history)
-                              groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
-
                               const openTreatmentDocForGroup = (g: { sessions: any[]; isPackage: boolean; primaryAppointment: any }) => {
                                 const a = g.primaryAppointment
                                 if (a.customer_id && a.id) {
@@ -1669,7 +1681,7 @@ export default function CustomersPage() {
                                 }
                               }
 
-                              return groupList.map((g) => {
+                              return appointmentGroups.map((g) => {
                                 const a = g.primaryAppointment
                                 const totalSessions = g.sessions.length
                                 const completedCount = g.sessions.filter((s) => s.status === "completed").length
@@ -1805,6 +1817,64 @@ export default function CustomersPage() {
                     </>
                   )}
                 </>
+              ) : modalView === "treatments" ? (
+                <> {/* treatments tab view */}
+                  {selectedCustomer && (
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-semibold">Active Treatments</h4>
+                        {(() => {
+                           const activePackages = appointmentGroups.filter(g => g.isPackage && !g.sessions.every(s => s.status === "completed" || s.status === "cancelled"))
+                           if (activePackages.length === 0) return <p className="text-sm text-muted-foreground">No active treatments found.</p>
+                           
+                           return activePackages.map(g => {
+                             const totalSessions = g.sessions.length
+                             const completedCount = g.sessions.filter((s) => s.status === "completed").length
+                             const title = g.primaryAppointment.title
+
+                             return (
+                               <div key={g.id} className="flex flex-col gap-1 p-3 rounded-lg border bg-card/50">
+                                 <div className="flex justify-between items-center">
+                                   <span className="font-medium">{title}</span>
+                                   <span className="text-sm text-muted-foreground">{completedCount} / {totalSessions} completed</span>
+                                 </div>
+                                 <div className="w-full bg-muted rounded-full h-2 mt-1">
+                                   <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(completedCount / totalSessions) * 100}%` }}></div>
+                                 </div>
+                               </div>
+                             )
+                           })
+                        })()}
+
+                        <h4 className="text-lg font-semibold mt-6">Completed Treatments</h4>
+                        {(() => {
+                           const completedPackages = appointmentGroups.filter(g => g.isPackage && g.sessions.length > 0 && g.sessions.every(s => s.status === "completed" || s.status === "cancelled"))
+                           if (completedPackages.length === 0) return <p className="text-sm text-muted-foreground">No completed treatments found.</p>
+
+                           return completedPackages.map(g => {
+                             const totalSessions = g.sessions.length
+                             const completedCount = g.sessions.filter((s) => s.status === "completed").length
+                             const title = g.primaryAppointment.title
+
+                             return (
+                               <div key={g.id} className="flex flex-col gap-1 p-3 rounded-lg border bg-muted/40 opacity-70">
+                                 <div className="flex justify-between items-center">
+                                   <span className="font-medium line-through">{title}</span>
+                                   <span className="text-sm text-muted-foreground">{completedCount} / {totalSessions} completed</span>
+                                 </div>
+                               </div>
+                             )
+                           })
+                        })()}
+                      </div>
+                      <Separator />
+                      <div>
+                        <h4 className="text-lg font-semibold mb-3">Treatment History Log</h4>
+                        <TreatmentHistory customerId={selectedCustomer.id} refreshKey={historyRefreshKey} />
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : null}
 
               <div className="space-y-3 pb-2 md:hidden">
@@ -1812,18 +1882,25 @@ export default function CustomersPage() {
                 <h4 className="text-base font-semibold">Quick Actions</h4>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button
-                    variant="outline"
+                    variant={modalView === "details" ? "default" : "outline"}
                     onClick={() => setModalView("details")}
                   >
                     <Eye className="mr-2 h-4 w-4" />
                     Details
                   </Button>
                   <Button
+                    variant={modalView === "appointments" ? "default" : "outline"}
+                    onClick={() => setModalView("appointments")}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Appointments
+                  </Button>
+                  <Button
                     variant={modalView === "treatments" ? "default" : "outline"}
                     onClick={() => setModalView("treatments")}
                   >
                     <Award className="mr-2 h-4 w-4" />
-                    Treatments
+                    Treatment History
                   </Button>
                   <Button
                     variant={modalView === "loyalty" ? "default" : "outline"}
@@ -2383,18 +2460,33 @@ export default function CustomersPage() {
                             <div key={type} className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm font-medium">{label}</p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    document
-                                      .getElementById(`treatment-${type}-input`)
-                                      ?.click()
-                                  }
-                                  disabled={treatmentGalleryUploading}
-                                >
-                                  Upload
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setCameraCaptureType(type as "before" | "after")
+                                      setCameraCaptureOpen(true)
+                                    }}
+                                    disabled={treatmentGalleryUploading}
+                                  >
+                                    <Camera className="w-4 h-4 mr-2" />
+                                    Camera
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      document
+                                        .getElementById(`treatment-${type}-input`)
+                                        ?.click()
+                                    }
+                                    disabled={treatmentGalleryUploading}
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload
+                                  </Button>
+                                </div>
                               </div>
                               {photos.length > 0 ? (
                                 <div className="grid grid-cols-2 gap-3">
@@ -2510,14 +2602,29 @@ export default function CustomersPage() {
                       ) : (
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-muted-foreground">No consent form uploaded yet.</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
-                            disabled={treatmentConsentUploading}
-                          >
-                            Upload
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setCameraCaptureType("consent")
+                                setCameraCaptureOpen(true)
+                              }}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Camera className="w-4 h-4 mr-2" />
+                              Camera
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Upload className="w-4 h-4 mr-2" />
+                              Upload
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2595,11 +2702,22 @@ export default function CustomersPage() {
                           ))}
                         <button
                           className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
+                          onClick={() => {
+                            setCameraCaptureType("other")
+                            setCameraCaptureOpen(true)
+                          }}
+                          disabled={treatmentGalleryUploading}
+                        >
+                          <Camera className="h-5 w-5 text-primary" />
+                          Camera
+                        </button>
+                        <button
+                          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
                           onClick={() => document.getElementById('treatment-other-input')?.click()}
                           disabled={treatmentGalleryUploading}
                         >
-                          <Plus className="h-5 w-5 text-primary" />
-                          Add Photo
+                          <Upload className="h-5 w-5 text-primary" />
+                          Upload
                         </button>
                       </div>
                     </div>
@@ -2688,6 +2806,18 @@ export default function CustomersPage() {
         prefillCustomerId={prefillCustomer?.id}
         prefillCustomerName={prefillCustomer?.name || `${prefillCustomer?.first_name || ''} ${prefillCustomer?.last_name || ''}`.trim()}
         prefillServiceIds={prefillServiceIds}
+      />
+
+      <CameraCaptureDialog
+        open={cameraCaptureOpen}
+        onOpenChange={setCameraCaptureOpen}
+        onCapture={(file) => {
+          if (cameraCaptureType === "consent") {
+            handleTreatmentConsentFormUpload(file)
+          } else if (cameraCaptureType !== "none") {
+            handleTreatmentPhotoUpload(file, cameraCaptureType)
+          }
+        }}
       />
     </div>
   )
