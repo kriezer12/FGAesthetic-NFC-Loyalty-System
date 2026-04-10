@@ -22,7 +22,7 @@ export function NavbarLinks() {
               [
                 "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 relative group",
                 isActive
-                  ? "bg-primary/20 text-primary-foreground shadow-sm ring-1 ring-primary/40"
+                  ? "bg-primary/20 text-foreground shadow-sm ring-1 ring-primary/40"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
               ].join(" ")
             }

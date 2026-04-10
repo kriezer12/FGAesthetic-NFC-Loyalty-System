@@ -172,7 +172,7 @@ export function AppNavbar() {
               <ShoppingCart className="h-5 w-5" />
             </button>
 
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary-foreground shadow-sm">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-foreground shadow-sm">
               <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
               <div className="flex flex-col leading-none">
                 <span className="text-sm font-semibold tabular-nums">{timeStr}</span>
