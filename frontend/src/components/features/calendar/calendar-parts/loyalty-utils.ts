@@ -5,8 +5,9 @@ import type { Appointment } from "@/types/appointment"
  * Automates loyalty points awarding when an appointment is completed.
  * Logic uses earning rules linked to treatment IDs.
  */
-export async function awardPointsForAppointment(appt: Appointment) {
-  if (appt.status !== 'completed' || !appt.customer_id) return
+export async function awardPointsForAppointment(appt: Appointment, forceAward: boolean = false) {
+  if (!forceAward && appt.status !== 'completed' && appt.status !== 'Completed') return
+  if (!appt.customer_id) return
 
   try {
     // 1. Check if already awarded for this appointment to avoid duplicates

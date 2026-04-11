@@ -31,7 +31,6 @@ import {
   type RecurrenceActionScope,
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
-import { awardPointsForAppointment } from "./calendar-parts/loyalty-utils"
 import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
 
 // ---- localStorage key ----
@@ -271,7 +270,6 @@ export function CalendarView() {
         if (updates.status === "completed" && oldAppt?.status !== "completed") {
           const updatedAppt = { ...oldAppt, ...updates } as Appointment
           await Promise.all([
-            awardPointsForAppointment(updatedAppt),
             deductInventoryForAppointment(updatedAppt)
           ])
         }
@@ -335,18 +333,12 @@ export function CalendarView() {
       } else {
         await addAppointment(appt)
       }
-      
-      // If created as completed (unlikely but possible), award points
-      if (appt.status === "completed") {
-        await awardPointsForAppointment(appt)
-      }
     } else {
       await updateAppointment(appt.id, appt)
       
-      // If status changed to completed, award points and deduct inventory
+      // If status changed to completed, deduct inventory
       if (appt.status === "completed" && oldAppt?.status !== "completed") {
         await Promise.all([
-          awardPointsForAppointment(appt),
           deductInventoryForAppointment(appt)
         ])
       }
