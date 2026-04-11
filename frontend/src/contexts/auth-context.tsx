@@ -14,7 +14,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { supabase } from "@/lib/supabase"
 import type { User, Session } from "@supabase/supabase-js"
 
-type UserRole = "super_admin" | "branch_admin" | "staff"
+type UserRole = "super_admin" | "branch_admin" | "staff" | "customer"
 
 interface UserProfile {
   id: string
@@ -53,11 +53,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Fetch user profile with role information and branch details
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      // First try to find a staff profile
+      let { data, error } = await supabase
         .from("user_profiles")
         .select("id, role, email, full_name, branch_id, avatar_url, branches(name)")
         .eq("id", userId)
         .single()
+
+      if (error && error.code === 'PGRST116') {
+        // Not a staff member, check if it's a customer
+        const { data: customerData, error: customerError } = await supabase
+          .from("customers")
+          .select("id, email, name, branch_id")
+          .eq("user_id", userId)
+          .single()
+        
+        if (customerData) {
+          data = {
+            id: userId,
+            role: "customer" as UserRole,
+            email: customerData.email,
+            full_name: customerData.name,
+            branch_id: customerData.branch_id,
+            avatar_url: null,
+            customer_id: customerData.id // Extra field for convenience
+          }
+          error = null
+        }
+      }
 
       if (error) {
         console.error("Error fetching user profile:", error)

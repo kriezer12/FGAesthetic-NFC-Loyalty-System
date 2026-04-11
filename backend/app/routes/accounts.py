@@ -98,12 +98,17 @@ def create_account():
             caller_branch_id = caller_profile.data.get('branch_id')
 
             if caller_role == 'branch_admin':
-                if data.get('role') != 'staff':
-                    return jsonify({'error': 'Branch admin may only create staff accounts'}), 403
+                if data.get('role') not in ['staff', 'customer']:
+                    return jsonify({'error': 'Branch admin may only create staff or customer accounts'}), 403
                 
                 # Force branch_id to be same as admin's
                 if not caller_branch_id:
                     return jsonify({'error': 'Branch admin must have an assigned branch to create accounts'}), 403
+                
+                data['branch_id'] = caller_branch_id
+            elif caller_role == 'staff':
+                if data.get('role') != 'customer':
+                    return jsonify({'error': 'Staff may only create customer accounts'}), 403
                 
                 data['branch_id'] = caller_branch_id
             elif caller_role != 'super_admin':
@@ -146,20 +151,21 @@ def create_account():
         except Exception as e:
             return jsonify({'error': f'Auth user creation failed: {str(e)}'}), 500
 
-        # Upsert user profile with role, branch_id, first_login flag
+        # Upsert user profile with role, branch_id, first_login flag (skip if customer)
         try:
-            profile_payload = {
-                'id': user_id,
-                'email': data['email'],
-                'full_name': data.get('full_name', ''),
-                'role': data['role'],
-                'is_active': True,
-                'first_login': True,
-            }
-            if 'branch_id' in data:
-                profile_payload['branch_id'] = data.get('branch_id')
+            if data['role'] != 'customer':
+                profile_payload = {
+                    'id': user_id,
+                    'email': data['email'],
+                    'full_name': data.get('full_name', ''),
+                    'role': data['role'],
+                    'is_active': True,
+                    'first_login': True,
+                }
+                if 'branch_id' in data:
+                    profile_payload['branch_id'] = data.get('branch_id')
 
-            supabase_admin.table('user_profiles').upsert(profile_payload).execute()
+                supabase_admin.table('user_profiles').upsert(profile_payload).execute()
 
         except Exception as e:
             return jsonify({'error': f'User profile creation failed: {str(e)}'}), 500

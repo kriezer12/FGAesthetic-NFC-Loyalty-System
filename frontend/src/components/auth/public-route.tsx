@@ -23,18 +23,19 @@ interface PublicRouteProps {
 }
 
 export function PublicRoute({ children }: PublicRouteProps) {
-  const { user, loading } = useAuth()
+  const { user, userProfile, loading } = useAuth()
   const location = useLocation()
 
   // Show branded loading screen while checking auth state
-  if (loading) {
+  if (loading || (user && !userProfile)) {
     return <LoadingScreen />
   }
 
   // Redirect to dashboard if already authenticated
   // Check if there's a saved location to redirect to
-  if (user) {
-    const from = location.state?.from?.pathname || "/dashboard"
+  if (user && userProfile) {
+    const defaultFrom = userProfile.role === 'customer' ? "/portal/dashboard" : "/dashboard"
+    const from = location.state?.from?.pathname || defaultFrom
     return <Navigate to={from} replace />
   }
 

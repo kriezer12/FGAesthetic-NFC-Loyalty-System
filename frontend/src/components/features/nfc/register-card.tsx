@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
+import { apiCall } from "@/lib/api"
 import { applyAutomatedPoints } from "@/lib/loyalty-utils"
 import { validatePhilippinePhone } from "./register-card-parts/phone-utils"
 import { RegisterCardContactSection } from "./register-card-parts/register-card-contact-section"
@@ -13,8 +14,6 @@ import { initialRegisterCardFormData } from "./register-card-parts/register-card
 import { logUserAction } from "@/lib/user-log"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-import { ScrollArea } from "@/components/ui/scroll-area"
-
 import type { Customer } from "@/types/customer"
 
 interface RegisterCardProps {
@@ -24,7 +23,7 @@ interface RegisterCardProps {
 }
 
 export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps) {
-  const { userProfile } = useAuth()
+  const { userProfile, session } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState(initialRegisterCardFormData)
@@ -81,9 +80,33 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
     setIsLoading(true)
 
     try {
-      const { data, error: insertError } = await supabase
-        .from("customers")
-        .insert({
+      // 1. Create Supabase Auth User seamlessly behind the scenes if email is provided via the backend
+      // so we don't accidentally log out the current staff session
+      if (formData.email.trim()) {
+        try {
+          await apiCall("/api/accounts/create", {
+            method: "POST",
+            body: JSON.stringify({
+              email: formData.email.trim(),
+              role: "customer",
+              full_name: `${formData.first_name.trim()} ${formData.last_name.trim()}`
+            }),
+            authToken: session?.access_token,
+          })
+        } catch (err) {
+          console.error("Backend account creation failed (user might already exist):", err)
+        }
+      }
+
+      // The Postgres Trigger `handle_new_customer_signup` will have either generated a 
+      // customer record or we must link one. But since the trigger makes one for 'customer' role
+      // using a dummy NFC UID, it's safer to just let the NFC Card overwrite it, or just use
+      // the normal insert/upsert flow.
+
+      // Actually, since the trigger creates a row for them automatically if they are new, 
+      // let's do an UPSERT by email if they have one so we don't violate unique NFC constraints.
+      
+      const customerPayload = {
           nfc_uid: nfcUid,
           first_name: formData.first_name.trim(),
           middle_name: formData.middle_initial.trim() || null,
@@ -101,20 +124,42 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           points: 0,
           visits: 1,
           last_visit: new Date().toISOString(),
-          archived_at: null, // default active
-          last_inactive: null,
-          branch_id: userProfile?.branch_id || null, // Add branch from logged-in user
-        })
-        .select()
-        .single()
+      }
 
-      if (insertError) {
-        setError(insertError.message)
+      let updatedData = data
+      let finalError = insertError
+
+      // If email exists, try to upsert based on email to override what the Auth trigger generated
+      if (formData.email.trim()) {
+        const { data: upsertData, error: uError } = await supabase
+          .from("customers")
+          .upsert({ ...customerPayload, email: formData.email.trim() }, { onConflict: 'email' })
+          .select()
+          .single()
+        
+        if (!uError) {
+          updatedData = upsertData
+          finalError = null
+        }
+      } else {
+        const { data: insertData, error: iError } = await supabase
+          .from("customers")
+          .insert(customerPayload)
+          .select()
+          .single()
+        
+        updatedData = insertData
+        finalError = iError
+      }
+
+
+      if (finalError) {
+        setError(finalError.message)
         return
       }
 
       // Automatically apply points for first visit
-      const newCustomer = data as Customer
+      const newCustomer = updatedData as Customer
       await applyAutomatedPoints(newCustomer.id)
       
       // Fetch updated customer data
@@ -128,16 +173,16 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
       await logUserAction({
         actionType: "registered_new_client",
         entityType: "customer",
-        entityId: (data as Customer).id,
-        entityName: (data as Customer).name || `${(data as Customer).first_name || ""} ${(data as Customer).last_name || ""}`.trim() || "Customer",
+        entityId: (updatedData as Customer).id,
+        entityName: (updatedData as Customer).name || `${(updatedData as Customer).first_name || ""} ${(updatedData as Customer).last_name || ""}`.trim() || "Customer",
         changes: {
           before: null,
           after: {
-            id: (data as Customer).id,
-            nfc_uid: (data as Customer).nfc_uid,
-            name: (data as Customer).name,
-            email: (data as Customer).email,
-            phone: (data as Customer).phone,
+            id: (updatedData as Customer).id,
+            nfc_uid: (updatedData as Customer).nfc_uid,
+            name: (updatedData as Customer).name,
+            email: (updatedData as Customer).email,
+            phone: (updatedData as Customer).phone,
           },
         },
         metadata: {
@@ -145,7 +190,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
         },
       })
 
-      onSuccess(data as Customer)
+      onSuccess(updatedData as Customer)
     } catch (err) {
       setError("Failed to register card. Please try again.")
       console.error("Registration error:", err)

@@ -18,11 +18,16 @@ import { createRoot } from "react-dom/client"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import "./index.css"
 
-import { AuthProvider } from "./contexts/auth-context.tsx"
+import { AuthProvider, useAuth } from "./contexts/auth-context.tsx"
 import { ProtectedRoute, PublicRoute } from "./components/auth"
 import { DashboardLayout } from "./components/layout"
 
+import { RoleRoute } from "./components/auth/role-route"
+import { PortalLayout } from "./components/layout/portal/portal-layout"
+
 // Lazy load all page components for code splitting
+const PortalDashboard = lazy(() => import("./pages/portal/dashboard.tsx"))
+
 const Dashboard = lazy(() => import("./pages/dashboard.tsx"))
 const CheckinLogsPage = lazy(() => import("./pages/checkin-logs.tsx"))
 const UserLogsPage = lazy(() => import("./pages/user-logs.tsx"))
@@ -54,12 +59,23 @@ function PageLoader() {
   )
 }
 
+function RootRedirect() {
+  const { userProfile, loading } = useAuth()
+  if (loading) return <PageLoader />
+  if (userProfile?.role === "customer") return <Navigate to="/portal/dashboard" replace />
+  return <Navigate to="/dashboard" replace />
+}
+
 createRoot(document.getElementById('root')).render(
   <BrowserRouter>
     <AuthProvider>
       <Routes>
-        {/* Root redirects to dashboard (will redirect to login if not authenticated) */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Root redirects to dashboard based on role (will redirect to login if not authenticated) */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <RootRedirect />
+          </ProtectedRoute>
+        } />
         
         {/* Public routes - redirect to dashboard if already authenticated */}
         <Route path="/login" element={
@@ -78,9 +94,8 @@ createRoot(document.getElementById('root')).render(
           </Suspense>
         } />
         
-        {/* Protected routes - shared navbar layout */}
-        {/* Suspense is handled inside DashboardLayout so the navbar stays visible */}
-        <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+        {/* Protected Staff Admin routes */}
+        <Route element={<RoleRoute allowedRoles={["super_admin", "branch_admin", "staff"]} redirectPath="/portal/dashboard"><DashboardLayout /></RoleRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/scan" element={<NFCScanPage />} />
           <Route path="/dashboard/customers" element={<CustomersPage />} />
@@ -97,6 +112,11 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/pos-settings" element={<PosSettingsPage />} />
           <Route path="/dashboard/sales-reports" element={<SalesReportsPage />} />
           <Route path="/dashboard/equipment" element={<EquipmentPage />} />
+        </Route>
+
+        {/* Protected Customer routes */}
+        <Route element={<RoleRoute allowedRoles={["customer"]} redirectPath="/dashboard"><PortalLayout /></RoleRoute>}>
+          <Route path="/portal/dashboard" element={<PortalDashboard />} />
         </Route>
       </Routes>
     </AuthProvider>

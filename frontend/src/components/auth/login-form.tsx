@@ -9,6 +9,7 @@
 
 import { useState, useEffect, type ComponentProps, type FormEvent } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
+import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -25,9 +26,11 @@ type LoginFormProps = ComponentProps<"form">
 export function LoginForm({ className, ...props }: LoginFormProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { userProfile } = useAuth() // Assuming useAuth is imported, if not I need to add it inline
 
   // Get the redirect path from location state (set by ProtectedRoute)
-  const from = location.state?.from?.pathname || "/dashboard"
+  const defaultDashboard = userProfile?.role === "customer" ? "/portal/dashboard" : "/dashboard"
+  const from = location.state?.from?.pathname || defaultDashboard
   // Message passed via router state (e.g. after a successful password reset)
   const stateMessage: string | undefined = location.state?.message
 

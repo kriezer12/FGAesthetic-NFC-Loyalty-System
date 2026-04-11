@@ -81,6 +81,7 @@ export function SignupForm({ className, ...props }: SignupFormProps) {
         options: {
           data: {
             full_name: name,
+            role: "customer",
           },
         },
       })
