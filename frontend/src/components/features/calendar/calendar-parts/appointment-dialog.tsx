@@ -487,217 +487,242 @@ export function AppointmentDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0">
-          <div className="grid gap-4 px-5 py-4 pb-8 sm:grid-cols-2" id="appt-dialog-form">
+          <div className="flex flex-col gap-6 px-5 py-5 pb-8" id="appt-dialog-form">
 
-            {/* Appointment type */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="appt-type">Appointment Type</Label>
-              <Combobox
-                id="appt-type"
-                options={APPOINTMENT_TYPE_OPTIONS}
-                value={appointmentType}
-                onValueChange={(val) => setAppointmentType(val as "consultation" | "treatment" | "followup")}
-              />
-            </div>
-
-
-            {/* Status */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="appt-status">Status</Label>
-              <Combobox
-                id="appt-status"
-                options={statusOptions}
-                value={status}
-                onValueChange={(val) => setStatus(val as AppointmentStatus)}
-                placeholder="Select status..."
-                searchPlaceholder="Search status..."
-                emptyMessage="No status found."
-              />
-            </div>
-
-
-            {/* Services (only for non-consultation) */}
-            {appointmentType !== "consultation" && (
-              <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor="appt-services" className="flex items-center gap-1">
-                  Services <span className="text-destructive">*</span>
-                </Label>
-                <div id="appt-services">
-                <ServicePicker
-                  value={serviceIds}
-                  onChange={setServiceIds}
-                  showSelectedBadges
-                  compactSelectedPreview
-                />
+            {/* SECTION: Details */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <div className="h-6 w-1.5 bg-primary rounded-full"></div>
+                <h3 className="text-base font-semibold tracking-tight text-foreground">Appointment Details</h3>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Appointment type */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="appt-type">Appointment Type</Label>
+                  <Combobox
+                    id="appt-type"
+                    options={APPOINTMENT_TYPE_OPTIONS}
+                    value={appointmentType}
+                    onValueChange={(val) => setAppointmentType(val as "consultation" | "treatment" | "followup")}
+                  />
                 </div>
-              </div>
-            )}
 
-
-            {/* Customer */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="appt-customer">Customer</Label>
-              <Combobox
-                id="appt-customer"
-                options={customerOptions}
-                value={customerId}
-                onValueChange={handleCustomerChange}
-                placeholder="Search for a customer..."
-                searchPlaceholder="Type to search customers..."
-                emptyMessage={customersLoading ? "Loading..." : "No customers found."}
-              />
-            </div>
-
-
-            {/* Staff */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="appt-staff" className="flex items-center gap-1">
-                Staff <span className="text-destructive">*</span>
-              </Label>
-              <Combobox
-                id="appt-staff"
-                options={staffOptions}
-                value={staffId}
-                onValueChange={setStaffId}
-                placeholder="Select staff member..."
-                searchPlaceholder="Search staff..."
-                emptyMessage="No staff found."
-                aria-required={true}
-                aria-describedby={error ? "appt-form-error" : undefined}
-              />
-            </div>
-
-
-
-            {/* Appointment Date */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="appt-date">Appointment Date</Label>
-              <div id="appt-date">
-              <DatePicker
-                value={appointmentDate}
-                onChange={(date) => date && setAppointmentDate(date)}
-                placeholder="Select appointment date"
-              />
-              </div>
-            </div>
-
-
-            {/* Location */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="appt-location">Location</Label>
-              <Combobox
-                id="appt-location"
-                options={locationOptions}
-                value={locationType}
-                onValueChange={(val) => setLocationType(val as "branch" | "home_based")}
-                placeholder="Select location..."
-                searchPlaceholder="Search location..."
-                emptyMessage="No location found."
-              />
-            </div>
-
-
-            {/* Start / End times */}
-            <div className="grid grid-cols-2 gap-3 sm:col-span-2">
-              <div className="grid gap-1.5">
-                <Label htmlFor="appt-start" className="flex items-center gap-1">
-                  Start Time <span className="text-destructive">*</span>
-                </Label>
-                <div id="appt-start">
-                <TimePicker
-                  id="appt-start"
-                  value={startTime}
-                  onChange={setStartTime}
-                  minTime={minutesToTimeInput(clinicHours.open * 60)}
-                  maxTime={minutesToTimeInput(clinicHours.close * 60)}
-                  aria-required={true}
-                  aria-describedby={error ? "appt-form-error" : undefined}
-                />
-
+                {/* Status */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="appt-status">Status</Label>
+                  <Combobox
+                    id="appt-status"
+                    options={statusOptions}
+                    value={status}
+                    onValueChange={(val) => setStatus(val as AppointmentStatus)}
+                    placeholder="Select status..."
+                    searchPlaceholder="Search status..."
+                    emptyMessage="No status found."
+                  />
                 </div>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="appt-end" className="flex items-center gap-1">
-                  End Time <span className="text-destructive">*</span>
-                </Label>
-                <div id="appt-end">
-                <TimePicker
-                  id="appt-end"
-                  value={endTime}
-                  onChange={setEndTime}
-                  minTime={minutesToTimeInput(clinicHours.open * 60)}
-                  maxTime={minutesToTimeInput(clinicHours.close * 60)}
-                  aria-required={true}
-                  aria-describedby={error ? "appt-form-error" : undefined}
-                />
 
-                </div>
-              </div>
-            </div>
-
-
-            {/* Recurrence */}
-            {hasPackageSelected && (
-              <div className="sm:col-span-2 rounded-md border bg-muted/40 p-3 grid gap-3">
-                <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="appt-recur-days">Days between sessions</Label>
-                    <Input
-                      id="appt-recur-days"
-                      type="number"
-                      min={1}
-                      value={recurrenceInterval ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setRecurrenceInterval(val === "" ? "" : (parseInt(val, 10) || undefined) as any)
-                      }}
-                      placeholder="7 (weekly)"
+                {/* Services (only for non-consultation) */}
+                {appointmentType !== "consultation" && (
+                  <div className="grid gap-1.5 sm:col-span-2">
+                    <Label htmlFor="appt-services" className="flex items-center gap-1">
+                      Services <span className="text-destructive">*</span>
+                    </Label>
+                    <div id="appt-services">
+                    <ServicePicker
+                      value={serviceIds}
+                      onChange={setServiceIds}
+                      showSelectedBadges
+                      compactSelectedPreview
                     />
+                    </div>
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="appt-recur-count">Total sessions</Label>
-                    <Input
-                      id="appt-recur-count"
-                      type="number"
-                      min={1}
-                      value={recurrenceCount ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setRecurrenceCount(val === "" ? "" : (parseInt(val, 10) || 1) as any)
-                      }}
-                    />
+                )}
+              </div>
+            </div>
+
+            {/* SECTION: Participants */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <div className="h-6 w-1.5 bg-primary/70 rounded-full"></div>
+                <h3 className="text-base font-semibold tracking-tight text-foreground">Participants</h3>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Customer */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="appt-customer">Customer</Label>
+                  <Combobox
+                    id="appt-customer"
+                    options={customerOptions}
+                    value={customerId}
+                    onValueChange={handleCustomerChange}
+                    placeholder="Search for a customer..."
+                    searchPlaceholder="Type to search customers..."
+                    emptyMessage={customersLoading ? "Loading..." : "No customers found."}
+                  />
+                </div>
+
+                {/* Staff */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="appt-staff" className="flex items-center gap-1">
+                    Staff <span className="text-destructive">*</span>
+                  </Label>
+                  <Combobox
+                    id="appt-staff"
+                    options={staffOptions}
+                    value={staffId}
+                    onValueChange={setStaffId}
+                    placeholder="Select staff member..."
+                    searchPlaceholder="Search staff..."
+                    emptyMessage="No staff found."
+                    aria-required={true}
+                    aria-describedby={error ? "appt-form-error" : undefined}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION: Time & Location */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <div className="h-6 w-1.5 bg-primary/40 rounded-full"></div>
+                <h3 className="text-base font-semibold tracking-tight text-foreground">Schedule & Location</h3>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Appointment Date */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="appt-date">Appointment Date</Label>
+                  <div id="appt-date">
+                  <DatePicker
+                    value={appointmentDate}
+                    onChange={(date) => date && setAppointmentDate(date)}
+                    placeholder="Select appointment date"
+                  />
                   </div>
                 </div>
-              </div>
-            )}
 
+                {/* Location */}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="appt-location">Location</Label>
+                  <Combobox
+                    id="appt-location"
+                    options={locationOptions}
+                    value={locationType}
+                    onValueChange={(val) => setLocationType(val as "branch" | "home_based")}
+                    placeholder="Select location..."
+                    searchPlaceholder="Search location..."
+                    emptyMessage="No location found."
+                  />
+                </div>
 
-            {/* Notes */}
-            <div className="grid gap-1.5 sm:col-span-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="appt-notes">Notes</Label>
-                <span className={`text-xs tabular-nums ${
-                  notes.length > 360 ? "text-destructive" : "text-muted-foreground"
-                }`}>
-                  {notes.length}/400
-                </span>
+                {/* Start / End times */}
+                <div className="grid grid-cols-2 gap-3 sm:col-span-2">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="appt-start" className="flex items-center gap-1">
+                      Start Time <span className="text-destructive">*</span>
+                    </Label>
+                    <div id="appt-start">
+                    <TimePicker
+                      id="appt-start"
+                      value={startTime}
+                      onChange={setStartTime}
+                      minTime={minutesToTimeInput(clinicHours.open * 60)}
+                      maxTime={minutesToTimeInput(clinicHours.close * 60)}
+                      aria-required={true}
+                      aria-describedby={error ? "appt-form-error" : undefined}
+                    />
+
+                    </div>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="appt-end" className="flex items-center gap-1">
+                      End Time <span className="text-destructive">*</span>
+                    </Label>
+                    <div id="appt-end">
+                    <TimePicker
+                      id="appt-end"
+                      value={endTime}
+                      onChange={setEndTime}
+                      minTime={minutesToTimeInput(clinicHours.open * 60)}
+                      maxTime={minutesToTimeInput(clinicHours.close * 60)}
+                      aria-required={true}
+                      aria-describedby={error ? "appt-form-error" : undefined}
+                    />
+
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recurrence */}
+                {hasPackageSelected && (
+                  <div className="sm:col-span-2 rounded-md border bg-muted/40 p-3 grid gap-3">
+                    <p className="text-xs text-muted-foreground font-medium">Package scheduling — appointments will be created automatically</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="appt-recur-days">Days between sessions</Label>
+                        <Input
+                          id="appt-recur-days"
+                          type="number"
+                          min={1}
+                          value={recurrenceInterval ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setRecurrenceInterval(val === "" ? "" : (parseInt(val, 10) || undefined) as any)
+                          }}
+                          placeholder="7 (weekly)"
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="appt-recur-count">Total sessions</Label>
+                        <Input
+                          id="appt-recur-count"
+                          type="number"
+                          min={1}
+                          value={recurrenceCount ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setRecurrenceCount(val === "" ? "" : (parseInt(val, 10) || 1) as any)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <Textarea
-                ref={notesRef}
-                id="appt-notes"
-                rows={2}
-                maxLength={400}
-                className="resize-none min-h-[76px] max-h-[180px] overflow-y-auto"
-                placeholder="Skin/hair sensitivities, product preferences, allergies, follow-up reminders..."
-                value={notes}
-                onChange={(e) => {
-                  setNotes(e.target.value)
-                }}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Use for skin/hair sensitivities, preferences, product notes, or follow-up reminders.
-              </p>
+            </div>
+
+            {/* SECTION: Additional Notes */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b pb-2">
+                <div className="h-6 w-1.5 bg-muted rounded-full"></div>
+                <h3 className="text-base font-semibold tracking-tight text-foreground">Additional Info</h3>
+              </div>
+              
+              {/* Notes */}
+              <div className="grid gap-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="appt-notes">Notes</Label>
+                  <span className={`text-xs tabular-nums ${
+                    notes.length > 360 ? "text-destructive" : "text-muted-foreground"
+                  }`}>
+                    {notes.length}/400
+                  </span>
+                </div>
+                <Textarea
+                  ref={notesRef}
+                  id="appt-notes"
+                  rows={2}
+                  maxLength={400}
+                  className="resize-none min-h-[76px] max-h-[180px] overflow-y-auto"
+                  placeholder="Skin/hair sensitivities, product preferences, allergies, follow-up reminders..."
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value)
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Use for skin/hair sensitivities, preferences, product notes, or follow-up reminders.
+                </p>
+              </div>
             </div>
 
             {/* Validation error */}
@@ -705,7 +730,7 @@ export function AppointmentDialog({
               <p 
                 id="appt-form-error"
                 role="alert"
-                className="sm:col-span-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
               >
                 {error}
               </p>

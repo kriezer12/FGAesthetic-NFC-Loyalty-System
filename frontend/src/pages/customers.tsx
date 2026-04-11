@@ -24,6 +24,8 @@ import {
   Trash2,
   Download,
   Plus,
+  Camera,
+  Upload,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -32,7 +34,7 @@ import { useAppointments } from "@/hooks/use-appointments"
 import { useBranches } from "@/hooks/use-branches"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -52,9 +54,12 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { AppointmentDialog } from "@/components/features/calendar/calendar-parts/appointment-dialog"
+import { CameraCaptureDialog } from "@/components/ui/camera-capture-dialog"
 import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
+import { TreatmentHistory } from "@/components/features/customers/treatment-history"
+import { TreatmentStatusManager } from "@/components/features/customers/treatment-status-manager"
 import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
@@ -91,7 +96,7 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
   // which panel is shown inside the customer modal
-  const [modalView, setModalView] = useState<"details" | "treatments" | "loyalty">("details")
+  const [modalView, setModalView] = useState<"details" | "appointments" | "treatments" | "loyalty">("details")
   const [profileEditorOpen, setProfileEditorOpen] = useState(false)
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
   const [profileForm, setProfileForm] = useState({
@@ -344,6 +349,8 @@ export default function CustomersPage() {
   const [treatmentGalleryUploading, setTreatmentGalleryUploading] = useState(false)
   const [treatmentConsentUploading, setTreatmentConsentUploading] = useState(false)
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
+  const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false)
+  const [cameraCaptureType, setCameraCaptureType] = useState<"before" | "after" | "other" | "consent" | "none">("none")
   
   const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
@@ -1011,65 +1018,96 @@ export default function CustomersPage() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedCustomers = filteredCustomers.slice(startIndex, startIndex + itemsPerPage)
 
-  return (
-    <div>
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Clients</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalClientsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Points Issued</CardTitle>
-                <Award className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalPointsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Visits</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalVisitsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Registered Cards</CardTitle>
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{registeredCardsCount.toLocaleString()}</div>
-              </CardContent>
-            </Card>
-          </div>
+  const appointmentGroups = useMemo(() => {
+    if (!selectedCustomer) return []
+    const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer.id)
+    const displayAppts = customerAppts
+      .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
+      .flatMap((a) => {
+        if (a.service_ids && a.service_ids.length > 1) {
+          return a.service_ids.map((sid) => ({
+            ...a,
+            virtualServiceId: sid,
+            title: serviceMap.get(sid)?.name || a.title,
+            service_ids: [sid],
+          }))
+        }
+        return [a]
+      })
 
-          <div className="mb-6 flex flex-col gap-4 md:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, email, phone, or NFC ID..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+    const grouped = displayAppts.reduce((acc, a) => {
+      const keyBase = a.recurrence_group_id || a.id
+      const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
+      const key = `${keyBase}:${svcSuffix}`
+      if (!acc[key]) {
+        acc[key] = {
+          id: key,
+          isPackage: !!a.recurrence_group_id,
+          sessions: [a],
+          primaryAppointment: a,
+        };
+      } else {
+        acc[key].sessions.push(a);
+      }
+      return acc;
+    }, {} as Record<string, { id: string; isPackage: boolean; sessions: typeof displayAppts; primaryAppointment: (typeof displayAppts)[0] }>);
+
+    const groupList = Object.values(grouped).map(g => {
+      g.sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+      g.primaryAppointment = g.sessions[0];
+      return g;
+    });
+
+    groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
+    return groupList
+  }, [appointments, selectedCustomer, serviceMap])
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        {[
+          { title: "Total Clients", value: totalClientsCount, icon: <Users className="h-5 w-5" /> },
+          { title: "Total Points Issued", value: totalPointsCount, icon: <Award className="h-5 w-5" /> },
+          { title: "Total Visits", value: totalVisitsCount, icon: <Calendar className="h-5 w-5" /> },
+          { title: "Registered Cards", value: registeredCardsCount, icon: <CreditCard className="h-5 w-5" /> }
+        ].map((stat, idx) => (
+          <div key={idx} className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-6 border border-primary/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10 hover:-translate-y-1">
+            <div className="absolute -right-6 -top-6 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+            <div className="relative z-10 flex flex-row items-center justify-between mb-4">
+              <span className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">{stat.title}</span>
+              <div className="rounded-full bg-primary/20 dark:bg-primary/20 p-2 text-primary dark:text-primary shadow-sm">
+                {stat.icon}
+              </div>
             </div>
-            <Button variant={showFilters ? "secondary" : "outline"} onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="mr-2 h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">Active</span>
-              )}
-            </Button>
+            <div className="relative z-10 text-3xl font-bold text-foreground">
+              {stat.value.toLocaleString()}
+            </div>
           </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-4 md:flex-row">
+        <div className="relative flex-1 group">
+          <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+          <Input
+            placeholder="Search by name, email, phone, or NFC ID..."
+            className="pl-12 h-12 rounded-full border-border/50 bg-background/50 backdrop-blur-sm transition-all hover:bg-background focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Button 
+          variant={showFilters ? "default" : "outline"} 
+          className={`h-12 rounded-full px-6 transition-all shadow-sm ${showFilters ? 'bg-primary hover:bg-primary/80 text-primary-foreground' : 'hover:border-primary hover:text-primary'}`}
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <Filter className="mr-2 h-4 w-4" />
+          Filters
+          {hasActiveFilters && (
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${showFilters ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary/20 text-primary/80 dark:bg-primary/20 dark:text-primary'}`}>Active</span>
+          )}
+        </Button>
+      </div>
 
           {showFilters && (
             <div className="mb-6 flex flex-wrap gap-4 rounded-lg bg-muted/50 p-4">
@@ -1174,7 +1212,7 @@ export default function CustomersPage() {
             </Button>
           </div>
 
-          <div className="rounded-lg border bg-card">
+          <div className="rounded-2xl border border-border/40 bg-card overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -1208,15 +1246,15 @@ export default function CustomersPage() {
                           <tr
                             onClick={() => setSelectedCustomer(customer)}
                             className={
-                              "border-b transition-colors hover:bg-muted/30 cursor-pointer" +
+                              "border-b transition-all duration-200 hover:bg-primary/5 cursor-pointer" +
                               ((isArchivedClient(customer) || isInactiveClient(customer)) ? " opacity-50" : "") +
                               (isArchivedClient(customer) ? " italic" : "")
                             }
                           >
                             <td className="p-4">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                                  <span className="text-sm font-medium text-primary">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/20 dark:bg-foreground/30 shadow-sm ring-1 ring-primary/50">
+                                  <span className="text-sm font-bold text-primary/80 dark:text-primary">
                                     {customer.first_name?.[0] || customer.name?.[0] || "?"}
                                     {customer.last_name?.[0] || ""}
                                   </span>
@@ -1276,7 +1314,7 @@ export default function CustomersPage() {
                               )}
                             </td>
                             <td className="p-4">
-                              <span className="font-semibold text-primary">{customer.points || 0}</span>
+                              <span className="font-semibold text-primary dark:text-primary">{customer.points || 0}</span>
                             </td>
                             <td className="p-4">{customer.visits || 0}</td>
                             <td className="p-4 text-sm text-muted-foreground relative">
@@ -1286,9 +1324,9 @@ export default function CustomersPage() {
                                   {isArchivedClient(customer) ? (
                                     <Archive className="h-4 w-4 text-red-600" />
                                   ) : (
-                                    <Clock className="h-4 w-4 text-gray-500" />
+                                    <Clock className="h-4 w-4 text-muted-foreground" />
                                   )}
-                                  <span className={isArchivedClient(customer) ? "text-red-600" : "text-gray-500"}>
+                                  <span className={isArchivedClient(customer) ? "text-red-600" : "text-muted-foreground"}>
                                     {isArchivedClient(customer) ? "Archived" : "Inactive"}
                                   </span>
                                 </div>
@@ -1368,8 +1406,8 @@ export default function CustomersPage() {
             <p className="text-sm text-muted-foreground">Client since {formatDate(selectedCustomer?.created_at)}</p>
           </DialogHeader>
 
-          <div className="flex h-[calc(90vh-5.25rem)]">
-            <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/20 p-4">
+          <div className="flex h-[calc(90vh-5.25rem)] bg-background">
+            <div className="hidden md:flex w-64 shrink-0 flex-col gap-2 border-r bg-muted/10 p-4">
               <h4 className="text-sm font-semibold text-muted-foreground">Quick Actions</h4>
               <Button
                 variant={modalView === "details" ? "default" : "outline"}
@@ -1380,12 +1418,20 @@ export default function CustomersPage() {
                 Details
               </Button>
               <Button
+                variant={modalView === "appointments" ? "default" : "outline"}
+                className="justify-start"
+                onClick={() => setModalView("appointments")}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                Appointments
+              </Button>
+              <Button
                 variant={modalView === "treatments" ? "default" : "outline"}
                 className="justify-start"
                 onClick={() => setModalView("treatments")}
               >
                 <Award className="mr-2 h-4 w-4" />
-                Treatments
+                Treatment History
               </Button>
               <Button
                 variant={modalView === "loyalty" ? "default" : "outline"}
@@ -1424,26 +1470,28 @@ export default function CustomersPage() {
                 <> {/* details view */}
                   {/* Stats Cards */}
                   <div className="grid grid-cols-2 gap-4">
-                    <Card className="border-primary/20 bg-primary/5">
-                      <CardContent className="p-6">
+                    <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
+                      <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
+                      <CardContent className="p-6 relative z-10">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Points</p>
-                            <p className="text-3xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                            <p className="text-sm tracking-tight font-medium text-foreground/70 dark:text-foreground/70">Total Points</p>
+                            <p className="text-3xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
                           </div>
-                          <Award className="h-10 w-10 text-primary" />
+                          <Award className="h-10 w-10 text-primary drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                         </div>
                       </CardContent>
                     </Card>
                     
-                    <Card>
-                      <CardContent className="p-6">
+                    <Card className="group relative overflow-hidden border-zinc-500/20 bg-gradient-to-br from-zinc-500/10 to-zinc-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-500/10">
+                      <div className="absolute -right-4 -top-4 rounded-full bg-zinc-500/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
+                      <CardContent className="p-6 relative z-10">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <p className="text-sm font-medium text-muted-foreground">Total Visits</p>
-                            <p className="text-3xl font-bold">{selectedCustomer?.visits || 0}</p>
+                            <p className="text-sm tracking-tight font-medium text-zinc-500">Total Visits</p>
+                            <p className="text-3xl font-bold text-zinc-700 dark:text-zinc-300">{selectedCustomer?.visits || 0}</p>
                           </div>
-                          <Calendar className="h-10 w-10 text-muted-foreground" />
+                          <Calendar className="h-10 w-10 text-zinc-500 dark:text-zinc-400" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1454,7 +1502,7 @@ export default function CustomersPage() {
                   {/* Contact Information */}
                   <div className="space-y-4">
                     <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Phone className="h-4 w-4" />
+                      <Phone className="h-4 w-4 text-primary" />
                       Contact Information
                     </h4>
                     <div className="space-y-3 pl-6">
@@ -1484,7 +1532,7 @@ export default function CustomersPage() {
                   {/* Profile Details */}
                   <div className="space-y-4">
                     <h4 className="text-base font-semibold flex items-center gap-2">
-                      <Users className="h-4 w-4" />
+                      <Users className="h-4 w-4 text-primary" />
                       Profile Details
                     </h4>
                     <div className="grid grid-cols-2 gap-4 pl-6">
@@ -1545,29 +1593,31 @@ export default function CustomersPage() {
                 <> {/* Loyalty tab view */}
                   <div className="space-y-6">
                     <h4 className="text-xl font-semibold flex items-center gap-2">
-                      <Award className="h-5 w-5 text-primary" />
+                      <Award className="h-6 w-6 text-primary drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
                       Loyalty Points & Rewards
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="border-primary/20 bg-primary/5">
-                        <CardContent className="p-6">
+                      <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
+                        <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+                        <CardContent className="p-6 relative z-10">
                           <div className="flex items-center justify-between">
                             <div className="space-y-1" aria-live="polite" aria-atomic="true">
-                              <p className="text-sm font-medium text-muted-foreground">Available Points</p>
-                              <p className="text-4xl font-bold text-primary">{selectedCustomer?.points || 0}</p>
+                              <p className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">Available Points</p>
+                              <p className="text-5xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
                             </div>
 
-                            <Award className="h-12 w-12 text-primary opacity-50" />
+                            <Award className="h-16 w-16 text-primary/30" />
                           </div>
                         </CardContent>
                       </Card>
 
-                      <Card>
-                        <CardContent className="p-6 text-center flex flex-col items-center justify-center">
-                          <p className="text-sm font-medium text-muted-foreground mb-1">Total Visits</p>
-                          <p className="text-2xl font-bold">{selectedCustomer?.visits || 0}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Client since {formatDate(selectedCustomer?.created_at)}</p>
+                      <Card className="group relative overflow-hidden border-zinc-500/20 bg-gradient-to-br from-zinc-500/10 to-zinc-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-500/10">
+                        <div className="absolute -right-4 -top-4 rounded-full bg-zinc-500/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+                        <CardContent className="p-6 text-center flex flex-col items-center justify-center relative z-10 h-full">
+                          <p className="text-sm font-semibold tracking-tight text-zinc-500 mb-1">Total Visits</p>
+                          <p className="text-4xl font-bold text-zinc-700 dark:text-zinc-300">{selectedCustomer?.visits || 0}</p>
+                          <p className="text-xs text-zinc-500 mt-2 font-medium">Client since {formatDate(selectedCustomer?.created_at)}</p>
                         </CardContent>
                       </Card>
                     </div>
@@ -1597,8 +1647,8 @@ export default function CustomersPage() {
                     </div>
                   </div>
                 </>
-              ) : modalView === "treatments" ? (
-                <> {/* treatments view */}
+              ) : modalView === "appointments" ? (
+                <> {/* appointments view */}
                   {selectedCustomer && (
                     <>
                       {/* appointment log list */}
@@ -1611,53 +1661,6 @@ export default function CustomersPage() {
                         ) : (
                           <div className="space-y-2">
                             {(() => {
-                              const customerAppts = appointments.filter((a) => a.customer_id === selectedCustomer?.id);
-
-                              // Hide standalone cancelled appointments from history (they shouldn't be stored there)
-                              // Packages still show cancelled sessions so they can be rescheduled.
-                              const displayAppts = customerAppts
-                                .filter((a) => a.recurrence_group_id || a.status !== "cancelled")
-                                .flatMap((a) => {
-                                  if (a.service_ids && a.service_ids.length > 1) {
-                                    return a.service_ids.map((sid) => ({
-                                      ...a,
-                                      virtualServiceId: sid,
-                                      title: serviceMap.get(sid)?.name || a.title,
-                                      service_ids: [sid],
-                                    }))
-                                  }
-                                  return [a]
-                                })
-
-                              // Group by recurrence_group_id + service, or just appointment + service
-                              const grouped = displayAppts.reduce((acc, a) => {
-                                const keyBase = a.recurrence_group_id || a.id
-                                const svcSuffix = (a as any).virtualServiceId || a.service_ids?.[0] || ""
-                                const key = `${keyBase}:${svcSuffix}`
-                                if (!acc[key]) {
-                                  acc[key] = {
-                                    id: key,
-                                    isPackage: !!a.recurrence_group_id,
-                                    sessions: [a],
-                                    primaryAppointment: a,
-                                  };
-                                } else {
-                                  acc[key].sessions.push(a);
-                                }
-                                return acc;
-                              }, {} as Record<string, { id: string; isPackage: boolean; sessions: typeof displayAppts; primaryAppointment: (typeof displayAppts)[0] }>);
-
-                              const groupList = Object.values(grouped).map(g => {
-                                // sort sessions ascending by date
-                                g.sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-                                // set the primary to the first session, so docs are always stored against the first session's ID
-                                g.primaryAppointment = g.sessions[0];
-                                return g;
-                              });
-
-                              // Sort groups by the start time of their primary appointment (descending for history)
-                              groupList.sort((a, b) => new Date(b.primaryAppointment.start_time).getTime() - new Date(a.primaryAppointment.start_time).getTime());
-
                               const openTreatmentDocForGroup = (g: { sessions: any[]; isPackage: boolean; primaryAppointment: any }) => {
                                 const a = g.primaryAppointment
                                 if (a.customer_id && a.id) {
@@ -1678,7 +1681,7 @@ export default function CustomersPage() {
                                 }
                               }
 
-                              return groupList.map((g) => {
+                              return appointmentGroups.map((g) => {
                                 const a = g.primaryAppointment
                                 const totalSessions = g.sessions.length
                                 const completedCount = g.sessions.filter((s) => s.status === "completed").length
@@ -1814,6 +1817,64 @@ export default function CustomersPage() {
                     </>
                   )}
                 </>
+              ) : modalView === "treatments" ? (
+                <> {/* treatments tab view */}
+                  {selectedCustomer && (
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-semibold">Active Treatments</h4>
+                        {(() => {
+                           const activePackages = appointmentGroups.filter(g => g.isPackage && !g.sessions.every(s => s.status === "completed" || s.status === "cancelled"))
+                           if (activePackages.length === 0) return <p className="text-sm text-muted-foreground">No active treatments found.</p>
+                           
+                           return activePackages.map(g => {
+                             const totalSessions = g.sessions.length
+                             const completedCount = g.sessions.filter((s) => s.status === "completed").length
+                             const title = g.primaryAppointment.title
+
+                             return (
+                               <div key={g.id} className="flex flex-col gap-1 p-3 rounded-lg border bg-card/50">
+                                 <div className="flex justify-between items-center">
+                                   <span className="font-medium">{title}</span>
+                                   <span className="text-sm text-muted-foreground">{completedCount} / {totalSessions} completed</span>
+                                 </div>
+                                 <div className="w-full bg-muted rounded-full h-2 mt-1">
+                                   <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(completedCount / totalSessions) * 100}%` }}></div>
+                                 </div>
+                               </div>
+                             )
+                           })
+                        })()}
+
+                        <h4 className="text-lg font-semibold mt-6">Completed Treatments</h4>
+                        {(() => {
+                           const completedPackages = appointmentGroups.filter(g => g.isPackage && g.sessions.length > 0 && g.sessions.every(s => s.status === "completed" || s.status === "cancelled"))
+                           if (completedPackages.length === 0) return <p className="text-sm text-muted-foreground">No completed treatments found.</p>
+
+                           return completedPackages.map(g => {
+                             const totalSessions = g.sessions.length
+                             const completedCount = g.sessions.filter((s) => s.status === "completed").length
+                             const title = g.primaryAppointment.title
+
+                             return (
+                               <div key={g.id} className="flex flex-col gap-1 p-3 rounded-lg border bg-muted/40 opacity-70">
+                                 <div className="flex justify-between items-center">
+                                   <span className="font-medium line-through">{title}</span>
+                                   <span className="text-sm text-muted-foreground">{completedCount} / {totalSessions} completed</span>
+                                 </div>
+                               </div>
+                             )
+                           })
+                        })()}
+                      </div>
+                      <Separator />
+                      <div>
+                        <h4 className="text-lg font-semibold mb-3">Treatment History Log</h4>
+                        <TreatmentHistory customerId={selectedCustomer.id} refreshKey={historyRefreshKey} />
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : null}
 
               <div className="space-y-3 pb-2 md:hidden">
@@ -1821,18 +1882,25 @@ export default function CustomersPage() {
                 <h4 className="text-base font-semibold">Quick Actions</h4>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button
-                    variant="outline"
+                    variant={modalView === "details" ? "default" : "outline"}
                     onClick={() => setModalView("details")}
                   >
                     <Eye className="mr-2 h-4 w-4" />
                     Details
                   </Button>
                   <Button
+                    variant={modalView === "appointments" ? "default" : "outline"}
+                    onClick={() => setModalView("appointments")}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Appointments
+                  </Button>
+                  <Button
                     variant={modalView === "treatments" ? "default" : "outline"}
                     onClick={() => setModalView("treatments")}
                   >
                     <Award className="mr-2 h-4 w-4" />
-                    Treatments
+                    Treatment History
                   </Button>
                   <Button
                     variant={modalView === "loyalty" ? "default" : "outline"}
@@ -2392,18 +2460,33 @@ export default function CustomersPage() {
                             <div key={type} className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm font-medium">{label}</p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    document
-                                      .getElementById(`treatment-${type}-input`)
-                                      ?.click()
-                                  }
-                                  disabled={treatmentGalleryUploading}
-                                >
-                                  Upload
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setCameraCaptureType(type as "before" | "after")
+                                      setCameraCaptureOpen(true)
+                                    }}
+                                    disabled={treatmentGalleryUploading}
+                                  >
+                                    <Camera className="w-4 h-4 mr-2" />
+                                    Camera
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      document
+                                        .getElementById(`treatment-${type}-input`)
+                                        ?.click()
+                                    }
+                                    disabled={treatmentGalleryUploading}
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload
+                                  </Button>
+                                </div>
                               </div>
                               {photos.length > 0 ? (
                                 <div className="grid grid-cols-2 gap-3">
@@ -2519,14 +2602,29 @@ export default function CustomersPage() {
                       ) : (
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-muted-foreground">No consent form uploaded yet.</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
-                            disabled={treatmentConsentUploading}
-                          >
-                            Upload
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setCameraCaptureType("consent")
+                                setCameraCaptureOpen(true)
+                              }}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Camera className="w-4 h-4 mr-2" />
+                              Camera
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => document.getElementById('treatment-consent-form-input')?.click()}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Upload className="w-4 h-4 mr-2" />
+                              Upload
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2604,11 +2702,22 @@ export default function CustomersPage() {
                           ))}
                         <button
                           className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
+                          onClick={() => {
+                            setCameraCaptureType("other")
+                            setCameraCaptureOpen(true)
+                          }}
+                          disabled={treatmentGalleryUploading}
+                        >
+                          <Camera className="h-5 w-5 text-primary" />
+                          Camera
+                        </button>
+                        <button
+                          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-xs text-muted-foreground hover:border-primary hover:bg-primary/5"
                           onClick={() => document.getElementById('treatment-other-input')?.click()}
                           disabled={treatmentGalleryUploading}
                         >
-                          <Plus className="h-5 w-5 text-primary" />
-                          Add Photo
+                          <Upload className="h-5 w-5 text-primary" />
+                          Upload
                         </button>
                       </div>
                     </div>
@@ -2697,6 +2806,18 @@ export default function CustomersPage() {
         prefillCustomerId={prefillCustomer?.id}
         prefillCustomerName={prefillCustomer?.name || `${prefillCustomer?.first_name || ''} ${prefillCustomer?.last_name || ''}`.trim()}
         prefillServiceIds={prefillServiceIds}
+      />
+
+      <CameraCaptureDialog
+        open={cameraCaptureOpen}
+        onOpenChange={setCameraCaptureOpen}
+        onCapture={(file) => {
+          if (cameraCaptureType === "consent") {
+            handleTreatmentConsentFormUpload(file)
+          } else if (cameraCaptureType !== "none") {
+            handleTreatmentPhotoUpload(file, cameraCaptureType)
+          }
+        }}
       />
     </div>
   )

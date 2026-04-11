@@ -1,4 +1,12 @@
-export const GOLD = "var(--color-primary)"
+// Semantic chart colors using CSS variables (resolved at runtime)
+export const ROSE   = "var(--color-chart-1)"
+export const VIOLET = "var(--color-chart-2)"
+export const SKY    = "var(--color-chart-3)"
+export const AMBER  = "var(--color-chart-4)"
+export const EMERALD = "var(--color-chart-5)"
+
+/** @deprecated use ROSE */
+export const GOLD = ROSE
 
 export type TimeFilter = "daily" | "weekly" | "yearly"
 

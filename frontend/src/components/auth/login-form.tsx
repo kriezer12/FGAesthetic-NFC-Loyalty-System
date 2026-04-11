@@ -268,7 +268,7 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
 
         {/* Submit button */}
         <Field>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading} className="bg-muted-foreground hover:bg-muted-foreground/80 text-background">
             {loading ? "Logging in..." : "Login"}
           </Button>
         </Field>

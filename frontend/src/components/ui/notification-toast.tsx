@@ -75,7 +75,7 @@ export function NotificationToast({
           <div className="flex-shrink-0 mt-0.5">
             {type === "warning" ? (
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
-                <Clock className="h-5 w-5 text-yellow-600" aria-hidden="true" />
+                <Clock className="h-5 w-5 text-primary" aria-hidden="true" />
               </div>
             ) : (
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

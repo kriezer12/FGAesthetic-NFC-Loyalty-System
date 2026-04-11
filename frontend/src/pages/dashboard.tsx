@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback, lazy, Suspense } fro
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check, Calendar, Package, ClipboardList, UserPlus } from "lucide-react"
+import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check, Calendar, Package, ClipboardList, UserPlus, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -96,6 +96,10 @@ function DraggableSection({ id, editMode, dragOver, onDragStart, onDragOver, onD
 }
 
 // ---------------------------------------------------------------------------
+// Stat Card configs — flat light gold icon bg
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function Dashboard() {
@@ -149,12 +153,8 @@ export default function Dashboard() {
     loadAll()
   }, [])
 
-  // When a modal with charts opens we need to trigger a resize event
-  // so Recharts can recalculate dimensions. The modal is initially
-  // hidden which can cause the animation/render to misbehave.
   useEffect(() => {
     if (openModal) {
-      // dispatch after paint so charts can measure themselves
       setTimeout(() => window.dispatchEvent(new Event("resize")), 50)
     }
   }, [openModal])
@@ -188,11 +188,14 @@ export default function Dashboard() {
 
   // ── Stat cards config ────────────────────────────────────────────────────
   const statCards = useMemo(() => [
-    { title: "Total Customers", value: loading ? "—" : totalCustomersCount.toLocaleString(), sub: "Registered", icon: Users, id: "customers" as const },
+    { title: "Total Customers", value: loading ? "—" : totalCustomersCount.toLocaleString(), sub: "Registered members", icon: Users, id: "customers" as const },
     { title: "Active NFC Cards", value: loading ? "—" : activeCardsCount.toLocaleString(), sub: "Linked cards", icon: CreditCard, id: "cards" as const },
-    { title: "Total Visits", value: loading ? "—" : totalVisitsCount.toLocaleString(), sub: "All-time", icon: TrendingUp, id: "visits" as const },
+    { title: "Total Visits", value: loading ? "—" : totalVisitsCount.toLocaleString(), sub: "All-time check-ins", icon: TrendingUp, id: "visits" as const },
     { title: "Recent Activity", value: loading ? "—" : recentActivityCount.toLocaleString(), sub: "Last 7 days", icon: Activity, id: "activity" as const },
   ], [loading, totalCustomersCount, activeCardsCount, totalVisitsCount, recentActivityCount])
+
+  // ── Quick actions config — flat light gold icons ──────────────────────────
+  const quickActionIconBg = "bg-primary/10 border border-primary/20 text-primary"
 
   // ── Section renderers ────────────────────────────────────────────────────
   const sectionMap: Record<SectionId, React.ReactNode> = useMemo(() => ({
@@ -200,27 +203,25 @@ export default function Dashboard() {
       /* ── Stat Cards ─────────────────────────────────────────────────── */
       <div className="space-y-3">
         <h2 className="sr-only">Statistical Overview</h2>
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {statCards.map(({ title, value, sub, icon: Icon, id }) => (
-          <Card 
-            key={title} 
-            className="border border-border shadow-sm cursor-pointer transition-all hover:shadow-md hover:border-primary/50 active:scale-95"
+          <div
+            key={title}
             onClick={() => setOpenModal(id)}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-6 border border-primary/20 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10 hover:-translate-y-1 cursor-pointer active:scale-[0.98]"
           >
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs text-muted-foreground leading-none mb-2">{title}</p>
-                  <p className="text-2xl font-bold tracking-tight">{value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{sub}</p>
-                </div>
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="h-4 w-4" />
-                </div>
+            <div className="absolute -right-6 -top-6 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
+            <div className="relative z-10 flex flex-row items-center justify-between mb-4">
+              <span className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">{title}</span>
+              <div className="rounded-full bg-primary/20 dark:bg-primary/20 p-2 text-primary dark:text-primary shadow-sm">
+                <Icon className="h-5 w-5" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="relative z-10 text-3xl font-bold text-foreground">
+              {value}
+            </div>
+            <p className="relative z-10 text-xs text-muted-foreground mt-1">{sub}</p>
+          </div>
         ))}
         </div>
       </div>
@@ -247,13 +248,15 @@ export default function Dashboard() {
 
     "quick-actions": (
       /* ── Quick Actions ───────────────────────────────────────────────── */
-      <Card className="border border-border shadow-sm">
-        <CardHeader className="pb-2 pt-4 px-5">
-          <CardTitle as="h2" className="text-base font-semibold">Quick Actions</CardTitle>
-
+      <Card className="border border-border shadow-sm overflow-hidden">
+        <CardHeader className="pb-0 pt-2 px-5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <CardTitle as="h2" className="text-lg font-bold">Quick Actions</CardTitle>
+          </div>
           <p className="text-xs text-muted-foreground">Jump to common tasks</p>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-2 pb-4 px-5">
+        <CardContent className="grid grid-cols-2 gap-2 pb-2 px-5">
           {(() => {
             const isPrivileged = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
             const actions = [
@@ -269,58 +272,130 @@ export default function Dashboard() {
             }
             
             return actions.map(({ href, icon: Icon, label, desc, state }) => (
-              <Link
-                key={label}
-                to={href}
-                state={state}
-                className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-all hover:border-primary hover:bg-primary/5"
-              >
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-tight">{label}</p>
-                  <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
-                </div>
-              </Link>
-            ))
+                <Link
+                  key={label}
+                  to={href}
+                  state={state}
+                  className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-all duration-200 hover:border-primary/30 hover:bg-primary/5 hover:shadow-sm"
+                >
+                  <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${quickActionIconBg} transition-transform group-hover:scale-110`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-tight">{label}</p>
+                    <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{desc}</p>
+                  </div>
+                </Link>
+              ))
           })()}
         </CardContent>
       </Card>
     ),
   }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth, userProfile])
 
+  const displayName = userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"
+
   return (
     <div className="space-y-6 pb-6">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">{greeting()}</p>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"}
-          </h1>
+      {/* ── Hero Header ─────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-background border border-border shadow-sm">
+        <style>{`
+          @keyframes floatA {
+            0%, 100% { transform: translate(0px, 0px) scale(1); }
+            33%       { transform: translate(6px, -8px) scale(1.06); }
+            66%       { transform: translate(-4px, 6px) scale(0.96); }
+          }
+          @keyframes floatB {
+            0%, 100% { transform: translate(0px, 0px) scale(1); }
+            40%       { transform: translate(-8px, 6px) scale(1.08); }
+            70%       { transform: translate(5px, -5px) scale(0.94); }
+          }
+          @keyframes floatC {
+            0%, 100% { transform: translate(0px, 0px); }
+            50%       { transform: translate(4px, -6px); }
+          }
+          @keyframes shimmerSweep {
+            0%   { transform: translateX(-100%); opacity: 0; }
+            20%  { opacity: 1; }
+            80%  { opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
+          }
+          @keyframes dotPulse {
+            0%, 100% { opacity: 0.35; }
+            50%       { opacity: 0.7; }
+          }
+          .hdr-float-a { animation: floatA 7s ease-in-out infinite; }
+          .hdr-float-b { animation: floatB 9s ease-in-out infinite; animation-delay: -3s; }
+          .hdr-float-c { animation: floatC 5s ease-in-out infinite; animation-delay: -1.5s; }
+          .hdr-shimmer { animation: shimmerSweep 4s ease-in-out infinite; animation-delay: 1s; }
+          .hdr-dot     { animation: dotPulse 3s ease-in-out infinite; }
+        `}</style>
+
+        {/* Animated shimmer — top border */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden rounded-t-2xl bg-primary/20">
+          <div className="hdr-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="text-xs text-muted-foreground">FG Aesthetic Centre</p>
-            <p className="text-xs font-medium text-primary">{userProfile?.branch_name || "NFC Loyalty Dashboard"}</p>
+
+        {/* Floating blob A — large, top-right */}
+        <div className="hdr-float-a pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-primary/50 blur-2xl" />
+        {/* Floating blob B — medium, bottom-left */}
+        <div className="hdr-float-b pointer-events-none absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-primary/10 blur-xl" />
+        {/* Floating blob C — small accent, top-left */}
+        <div className="hdr-float-c pointer-events-none absolute left-1/3 -top-6 h-16 w-16 rounded-full bg-secondary/40/40 blur-lg" />
+
+        {/* Animated dot grid — bottom right */}
+        <div className="pointer-events-none absolute bottom-3 right-4 grid grid-cols-4 gap-[4px]">
+          {Array.from({ length: 16 }).map((_, i) => (
+            <span
+              key={i}
+              className="hdr-dot h-[3px] w-[3px] rounded-full bg-primary/50"
+              style={{ animationDelay: `${(i * 0.15) % 3}s` }}
+            />
+          ))}
+        </div>
+
+        <div className="relative p-5">
+          {/* Top row: greeting + button */}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+                <p className="text-xs font-medium text-muted-foreground mb-0.5">{greeting()},</p>
+                <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">{displayName}</h1>
+              </div>
+            <button
+              onClick={() => setEditMode((v) => !v)}
+              className={[
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all shrink-0",
+                editMode
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30",
+              ].join(" ")}
+            >
+              {editMode ? (
+                <><Check className="h-3.5 w-3.5" />Done</>
+              ) : (
+                <><LayoutDashboard className="h-3.5 w-3.5" />Edit Layout</>
+              )}
+            </button>
           </div>
-          <button
-            onClick={() => setEditMode((v) => !v)}
-            className={[
-              "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-              editMode
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30",
-            ].join(" ")}
-          >
-            {editMode ? (
-              <><Check className="h-3.5 w-3.5" />Done</>
-            ) : (
-              <><LayoutDashboard className="h-3.5 w-3.5" />Edit Dashboard</>
+
+          {/* Divider */}
+          <div className="my-3 border-t border-border/60" />
+
+          {/* Bottom info row */}
+          <div className="flex flex-wrap items-center gap-2">
+            {userProfile?.branch_name && (
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-muted/60 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                📍 {userProfile.branch_name}
+              </span>
             )}
-          </button>
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-medium text-primary/80 capitalize">
+              {userProfile?.role?.replace("_", " ") ?? "Staff"}
+            </span>
+            <span className="ml-auto text-xs text-muted-foreground hidden sm:block">
+              {new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -376,7 +451,7 @@ export default function Dashboard() {
             <DashboardModalCharts
               type="cards"
               data={monthlyGrowth}
-              filter={registrationsFilter} // Not used for cards but required by type
+              filter={registrationsFilter}
               onFilterChange={setRegistrationsFilter}
               stats={stats}
             />

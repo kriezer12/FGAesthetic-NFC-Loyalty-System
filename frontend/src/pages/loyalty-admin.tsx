@@ -163,7 +163,7 @@ export default function LoyaltyAdminPage() {
                         <TableCell>{r.points_required}</TableCell>
                         <TableCell className="text-muted-foreground">{r.description || "—"}</TableCell>
                         <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${r.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                          <span className={`px-2 py-1 rounded-full text-xs ${r.is_active ? "bg-green-100 text-green-800" : "bg-muted text-foreground"}`}>
                             {r.is_active ? "Active" : "Inactive"}
                           </span>
                         </TableCell>
@@ -245,7 +245,7 @@ export default function LoyaltyAdminPage() {
                             ) : "Never"}
                           </TableCell>
                           <TableCell>
-                            <span className={`px-2 py-1 rounded-full text-xs ${r.is_active && !isExpired ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                            <span className={`px-2 py-1 rounded-full text-xs ${r.is_active && !isExpired ? "bg-green-100 text-green-800" : "bg-muted text-foreground"}`}>
                               {isExpired ? "Expired" : r.is_active ? "Active" : "Inactive"}
                             </span>
                           </TableCell>

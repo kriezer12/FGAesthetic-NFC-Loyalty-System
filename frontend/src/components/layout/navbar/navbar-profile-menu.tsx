@@ -118,7 +118,7 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
               <span className="pl-2">Theme</span>
             </div>
             <div className={`flex items-center w-10 h-6 rounded-full transition-colors ${isDark ? "bg-primary" : "bg-muted"}`}>
-              <div className={`w-5 h-5 rounded-full bg-white transition-transform flex items-center justify-center ${isDark ? "translate-x-4" : "translate-x-0"}`}>
+              <div className={`w-5 h-5 rounded-full bg-background transition-transform flex items-center justify-center ${isDark ? "translate-x-4" : "translate-x-0"}`}>
                 {isDark ? (
                   <Moon className="h-3 w-3 text-slate-500" />
                 ) : (

@@ -27,6 +27,10 @@ interface UseCustomersReturn {
   fetchAll: () => Promise<void>
   /** Get a single customer by ID */
   getById: (id: string) => Promise<Customer | null>
+  /** Delete a customer by ID */
+  deleteCustomer: (id: string) => Promise<void>
+  /** Add loyalty points to a customer */
+  addLoyaltyPoints: (customerId: string, points: number) => Promise<void>
 }
 
 export function useCustomers(options: UseCustomersOptions = {}): UseCustomersReturn {
@@ -116,11 +120,58 @@ export function useCustomers(options: UseCustomersOptions = {}): UseCustomersRet
     }
   }, [])
 
+  const deleteCustomer = useCallback(async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .delete()
+        .eq("id", id)
+
+      if (error) throw error
+
+      // Manually update local state for immediate feedback
+      setCustomers(prev =>
+        prev.map(c =>
+          c.id === id
+            ? { ...c, deleted: true }
+            : c
+        )
+      )
+    } catch (err) {
+      console.error("Error deleting customer:", err)
+      // Optionally re-throw or handle error state
+    }
+  }, [])
+
+  const addLoyaltyPoints = useCallback(async (customerId: string, points: number) => {
+    if (!customerId || points <= 0) return
+
+    try {
+      const { error } = await supabase.rpc('add_loyalty_points', {
+        customer_id: customerId,
+        points_to_add: points,
+      })
+      if (error) throw error
+
+      // Manually update local state for immediate feedback
+      setCustomers(prev =>
+        prev.map(c =>
+          c.id === customerId
+            ? { ...c, points: (c.points || 0) + points }
+            : c
+        )
+      )
+    } catch (err) {
+      console.error("Error adding loyalty points:", err)
+      // Optionally re-throw or handle error state
+    }
+  }, [])
+
   useEffect(() => {
     if (autoFetch) {
       fetchAll()
     }
   }, [autoFetch, fetchAll])
 
-  return { customers, loading, error, search, fetchAll, getById }
+  return { customers, loading, error, search, fetchAll, getById, deleteCustomer, addLoyaltyPoints }
 }

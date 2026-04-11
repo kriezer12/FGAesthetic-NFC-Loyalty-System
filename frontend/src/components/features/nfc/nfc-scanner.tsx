@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import { supabase } from "@/lib/supabase"
+import { apiCall } from "@/lib/api"
 import {
   MAX_AVG_KEYSTROKE_INTERVAL,
   MIN_CHARS_FOR_VALIDATION,
@@ -159,16 +160,29 @@ export function NFCScanner({ onCustomerFound, onNewCard, mode = "scan" }: NFCSca
     setLastScanned(uid)
     
     try {
-      const { data: customer, error } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("nfc_uid", uid)
-        .single()
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
 
-      if (error || !customer) {
-        onNewCard(uid)
-      } else {
+      if (!token) {
+        throw new Error("No active session")
+      }
+
+      const response = await apiCall(`/pos/nfc/${uid}`, { authToken: token })
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          onNewCard(uid)
+          return
+        }
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const customer = await response.json()
+      
+      if (customer) {
         onCustomerFound(customer)
+      } else {
+        onNewCard(uid)
       }
     } catch (err) {
       console.error("Error checking NFC card:", err)

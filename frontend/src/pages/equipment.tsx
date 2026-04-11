@@ -206,10 +206,10 @@ export default function EquipmentPage() {
         <Card className="border border-border shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">In Maintenance</CardTitle>
-            <Construction className="h-4 w-4 text-amber-500" />
+            <Construction className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-500">{statusStats.maintenance}</div>
+            <div className="text-2xl font-bold text-primary">{statusStats.maintenance}</div>
           </CardContent>
         </Card>
         <Card className="border border-border shadow-sm">

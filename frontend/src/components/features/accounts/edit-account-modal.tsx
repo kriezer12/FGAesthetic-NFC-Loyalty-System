@@ -108,7 +108,7 @@ export function EditAccountModal({
               disabled={!canChangeRole}
             />
             {isSuperAdminAccount && (
-              <p className="text-sm text-amber-600">
+              <p className="text-sm text-primary">
                 Super admin privileges cannot be downgraded or removed.
               </p>
             )}
