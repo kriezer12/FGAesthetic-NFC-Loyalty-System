@@ -67,10 +67,10 @@ export default function NFCScanPage() {
   }
 
   const handleRegistrationSuccess = (customer: Customer) => {
-    // after creating a new card, jump to customer modal as well
+    // after creating a new card, redirect to dashboard
     setPendingNfcUid(null)
     setViewState("scanning")
-    navigate("/dashboard/customers", { state: { customer, fromNfc: true } })
+    navigate("/dashboard")
   }
 
   const handleClose = () => {

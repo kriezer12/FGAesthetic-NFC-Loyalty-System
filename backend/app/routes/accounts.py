@@ -122,27 +122,55 @@ def create_account():
             return jsonify({'error': f'Supabase connection failed: {str(e)}'}), 500
 
         # Create auth user
+        user_id = None
         try:
             default_password = "password"
             print(f"[DEBUG] Creating user with email: {data['email']}", file=sys.stderr)
-            user_response = supabase_admin.auth.admin.create_user(
-                AdminUserAttributes(
-                    email=data['email'],
-                    password=default_password,
-                    email_confirm=True,
-                    user_metadata={
-                        'full_name': data.get('full_name', ''),
-                        'role': data['role'],
-                        'admin_id': admin_user_id,
-                    },
+            try:
+                user_response = supabase_admin.auth.admin.create_user(
+                    AdminUserAttributes(
+                        email=data['email'],
+                        password=default_password,
+                        email_confirm=True,
+                        user_metadata={
+                            'full_name': data.get('full_name', ''),
+                            'role': data['role'],
+                            'admin_id': admin_user_id,
+                        },
+                    )
                 )
-            )
 
-            if not user_response.user:
-                return jsonify({'error': 'Failed to create auth user'}), 500
+                if not user_response.user:
+                    return jsonify({'error': 'Failed to create auth user'}), 500
 
-            user_id = user_response.user.id
-            print(f"[DEBUG] User created successfully: {user_id}", file=sys.stderr)
+                user_id = user_response.user.id
+                print(f"[DEBUG] User created successfully: {user_id}", file=sys.stderr)
+            except Exception as create_err:
+                if "already been registered" in str(create_err):
+                    print(f"[DEBUG] User already exists: {data['email']}. Proceeding to send password reset email.", file=sys.stderr)
+                    # Try to fetch existing user profile ID
+                    try:
+                        existing_prof = supabase_admin.table("user_profiles").select("id").eq("email", data["email"]).maybe_single().execute()
+                        if existing_prof.data:
+                            user_id = existing_prof.data["id"]
+                        else:
+                            # Customer might not have profile yet due to trigger delay, we'll try returning a dummy ID
+                            user_id = "00000000-0000-0000-0000-000000000000"
+                    except:
+                        user_id = "00000000-0000-0000-0000-000000000000"
+                else:
+                    raise create_err
+
+            # Automatically trigger a password reset email so the client can set a new password
+            try:
+                from app.config import config
+                supabase_admin.auth.reset_password_email(
+                    data['email'], 
+                    options={"redirect_to": f"{config.FRONTEND_URL}/reset-password"}
+                )
+                print(f"[DEBUG] Password reset email triggered for: {data['email']}", file=sys.stderr)
+            except Exception as email_err:
+                print(f"[WARNING] Failed to send password reset email: {str(email_err)}", file=sys.stderr)
 
             # Wait a moment for trigger to fire
             import time

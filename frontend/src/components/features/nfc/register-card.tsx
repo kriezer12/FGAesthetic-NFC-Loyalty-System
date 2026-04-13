@@ -84,7 +84,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
       // so we don't accidentally log out the current staff session
       if (formData.email.trim()) {
         try {
-          await apiCall("/api/accounts/create", {
+          await apiCall("/accounts/create", {
             method: "POST",
             body: JSON.stringify({
               email: formData.email.trim(),
@@ -126,20 +126,43 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           last_visit: new Date().toISOString(),
       }
 
-      let updatedData = data
-      let finalError = insertError
+      let updatedData = null
+      let finalError = null
 
-      // If email exists, try to upsert based on email to override what the Auth trigger generated
+      // If email exists, check if customer exists first to update, avoiding "ON CONFLICT" error for email
       if (formData.email.trim()) {
-        const { data: upsertData, error: uError } = await supabase
+        const searchEmail = formData.email.trim()
+        const { data: existingCustomer } = await supabase
           .from("customers")
-          .upsert({ ...customerPayload, email: formData.email.trim() }, { onConflict: 'email' })
-          .select()
-          .single()
-        
-        if (!uError) {
-          updatedData = upsertData
-          finalError = null
+          .select("id")
+          .eq("email", searchEmail)
+          .maybeSingle()
+
+        if (existingCustomer) {
+          const { data: updateData, error: uError } = await supabase
+            .from("customers")
+            .update({ ...customerPayload, email: searchEmail })
+            .eq("id", existingCustomer.id)
+            .select()
+            .single()
+          
+          if (uError) {
+            finalError = uError
+          } else {
+            updatedData = updateData
+          }
+        } else {
+          const { data: insertData, error: iError } = await supabase
+            .from("customers")
+            .insert({ ...customerPayload, email: searchEmail })
+            .select()
+            .single()
+          
+          if (iError) {
+            finalError = iError
+          } else {
+            updatedData = insertData
+          }
         }
       } else {
         const { data: insertData, error: iError } = await supabase
@@ -148,8 +171,11 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           .select()
           .single()
         
-        updatedData = insertData
-        finalError = iError
+        if (iError) {
+          finalError = iError
+        } else {
+          updatedData = insertData
+        }
       }
 
 

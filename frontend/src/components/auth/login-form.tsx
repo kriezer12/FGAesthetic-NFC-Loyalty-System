@@ -212,7 +212,7 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-xl font-bold">Welcome back</h1>
           <p className="text-muted-foreground text-sm text-balance">
-            Enter your credentials to sign in
+            Enter your credentials to sign in to your account
           </p>
         </div>
 
@@ -279,3 +279,4 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
     </form>
   )
 }
+

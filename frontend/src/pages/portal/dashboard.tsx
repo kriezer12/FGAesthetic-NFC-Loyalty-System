@@ -19,6 +19,10 @@ export default function PortalDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    document.title = "Portal - FG Aesthetic Centre"
+  }, [])
+
+  useEffect(() => {
     async function loadCustomerDashboard() {
       if (!user) return
       

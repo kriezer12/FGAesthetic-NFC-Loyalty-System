@@ -27,6 +27,7 @@ import { PortalLayout } from "./components/layout/portal/portal-layout"
 
 // Lazy load all page components for code splitting
 const PortalDashboard = lazy(() => import("./pages/portal/dashboard.tsx"))
+const PortalSettings = lazy(() => import("./pages/portal/settings.tsx"))
 
 const Dashboard = lazy(() => import("./pages/dashboard.tsx"))
 const CheckinLogsPage = lazy(() => import("./pages/checkin-logs.tsx"))
@@ -117,6 +118,7 @@ createRoot(document.getElementById('root')).render(
         {/* Protected Customer routes */}
         <Route element={<RoleRoute allowedRoles={["customer"]} redirectPath="/dashboard"><PortalLayout /></RoleRoute>}>
           <Route path="/portal/dashboard" element={<PortalDashboard />} />
+          <Route path="/portal/settings" element={<PortalSettings />} />
         </Route>
       </Routes>
     </AuthProvider>
