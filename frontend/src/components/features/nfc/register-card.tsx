@@ -13,8 +13,6 @@ import { initialRegisterCardFormData } from "./register-card-parts/register-card
 import { logUserAction } from "@/lib/user-log"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-import { ScrollArea } from "@/components/ui/scroll-area"
-
 import type { Customer } from "@/types/customer"
 
 interface RegisterCardProps {
