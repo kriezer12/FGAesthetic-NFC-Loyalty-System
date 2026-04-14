@@ -23,8 +23,8 @@ export function ClientStatusCards({ clientCounts, topStaffSales, loading }: Clie
       label: "Inactive Clients",
       value: clientCounts?.inactive_count ?? 0,
       description: "No activity > 60 days",
-      color: "text-amber-600",
-      bgColor: "bg-amber-50",
+      color: "text-primary",
+      bgColor: "bg-primary/10",
     },
     {
       icon: Archive,

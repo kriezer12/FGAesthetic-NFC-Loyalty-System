@@ -23,6 +23,23 @@ from app.routes.accounts import get_user_from_token
 
 pos_bp = Blueprint("pos", __name__, url_prefix="/api/pos")
 
+@pos_bp.route("/nfc/<uid>", methods=["GET"])
+def get_customer_by_nfc(uid):
+    """Retrieve customer by NFC globally (bypass RLS) for cross-branch checkins."""
+    try:
+        caller_id = get_user_from_token()
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
+
+    supabase = get_supabase_admin()
+    res = supabase.table("customers").select("*").eq("nfc_uid", uid).execute()
+    
+    if not res.data:
+        return jsonify({"error": "Customer not found"}), 404
+        
+    return jsonify(res.data[0]), 200
+
+
 
 def _to_decimal(value, default=Decimal(0)):
     try:

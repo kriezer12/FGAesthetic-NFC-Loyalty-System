@@ -231,10 +231,10 @@ export default function InventoryPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Items to Reorder</CardTitle>
-            <AlertTriangle className={`h-4 w-4 ${reorderCount > 0 ? 'text-yellow-600 animate-pulse' : 'text-muted-foreground'}`} />
+            <AlertTriangle className={`h-4 w-4 ${reorderCount > 0 ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${reorderCount > 0 ? 'text-yellow-600' : ''}`}>{reorderCount}</div>
+            <div className={`text-2xl font-bold ${reorderCount > 0 ? 'text-primary' : ''}`}>{reorderCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -312,8 +312,8 @@ export default function InventoryPage() {
           {error && <div className="p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">{error}</div>}
           
           {reorderCount > 0 && (
-            <div className="flex gap-4 p-4 rounded-lg bg-yellow-100 text-yellow-900 border border-yellow-200 mb-4 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
-              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-yellow-600" />
+            <div className="flex gap-4 p-4 rounded-lg bg-secondary/40 text-yellow-900 border border-yellow-200 mb-4 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-primary" />
               <div className="space-y-1">
                 <h5 className="font-medium leading-none tracking-tight">Reorder Level Reached</h5>
                 <div className="text-sm opacity-90">
@@ -358,7 +358,7 @@ export default function InventoryPage() {
                               {stock.quantity <= (stock.product?.danger_level || 0) ? (
                                 <AlertTriangle className="h-4 w-4 text-red-600" />
                               ) : stock.quantity <= (stock.product?.reorder_level || 0) ? (
-                                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                                <AlertTriangle className="h-4 w-4 text-primary" />
                               ) : null}
                             </div>
                           </td>
@@ -381,7 +381,7 @@ export default function InventoryPage() {
                               <span className={`font-bold ${
                                 stock.quantity <= (stock.product?.danger_level || 0) ? 'text-red-600' :
                                 stock.quantity <= (stock.product?.min_stock_level || 0) ? 'text-orange-600' :
-                                stock.quantity <= (stock.product?.reorder_level || 0) ? 'text-yellow-600' :
+                                stock.quantity <= (stock.product?.reorder_level || 0) ? 'text-primary' :
                                 stock.quantity > (stock.product?.max_stock_level || Infinity) ? 'text-blue-600' : ''
                               }`}>
                                 {stock.quantity}
@@ -393,7 +393,7 @@ export default function InventoryPage() {
                               ) : null}
                               {stock.quantity <= (stock.product?.reorder_level || 0) && (
                                 <span className={`text-[10px] font-medium ${
-                                  stock.quantity <= (stock.product?.danger_level || 0) ? 'text-red-600' : 'text-yellow-600'
+                                  stock.quantity <= (stock.product?.danger_level || 0) ? 'text-red-600' : 'text-primary'
                                 }`}>
                                   Reorder
                                 </span>

@@ -575,7 +575,7 @@ export default function UserLogsPage() {
            <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-2">Deleted Original Data:</p>
            <div className="flex flex-wrap gap-2">
              {Object.keys(before).filter(k => typeof before[k] !== "object").map(key => (
-                <div key={key} className="text-xs bg-background md:bg-white/50 dark:bg-black/20 px-2 py-1.5 rounded border border-red-50 dark:border-red-900/20">
+                <div key={key} className="text-xs bg-background md:bg-background/50 dark:bg-black/20 px-2 py-1.5 rounded border border-red-50 dark:border-red-900/20">
                   <span className="text-muted-foreground mr-1 capitalize">{key.replace(/_/g, " ")}:</span>
                   <span className="font-medium">{renderReadableValue(before[key])}</span>
                 </div>
@@ -591,7 +591,7 @@ export default function UserLogsPage() {
            <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-2">Newly Initialized Data:</p>
            <div className="flex flex-wrap gap-2">
              {Object.keys(after).filter(k => typeof after[k] !== "object").map(key => (
-                <div key={key} className="text-xs bg-background md:bg-white/50 dark:bg-black/20 px-2 py-1.5 rounded border border-green-50 dark:border-green-900/20">
+                <div key={key} className="text-xs bg-background md:bg-background/50 dark:bg-black/20 px-2 py-1.5 rounded border border-green-50 dark:border-green-900/20">
                   <span className="text-muted-foreground mr-1 capitalize">{key.replace(/_/g, " ")}:</span>
                   <span className="font-medium">{renderReadableValue(after[key])}</span>
                 </div>

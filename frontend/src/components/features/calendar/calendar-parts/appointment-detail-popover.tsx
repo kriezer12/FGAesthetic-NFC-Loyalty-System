@@ -33,10 +33,10 @@ const STATUS_CONFIG: Record<
   AppointmentStatus,
   { label: string; className: string }
 > = {
-  scheduled:     { label: "Scheduled",   className: "bg-yellow-100 text-yellow-800" },
+  scheduled:     { label: "Scheduled",   className: "bg-secondary/40 text-yellow-800" },
   confirmed:     { label: "Confirmed",   className: "bg-green-100 text-green-800" },
   "in-progress": { label: "In Progress", className: "bg-blue-100 text-blue-800" },
-  completed:     { label: "Completed",   className: "bg-gray-100 text-gray-800" },
+  completed:     { label: "Completed",   className: "bg-muted text-foreground" },
   cancelled:     { label: "Cancelled",   className: "bg-red-100 text-red-800" },
 }
 
@@ -139,10 +139,10 @@ export function AppointmentDetailPopover({
 
             {/* Customer */}
             {appointment.customer_name && (
-              <div className="rounded-md bg-amber-50 dark:bg-amber-950 p-2.5 border border-amber-200 dark:border-amber-800">
-                <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1">Customer</p>
+              <div className="rounded-md bg-primary/10 dark:bg-primary/20 p-2.5 border border-primary/30 dark:border-primary/90">
+                <p className="text-[10px] font-semibold text-primary/80 dark:text-primary uppercase tracking-wide mb-1">Customer</p>
                 <div className="flex items-center gap-1.5">
-                  <User className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <User className="h-3 w-3 text-primary dark:text-primary shrink-0" />
                   <span className="text-xs font-medium text-foreground">{appointment.customer_name}</span>
                 </div>
               </div>

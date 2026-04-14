@@ -11,7 +11,6 @@ import { Check, ChevronsUpDown } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Command,
   CommandEmpty,
@@ -107,15 +106,14 @@ export function Combobox({
       >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <CommandList className="max-h-none overflow-hidden">
-            <ScrollArea className="h-60">
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-              <CommandGroup>
-                {options.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={option.label}
-                    disabled={option.disabled}
+          <CommandList>
+            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={`${option.label} ${option.description || ""} ${option.value}`}
+                  disabled={option.disabled}
                     onSelect={() => {
                       onValueChange?.(option.value)
                       setOpen(false)
@@ -139,7 +137,6 @@ export function Combobox({
                   </CommandItem>
                 ))}
               </CommandGroup>
-            </ScrollArea>
           </CommandList>
         </Command>
       </PopoverContent>

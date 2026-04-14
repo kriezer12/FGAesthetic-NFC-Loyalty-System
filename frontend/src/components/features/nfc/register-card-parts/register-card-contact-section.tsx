@@ -64,73 +64,77 @@ export function RegisterCardContactSection({ formData, setFormData }: RegisterCa
     <div className="space-y-4">
       <SectionHeader>Contact Information</SectionHeader>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div
+        className="rounded-xl p-5 space-y-4 bg-background border shadow-sm"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Phone Number <span className="text-destructive">*</span></Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="+63 9XX XXX XXXX or 09XX XXX XXXX"
+              value={formData.phone}
+              onChange={handlePhoneChange}
+              onBlur={handlePhoneBlur}
+              onKeyDown={handlePhoneKeyDown}
+              className={phoneError ? "border-destructive focus-visible:ring-destructive" : ""}
+              required
+            />
+            {phoneError && (
+              <p className="text-xs text-destructive">{phoneError}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="client@email.com"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+          </div>
+        </div>
+
         <div className="space-y-1.5">
-          <Label htmlFor="phone">Phone Number <span className="text-destructive">*</span></Label>
+          <Label htmlFor="address">Address <span className="text-destructive">*</span></Label>
           <Input
-            id="phone"
-            type="tel"
-            placeholder="+63 9XX XXX XXXX or 09XX XXX XXXX"
-            value={formData.phone}
-            onChange={handlePhoneChange}
-            onBlur={handlePhoneBlur}
-            onKeyDown={handlePhoneKeyDown}
-            className={phoneError ? "border-destructive focus-visible:ring-destructive" : ""}
+            id="address"
+            placeholder="Complete address"
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             required
           />
-          {phoneError && (
-            <p className="text-xs text-destructive">{phoneError}</p>
-          )}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="client@email.com"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            required
-          />
-        </div>
-      </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="address">Address <span className="text-destructive">*</span></Label>
-        <Input
-          id="address"
-          placeholder="Complete address"
-          value={formData.address}
-          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          required
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
-          <Input
-            id="emergency_contact_name"
-            placeholder="Contact name"
-            value={formData.emergency_contact_name}
-            onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="emergency_contact_phone">Emergency Contact Phone</Label>
-          <Input
-            id="emergency_contact_phone"
-            type="tel"
-            placeholder="+63 9XX XXX XXXX or 09XX XXX XXXX"
-            value={formData.emergency_contact_phone}
-            onChange={handleEmergencyPhoneChange}
-            onBlur={handleEmergencyPhoneBlur}
-            onKeyDown={handleEmergencyPhoneKeyDown}
-            className={emergencyPhoneError ? "border-destructive focus-visible:ring-destructive" : ""}
-          />
-          {emergencyPhoneError && (
-            <p className="text-xs text-destructive">{emergencyPhoneError}</p>
-          )}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
+            <Input
+              id="emergency_contact_name"
+              placeholder="Contact name"
+              value={formData.emergency_contact_name}
+              onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="emergency_contact_phone">Emergency Contact Phone</Label>
+            <Input
+              id="emergency_contact_phone"
+              type="tel"
+              placeholder="+63 9XX XXX XXXX or 09XX XXX XXXX"
+              value={formData.emergency_contact_phone}
+              onChange={handleEmergencyPhoneChange}
+              onBlur={handleEmergencyPhoneBlur}
+              onKeyDown={handleEmergencyPhoneKeyDown}
+              className={emergencyPhoneError ? "border-destructive focus-visible:ring-destructive" : ""}
+            />
+            {emergencyPhoneError && (
+              <p className="text-xs text-destructive">{emergencyPhoneError}</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

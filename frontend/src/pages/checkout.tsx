@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Clock3, Download, Settings2, ShoppingCart } from "lucide-react"
+import { Box, Clock3, Download, Settings2, ShoppingCart, MoreHorizontal } from "lucide-react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Combobox } from "@/components/ui/combobox"
 import { supabase } from "@/lib/supabase"
 import { apiCall } from "@/lib/api"
 import { openInvoiceA4Landscape, type ReceiptTemplateData } from "@/lib/receipt-templates"
+import { awardPointsForAppointment } from "@/components/features/calendar/calendar-parts/loyalty-utils"
 import { NotificationToast } from "@/components/ui/notification-toast"
 
 import {
@@ -26,6 +27,19 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { Appointment } from "@/types/appointment"
 import type { Service } from "@/types/service"
 
@@ -33,13 +47,6 @@ type Customer = {
   id: string
   name: string
   phone?: string | null
-}
-
-type InventoryProduct = {
-  id: string
-  name: string
-  sku?: string
-  unit_price: number
 }
 
 type CartItem = {
@@ -193,7 +200,6 @@ export default function CheckoutPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [billedAppointmentIds, setBilledAppointmentIds] = useState<Set<string>>(new Set())
   const [services, setServices] = useState<Service[]>([])
-  const [products, setProducts] = useState<InventoryProduct[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("")
@@ -207,9 +213,11 @@ export default function CheckoutPage() {
   const [adjustmentOptions, setAdjustmentOptions] = useState<AdjustmentOption[]>(defaultAdjustments)
   const [activeView, setActiveView] = useState<"checkout" | "logs" | "inventory">("checkout")
   const [logTransactions, setLogTransactions] = useState<LogTx[]>([])
+  const [logSearchQuery, setLogSearchQuery] = useState("")
   const [logItemsByTx, setLogItemsByTx] = useState<Record<string, LogTxItem[]>>({})
   const [logCustomerMap, setLogCustomerMap] = useState<Record<string, string>>({})
   const [logsLoading, setLogsLoading] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<{ id: string, type: 'context' | 'dropdown' } | null>(null)
 
   const [inventoryRows, setInventoryRows] = useState<PosInventoryItem[]>([])
   const [inventoryLoading, setInventoryLoading] = useState(false)
@@ -279,7 +287,6 @@ export default function CheckoutPage() {
         const [
           { data: appointmentsData, error: appointmentsError },
           { data: servicesData, error: servicesError },
-          { data: productsData, error: productsError },
           { data: billedData, error: billedError },
           { data: settingsData, error: settingsError },
           { data: customersData, error: customersError },
@@ -293,10 +300,6 @@ export default function CheckoutPage() {
           supabase
             .from("services")
             .select("id, category_id, name, sort_order, uses_equipment, equipment, uses_product, product, inventory_product_id, price, is_package, session_count, recurrence_days"),
-          supabase
-            .from("inventory_products")
-            .select("id, name, sku, unit_price")
-            .order("name", { ascending: true }),
           supabase
             .from("transactions")
             .select("appointment_id")
@@ -315,14 +318,12 @@ export default function CheckoutPage() {
 
         if (appointmentsError) throw appointmentsError
         if (servicesError) throw servicesError
-        if (productsError) throw productsError
         if (billedError) throw billedError
         if (settingsError) throw settingsError
         if (customersError) throw customersError
 
         setAppointments((appointmentsData || []) as Appointment[])
         setServices((servicesData || []) as Service[])
-        setProducts((productsData || []) as InventoryProduct[])
         setBilledAppointmentIds(new Set((billedData || []).map((row: { appointment_id?: string | null }) => row.appointment_id).filter(Boolean) as string[]))
         setBusinessSettings((settingsData || null) as BusinessSettings | null)
         setCustomers((customersData || []) as Customer[])
@@ -448,11 +449,22 @@ export default function CheckoutPage() {
     const start = (zHistoryPage - 1) * zPageSize
     return zReadingHistory.slice(start, start + zPageSize)
   }, [zReadingHistory, zHistoryPage])
-  const totalTransactionPages = Math.max(1, Math.ceil(logTransactions.length / transactionPageSize))
+  const filteredLogTransactions = useMemo(() => {
+    const keyword = logSearchQuery.trim().toLowerCase()
+    if (!keyword) return logTransactions
+    return logTransactions.filter((tx) => {
+      const ref = (tx.receipt_number || "").toLowerCase()
+      const method = (tx.payment_method || "").toLowerCase()
+      const status = (tx.status || "").toLowerCase()
+      const total = Number(tx.total_due || 0).toString()
+      return ref.includes(keyword) || method.includes(keyword) || status.includes(keyword) || total.includes(keyword)
+    })
+  }, [logTransactions, logSearchQuery])
+  const totalTransactionPages = Math.max(1, Math.ceil(filteredLogTransactions.length / transactionPageSize))
   const paginatedTransactions = useMemo(() => {
     const start = (transactionPage - 1) * transactionPageSize
-    return logTransactions.slice(start, start + transactionPageSize)
-  }, [logTransactions, transactionPage])
+    return filteredLogTransactions.slice(start, start + transactionPageSize)
+  }, [filteredLogTransactions, transactionPage])
   const requiresPaymentReference = paymentMethod === "gcash" || paymentMethod === "paymaya"
   const supportsOptionalReference = paymentMethod === "card"
   const referenceLabel = useMemo(() => {
@@ -1282,6 +1294,12 @@ export default function CheckoutPage() {
 
       // Confirm action generates invoice only.
       openInvoiceA4Landscape(buildTemplateData(receiptSnapshot, "INTERNAL ORIGINAL"))
+      
+      // Award loyalty points directly after checkout instead of inside calendar view to prevent redundancy
+      const fullAppt = appointments.find((a) => a.id === selectedAppointmentId)
+      if (fullAppt) {
+        awardPointsForAppointment(fullAppt, true).catch(e => console.error("Failed to award points:", e))
+      }
 
       setCartItems([])
       setSelectedAppointmentId("")
@@ -1367,8 +1385,8 @@ export default function CheckoutPage() {
         </div>
 
         {activeView === "checkout" ? (
-        <div className="grid gap-0 xl:grid-cols-[1.35fr_0.95fr]">
-          <Card className="rounded-none border-0 border-r shadow-none">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)] w-full">
+          <Card className="rounded-none border-0 border-r shadow-none min-w-0">
           <CardHeader>
             <CardTitle>Cart Builder</CardTitle>
           </CardHeader>
@@ -1451,7 +1469,7 @@ export default function CheckoutPage() {
           </CardContent>
           </Card>
 
-          <Card className="rounded-none border-0 shadow-none">
+          <Card className="rounded-none border-0 shadow-none min-w-0">
           <CardHeader>
             <CardTitle>{isCheckoutStage ? "Payment Pad" : "Checkout Adjustments"}</CardTitle>
           </CardHeader>
@@ -1646,7 +1664,7 @@ export default function CheckoutPage() {
                       } else if (row.min_stock_level > 0 && qty <= row.min_stock_level) {
                         statusNode = <span className="rounded-md bg-orange-100 px-2 py-1 text-xs text-orange-900 font-semibold whitespace-nowrap">Warning</span>
                       } else if (row.reorder_level > 0 && qty <= row.reorder_level) {
-                        statusNode = <span className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-900 font-semibold whitespace-nowrap">Reorder</span>
+                        statusNode = <span className="rounded-md bg-primary/20 px-2 py-1 text-xs text-foreground font-semibold whitespace-nowrap">Reorder</span>
                       } else {
                         statusNode = <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-900 font-medium whitespace-nowrap">Healthy</span>
                       }
@@ -1668,12 +1686,18 @@ export default function CheckoutPage() {
           </div>
         ) : (
           <div className="p-5 space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-lg font-semibold">POS Logs</h2>
                 <p className="text-sm text-muted-foreground">Internal transaction tracking for the current branch scope.</p>
               </div>
               <div className="flex gap-2">
+                <Input
+                  value={logSearchQuery}
+                  onChange={(e) => setLogSearchQuery(e.target.value)}
+                  placeholder="Search receipt, payment..."
+                  className="w-64"
+                />
                 <Button type="button" variant="outline" onClick={() => void loadLogs()} disabled={logsLoading}>
                   {logsLoading ? "Refreshing..." : "Refresh"}
                 </Button>
@@ -1801,9 +1825,13 @@ export default function CheckoutPage() {
                     </tr>
                   ) : (
                     paginatedTransactions.map((tx) => (
-                      <ContextMenu key={tx.id}>
+                      <ContextMenu 
+                        key={tx.id} 
+                        open={openMenuId?.id === tx.id && openMenuId.type === 'context'} 
+                        onOpenChange={(o) => setOpenMenuId(o ? { id: tx.id, type: 'context' } : null)}
+                      >
                         <ContextMenuTrigger asChild>
-                          <tr className="border-t cursor-context-menu hover:bg-muted/50 transition-colors">
+                          <tr className="border-t cursor-pointer hover:bg-muted/50 transition-colors">
                             <td className="px-3 py-2 font-medium">
                               {tx.receipt_number}
                               {tx.status === "voided" && <span className="ml-[8px] rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-red-800 uppercase">Voided</span>}
@@ -1811,8 +1839,43 @@ export default function CheckoutPage() {
                             <td className="px-3 py-2">{new Date(tx.created_at).toLocaleString()}</td>
                             <td className="px-3 py-2">{tx.payment_method || "cash"}</td>
                             <td className="px-3 py-2 text-right">{formatMoney(Number(tx.total_due || 0))}</td>
-                            <td className="px-3 py-2 text-right text-muted-foreground text-xs italic">
-                              Right-click row
+                            <td className="px-3 py-2 text-right text-muted-foreground">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <DropdownMenu
+                                    open={openMenuId?.id === tx.id && openMenuId.type === 'dropdown'} 
+                                    onOpenChange={(o) => setOpenMenuId(o ? { id: tx.id, type: 'dropdown' } : null)}
+                                  >
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuTrigger asChild>
+                                        <div className="inline-flex items-center justify-center p-1 rounded-md hover:bg-muted/80 cursor-pointer focus:outline-none">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                          <span className="sr-only">More options</span>
+                                        </div>
+                                      </DropdownMenuTrigger>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Left-click ellipsis, or Right-click row for more options</p>
+                                    </TooltipContent>
+                                    <DropdownMenuContent align="end" className="w-48">
+                                      <DropdownMenuItem onClick={() => openInvoiceA4Landscape(buildLogTemplateData(tx, "INTERNAL DUPLICATE"))}>
+                                        View Invoice
+                                      </DropdownMenuItem>
+                                      {tx.status !== "voided" && (
+                                        <>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem 
+                                            className="text-red-600 focus:text-red-600 font-medium" 
+                                            onClick={() => triggerVoidTransaction(tx)}
+                                          >
+                                            Void Transaction
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </Tooltip>
+                              </TooltipProvider>
                             </td>
                           </tr>
                         </ContextMenuTrigger>
