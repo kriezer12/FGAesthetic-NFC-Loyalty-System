@@ -26,6 +26,7 @@ interface UserProfile {
   avatar_url?: string
   created_at?: string
   first_login?: boolean
+  customer_id?: string // Customer database record ID for customers
 }
 
 interface AuthContextType {
@@ -62,11 +63,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (error && error.code === 'PGRST116') {
         // Not a staff member, check if it's a customer
-        const { data: customerData, error: customerError } = await supabase
+        const { data: customerData } = await supabase
           .from("customers")
           .select("id, email, name, branch_id")
           .eq("user_id", userId)
-          .single()
+          .maybeSingle()
         
         if (customerData) {
           data = {
@@ -76,9 +77,110 @@ export function AuthProvider({ children }: AuthProviderProps) {
             full_name: customerData.name,
             branch_id: customerData.branch_id,
             avatar_url: null,
-            customer_id: customerData.id // Extra field for convenience
+            customer_id: customerData.id
           }
           error = null
+        } else {
+          // No customer found by user_id, try to register/link this user
+          // Get user email from auth session
+          const { data: { user: authUser } } = await supabase.auth.getUser()
+          if (authUser?.email) {
+            try {
+              const response = await fetch(
+                `${import.meta.env.VITE_API_URL}/api/customer/register`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token || ''}`,
+                  },
+                  body: JSON.stringify({
+                    email: authUser.email,
+                    name: authUser.user_metadata?.full_name || authUser.email.split('@')[0],
+                  }),
+                }
+              )
+
+              if (response.ok) {
+                const result = await response.json()
+                if (result.customer_id) {
+                  data = {
+                    id: userId,
+                    role: "customer" as UserRole,
+                    email: authUser.email,
+                    full_name: result.name || authUser.user_metadata?.full_name,
+                    branch_id: result.branch_id,
+                    avatar_url: null,
+                    customer_id: result.customer_id
+                  }
+                  error = null
+                }
+              }
+            } catch (err) {
+              console.error('Failed to register customer:', err)
+            }
+          }
+        }
+      } else if (data && !error) {
+        // Found user_profile - if they're a customer role, look up their database customer ID
+        if (data.role === 'customer') {
+          // First try by user_id
+          let { data: customerData } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("user_id", userId)
+            .maybeSingle()
+          
+          // If not found by user_id, try by email (for pre-registered customers)
+          if (!customerData && data.email) {
+            const { data: customerDataByEmail } = await supabase
+              .from("customers")
+              .select("id")
+              .eq("email", data.email)
+              .maybeSingle()
+            
+            if (customerDataByEmail) {
+              customerData = customerDataByEmail
+              // Link this pre-registered customer to the user_id
+              try {
+                await supabase
+                  .from("customers")
+                  .update({ user_id: userId })
+                  .eq("id", customerDataByEmail.id)
+                  .execute()
+              } catch (err) {
+                console.error('Failed to link customer to user_id:', err)
+              }
+            }
+          }
+          
+          // If still not found, try by name
+          if (!customerData && data.full_name) {
+            const { data: customerDataByName } = await supabase
+              .from("customers")
+              .select("id")
+              .eq("name", data.full_name)
+              .maybeSingle()
+            
+            if (customerDataByName) {
+              customerData = customerDataByName
+            }
+          }
+          
+          if (customerData) {
+            ;(data as any).customer_id = customerData.id
+          }
+        } else {
+          // User is staff - but also check if they're a customer
+          const { data: customerData } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("user_id", userId)
+            .maybeSingle()
+          
+          if (customerData) {
+            ;(data as any).customer_id = customerData.id
+          }
         }
       }
 

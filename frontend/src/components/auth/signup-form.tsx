@@ -89,6 +89,32 @@ export function SignupForm({ className, ...props }: SignupFormProps) {
       if (error) {
         setError(error.message)
       } else {
+        // Call backend to create customer record
+        // This happens before email confirmation so record is ready when they log in
+        try {
+          const registerResponse = await fetch(
+            `${import.meta.env.VITE_API_URL}/api/customer/register-after-signup`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: email.toLowerCase(),
+                name: name,
+              }),
+            }
+          )
+
+          if (!registerResponse.ok) {
+            console.error('Failed to create customer record:', registerResponse.statusText)
+            // Don't fail the signup, just log the error
+          }
+        } catch (err) {
+          console.error('Error calling customer registration:', err)
+          // Don't fail the signup
+        }
+
         // Show success message for email verification
         setSuccess(true)
       }

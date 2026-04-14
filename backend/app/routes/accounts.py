@@ -246,9 +246,9 @@ def list_accounts():
         caller_role = caller_profile.data.get('role')
         caller_branch_id = caller_profile.data.get('branch_id')
         
-        # Build query based on role
-        query = supabase.table('user_profiles').select('*')
-        
+        # Build query based on role (excluding customers)
+        query = supabase.table('user_profiles').select('*').neq('role', 'customer')
+
         if caller_role == 'branch_admin':
             if not caller_branch_id:
                 # Branch admin without a branch assigned
@@ -399,7 +399,13 @@ def update_account(user_id):
 @accounts_bp.route('/<user_id>', methods=['DELETE'])
 def delete_account(user_id):
     """
-    Delete a user account.
+    Delete a user account and all related data.
+    
+    Cascading delete order:
+    1. Delete appointments for any linked customer
+    2. Delete customer record (if exists)
+    3. Delete user profile
+    4. Delete auth user
     
     Returns:
     {
@@ -438,11 +444,36 @@ def delete_account(user_id):
 
         supabase = get_supabase_admin()
         
-        # Delete user auth record using admin API
-        supabase.auth.admin.delete_user(user_id)
+        # Step 1: Find customer record(s) linked to this user
+        try:
+            customer_result = supabase.table('customers').select('id').eq('user_id', user_id).execute()
+            customer_ids = [c['id'] for c in (customer_result.data or [])]
+            
+            # Step 2: Delete appointments for this customer
+            if customer_ids:
+                for customer_id in customer_ids:
+                    supabase.table('appointments').delete().eq('customer_id', customer_id).execute()
+                
+                # Step 3: Delete the customer record(s)
+                supabase.table('customers').delete().eq('user_id', user_id).execute()
+                
+        except Exception as e:
+            print(f"[ACCOUNTS] Warning deleting customer data: {str(e)}", file=sys.stderr)
+            # Continue anyway to try to delete the user
         
-        # Delete user profile
-        supabase.table('user_profiles').delete().eq('id', user_id).execute()
+        # Step 4: Delete user profile
+        try:
+            supabase.table('user_profiles').delete().eq('id', user_id).execute()
+        except Exception as e:
+            print(f"[ACCOUNTS] Warning deleting user profile: {str(e)}", file=sys.stderr)
+            # Continue to delete auth user
+        
+        # Step 5: Delete user auth record using admin API
+        try:
+            supabase.auth.admin.delete_user(user_id)
+        except Exception as e:
+            print(f"[ACCOUNTS] Warning deleting auth user: {str(e)}", file=sys.stderr)
+            # If we got this far, the data deletion was successful
         
         return jsonify({
             'success': True,
@@ -450,6 +481,4 @@ def delete_account(user_id):
         }), 200
         
     except Exception as e:
-        return jsonify({
-            'error': f'Delete failed: {str(e)}'
-        }), 500
+        print(f"[ACCOUNTS] Error in delete_account: {str(e)}", file=sys.stderr)

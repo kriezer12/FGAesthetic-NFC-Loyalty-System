@@ -89,6 +89,7 @@ export function CalendarView() {
   
   // Fetch appointments from Supabase
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  const visibleAppointments = useMemo(() => appointments.filter(a => a.status !== "pending"), [appointments])
 
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
@@ -472,7 +473,7 @@ export function CalendarView() {
           interval={interval}
           clinicHours={clinicHours}
           staff={staff}
-          appointments={appointments}
+          appointments={visibleAppointments}
           blockedTimes={blockedTimes}
           snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}
           onAppointmentUpdate={handleAppointmentUpdate}
@@ -489,7 +490,7 @@ export function CalendarView() {
           interval={interval}
           clinicHours={clinicHours}
           staff={staff}
-          appointments={appointments}
+          appointments={visibleAppointments}
           blockedTimes={blockedTimes}
           onSlotClick={openSlotDialog}
           onAppointmentUpdate={handleAppointmentUpdate}
@@ -503,7 +504,7 @@ export function CalendarView() {
         <CalendarMonthGrid
           selectedDate={selectedDate}
           staff={staff}
-          appointments={appointments}
+          appointments={visibleAppointments}
           onDayClick={handleDayClick}
         />
       )}
@@ -530,7 +531,7 @@ export function CalendarView() {
         selectedDate={selectedDate}
         interval={interval}
         clinicHours={clinicHours}
-        appointments={appointments}
+        appointments={visibleAppointments}
         blockedTimes={blockedTimes}
         onSave={handleSave}
         onDelete={handleDelete}

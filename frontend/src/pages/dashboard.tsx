@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo, useRef, useCallback, lazy, Suspense } fro
 import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check, Calendar, Package, ClipboardList, UserPlus, Sparkles } from "lucide-react"
+import { Users, CreditCard, TrendingUp, Activity, LayoutDashboard, GripVertical, Check, Calendar, Package, ClipboardList, UserPlus, Sparkles, X } from "lucide-react"
+import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -19,8 +20,8 @@ const DashboardModalCharts = lazy(() => import("@/components/features/dashboard/
 // ---------------------------------------------------------------------------
 // Drag-and-drop types & helpers
 // ---------------------------------------------------------------------------
-type SectionId = "stats" | "charts" | "quick-actions"
-const DEFAULT_ORDER: SectionId[] = ["stats", "charts", "quick-actions"]
+type SectionId = "stats" | "charts" | "quick-actions" | "pending-bookings"
+const DEFAULT_ORDER: SectionId[] = ["quick-actions", "pending-bookings", "stats", "charts"]
 const STORAGE_KEY = "dashboard-section-order"
 
 function loadOrder(): SectionId[] {
@@ -28,8 +29,11 @@ function loadOrder(): SectionId[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_ORDER
     const parsed: unknown = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.every((x) => DEFAULT_ORDER.includes(x as SectionId))) {
-      return parsed as SectionId[]
+    if (Array.isArray(parsed)) {
+      // Ensure pending-bookings is injected if missing from old saved state
+      const valid = parsed.filter(x => DEFAULT_ORDER.includes(x as SectionId)) as SectionId[]
+      if (!valid.includes("pending-bookings")) valid.splice(1, 0, "pending-bookings")
+      if (valid.length > 0) return valid
     }
   } catch { /* ignore */ }
   return DEFAULT_ORDER
@@ -107,6 +111,9 @@ export default function Dashboard() {
 
   const [stats, setStats] = useState({ totalCustomers: 0, activeCards: 0, totalVisits: 0, recentActivity: 0 })
   const [rawRows, setRawRows] = useState<RawRow[]>([])
+  const [pendingBookings, setPendingBookings] = useState<any[]>([])
+  const [showAllPending, setShowAllPending] = useState(false)
+  const [selectedPendingBooking, setSelectedPendingBooking] = useState<any | null>(null)
   const [activityFilter, setActivityFilter] = useState<TimeFilter>("daily")
   const [registrationsFilter, setRegistrationsFilter] = useState<TimeFilter>("weekly")
   const [loading, setLoading] = useState(true)
@@ -179,10 +186,42 @@ export default function Dashboard() {
       setStats({ totalCustomers, activeCards, totalVisits, recentActivity })
       setRawRows(rows)
 
+      const { data: upcomingApts } = await supabase
+        .from("appointments")
+        .select("id, title, customer_name, start_time, end_time, status, notes, staff_name")
+        .eq("status", "pending")
+        .gte("start_time", new Date().toISOString())
+        .order("start_time", { ascending: true })
+        .limit(50)
+      
+      setPendingBookings(upcomingApts || [])
+
     } catch (err) {
       console.error("Dashboard load error:", err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleApprove = async (id: string) => {
+    try {
+      const { error } = await supabase.from("appointments").update({ status: "scheduled" }).eq("id", id)
+      if (error) throw error
+      setPendingBookings(prev => prev.filter(p => p.id !== id))
+      toast.success("Appointment approved and scheduled")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve appointment")
+    }
+  }
+
+  const handleDecline = async (id: string) => {
+    try {
+      const { error } = await supabase.from("appointments").update({ status: "cancelled" }).eq("id", id)
+      if (error) throw error
+      setPendingBookings(prev => prev.filter(p => p.id !== id))
+      toast.success("Appointment declined")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to decline appointment")
     }
   }
 
@@ -246,6 +285,65 @@ export default function Dashboard() {
     ),
 
 
+    "pending-bookings": (
+      <Card className="border border-border shadow-sm overflow-hidden">
+        <CardHeader className="pb-0 pt-2 px-5">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" />
+            <CardTitle as="h2" className="text-lg font-bold">Pending Online Bookings</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground">Upcoming scheduled appointments that need review</p>
+        </CardHeader>
+        <CardContent className="pb-2 px-5 pt-4 space-y-2">
+          {pendingBookings.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4 text-center border rounded-lg border-dashed">
+              No pending bookings at the moment.
+            </div>
+          ) : (
+            <>
+              {(showAllPending ? pendingBookings : pendingBookings.slice(0, 3)).map((appt) => (
+                <div key={appt.id} className="flex flex-col bg-muted/20 p-3 rounded-lg border gap-1 transition-colors hover:bg-muted/40 cursor-pointer" onClick={() => setSelectedPendingBooking(appt)}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-sm">{appt.title}</p>
+                      <p className="text-xs text-muted-foreground">{appt.customer_name || "Unknown Customer"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{new Date(appt.start_time).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(appt.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </div>
+                  {appt.notes && appt.notes.replace("[Online Booking]", "").trim() && (
+                    <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded mt-1 line-clamp-1">
+                      <span className="font-medium text-foreground/80">Notes:</span> {appt.notes.replace("[Online Booking]", "").replace("Notes from customer:", "").trim()}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={(e) => { e.stopPropagation(); handleApprove(appt.id); }} className="flex flex-1 justify-center items-center gap-1 text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors pointer-cursor relative z-10 transition-colors" style={{ cursor: "pointer" }}>
+                      <Check className="h-3 w-3" /> Approve
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDecline(appt.id); }} className="flex flex-1 justify-center items-center gap-1 text-xs px-3 py-1.5 bg-destructive/10 text-destructive rounded-md hover:bg-destructive/20 border border-destructive/20 transition-colors pointer-cursor relative z-10 transition-colors" style={{ cursor: "pointer" }}>
+                      <X className="h-3 w-3" /> Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {pendingBookings.length > 3 && (
+                <button
+                  onClick={() => setShowAllPending(!showAllPending)}
+                  className="w-full py-2 mt-2 text-xs font-medium text-primary hover:text-primary/80 transition-colors border border-border/50 rounded-lg bg-background/50 hover:bg-background"
+                >
+                  {showAllPending ? "Show Less" : `Show More (${pendingBookings.length - 3} more)`}
+                </button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    ),
+
     "quick-actions": (
       /* ── Quick Actions ───────────────────────────────────────────────── */
       <Card className="border border-border shadow-sm overflow-hidden">
@@ -291,7 +389,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
     ),
-  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth, userProfile])
+  }), [statCards, activityFilter, registrationsFilter, dailyActivity, monthlyGrowth, userProfile, pendingBookings, showAllPending])
 
   const displayName = userProfile?.full_name ?? user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Admin"
 
@@ -495,6 +593,76 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Modal: Pending Booking Details ──────────────────────────────────────── */}
+      <Dialog open={!!selectedPendingBooking} onOpenChange={(open) => !open && setSelectedPendingBooking(null)}>
+        <DialogContent className="bg-background/95 backdrop-blur-sm border border-border shadow-lg p-6 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">Appointment Details</DialogTitle>
+          </DialogHeader>
+          {selectedPendingBooking && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Title</p>
+                <p className="text-base">{selectedPendingBooking.title}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Customer</p>
+                  <p className="text-base">{selectedPendingBooking.customer_name || "Unknown Customer"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Staff Assigned</p>
+                  <p className="text-base">{selectedPendingBooking.staff_name || "Unassigned"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Date</p>
+                  <p className="text-base">{new Date(selectedPendingBooking.start_time).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Time</p>
+                  <p className="text-base">
+                    {new Date(selectedPendingBooking.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {" - "}
+                    {selectedPendingBooking.end_time 
+                      ? new Date(selectedPendingBooking.end_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) 
+                      : "TBD"}
+                  </p>
+                </div>
+              </div>
+              {selectedPendingBooking.notes && selectedPendingBooking.notes.replace("[Online Booking]", "").trim() && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Notes</p>
+                  <div className="text-sm bg-muted/30 p-3 rounded-md mt-1 whitespace-pre-wrap">
+                    {selectedPendingBooking.notes.replace("[Online Booking]", "").replace("Notes from customer:", "").trim()}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-3 pt-4 border-t mt-4">
+                <button
+                  onClick={() => {
+                    handleApprove(selectedPendingBooking.id)
+                    setSelectedPendingBooking(null)
+                  }}
+                  className="flex-1 py-2 px-4 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                >
+                  <Check className="h-4 w-4" /> Approve
+                </button>
+                <button
+                  onClick={() => {
+                    handleDecline(selectedPendingBooking.id)
+                    setSelectedPendingBooking(null)
+                  }}
+                  className="flex-1 py-2 px-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-lg hover:bg-destructive/20 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+                >
+                  <X className="h-4 w-4" /> Decline
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
+

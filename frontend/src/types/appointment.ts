@@ -7,6 +7,7 @@
  */
 
 export type AppointmentStatus =
+  | "pending"
   | "scheduled"
   | "confirmed"
   | "in-progress"

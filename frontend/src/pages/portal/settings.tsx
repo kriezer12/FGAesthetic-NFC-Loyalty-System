@@ -31,7 +31,8 @@ export default function PortalSettings() {
           .from("customers")
           .select("*")
           .eq("user_id", user.id)
-          .single()
+          .limit(1)
+          .maybeSingle()
 
         if (!error && data) {
           setCustomerData(data)

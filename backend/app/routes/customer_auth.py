@@ -46,6 +46,192 @@ def get_user_from_token():
         raise ValueError(f'Invalid token format: {str(e)}')
 
 
+@customer_auth_bp.route('/register-after-signup', methods=['POST'])
+def register_after_signup():
+    """
+    Create a customer record after signup, before email confirmation.
+    Called from the frontend immediately after user signs up.
+    
+    This prepares the customer record so it's ready when the user confirms their email.
+    After email confirmation, the record will be linked to the auth user.
+    
+    Request body:
+    {
+        "email": "customer@example.com",
+        "name": "Customer Name"
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "message": "Customer record created"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body must be valid JSON'}), 400
+        
+        email = data.get('email', '').lower().strip()
+        name = data.get('name', '').strip()
+        
+        if not email or not name:
+            return jsonify({'error': 'Email and name are required'}), 400
+        
+        if '@' not in email:
+            return jsonify({'error': 'Invalid email address'}), 400
+        
+        supabase_admin = get_supabase_admin()
+        
+        # Check if customer with this email already exists
+        existing = supabase_admin.table('customers').select('id').eq('email', email).maybeSingle().execute()
+        if existing.data:
+            # Customer already exists
+            return jsonify({
+                'success': True,
+                'message': 'Customer record already exists'
+            }), 200
+        
+        # Create customer record without user_id (will be linked after email confirmation)
+        insert_result = supabase_admin.table('customers').insert({
+            'name': name,
+            'email': email,
+        }).execute()
+        
+        if not insert_result.data:
+            print(f"[CUSTOMER_AUTH] Failed to create customer record for {email}", file=sys.stderr)
+            return jsonify({'error': 'Failed to create customer record'}), 500
+        
+        print(f"[CUSTOMER_AUTH] Pre-registered customer {insert_result.data[0].get('id')} for {email}", file=sys.stderr)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Customer record created'
+        }), 201
+        
+    except Exception as e:
+        print(f"[CUSTOMER_AUTH] Error in register_after_signup: {str(e)}", file=sys.stderr)
+        return jsonify({'error': f'Failed to process signup: {str(e)}'}), 500
+
+
+@customer_auth_bp.route('/register', methods=['POST'])
+def register_customer():
+    """
+    Register/create a customer record for a newly signed-up user.
+    Creates the customer database record and links it to the auth user via user_id.
+    
+    Requires valid Authorization header with the customer's auth token.
+    
+    Request body:
+    {
+        "name": "Customer Name",
+        "email": "customer@example.com"  (optional - will use from auth if not provided)
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "customer_id": "customer_record_id",
+        "user_id": "auth_user_id",
+        "name": "Customer Name",
+        "email": "customer@example.com"
+    }
+    """
+    try:
+        user_id = get_user_from_token()
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body must be valid JSON'}), 400
+        
+        name = data.get('name')
+        email = data.get('email')
+        
+        if not name:
+            return jsonify({'error': 'Customer name is required'}), 400
+        
+        supabase_admin = get_supabase_admin()
+        
+        # Check if customer already exists for this user_id
+        existing = supabase_admin.table('customers').select('id').eq('user_id', user_id).maybeSingle().execute()
+        if existing.data:
+            # Customer already registered
+            return jsonify({
+                'success': True,
+                'message': 'Customer already registered',
+                'customer_id': existing.data['id'],
+                'user_id': user_id
+            }), 200
+        
+        # Check if customer with this email exists (from pre-registration)
+        email_match = supabase_admin.table('customers').select('id').eq('email', email or '').maybeSingle().execute()
+        if email_match.data:
+            # Found pre-registered customer, link it
+            result = supabase_admin.table('customers').update({
+                'user_id': user_id,
+                'name': name
+            }).eq('id', email_match.data['id']).execute()
+            
+            if result.data:
+                print(f"[CUSTOMER_AUTH] Linked pre-registered customer {email_match.data['id']} to user {user_id}", file=sys.stderr)
+                return jsonify({
+                    'success': True,
+                    'message': 'Customer linked successfully',
+                    'customer_id': result.data[0].get('id'),
+                    'user_id': user_id,
+                    'name': result.data[0].get('name'),
+                    'email': result.data[0].get('email')
+                }), 200
+        
+        # Check if customer with this name exists (fallback)
+        name_match = supabase_admin.table('customers').select('id').eq('name', name).maybeSingle().execute()
+        if name_match.data and not name_match.data.get('user_id'):
+            # Found unlinked customer by name, link it
+            result = supabase_admin.table('customers').update({
+                'user_id': user_id,
+                'email': email or ''
+            }).eq('id', name_match.data['id']).execute()
+            
+            if result.data:
+                print(f"[CUSTOMER_AUTH] Linked customer by name {name_match.data['id']} to user {user_id}", file=sys.stderr)
+                return jsonify({
+                    'success': True,
+                    'message': 'Customer linked successfully',
+                    'customer_id': result.data[0].get('id'),
+                    'user_id': user_id,
+                    'name': result.data[0].get('name'),
+                    'email': result.data[0].get('email')
+                }), 200
+        
+        # Create new customer record with user_id linkage
+        insert_result = supabase_admin.table('customers').insert({
+            'name': name,
+            'email': email or '',
+            'user_id': user_id,
+        }).execute()
+        
+        if not insert_result.data:
+            return jsonify({'error': 'Failed to create customer record'}), 500
+        
+        customer = insert_result.data[0]
+        
+        print(f"[CUSTOMER_AUTH] Customer registered: {customer.get('id')} for user {user_id}", file=sys.stderr)
+        
+        return jsonify({
+            'success': True,
+            'customer_id': customer.get('id'),
+            'user_id': user_id,
+            'name': customer.get('name'),
+            'email': customer.get('email')
+        }), 201
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 401
+    except Exception as e:
+        print(f"[CUSTOMER_AUTH] Error registering customer: {str(e)}", file=sys.stderr)
+        return jsonify({'error': f'Failed to register customer: {str(e)}'}), 500
+
+
 @customer_auth_bp.route('/set-password', methods=['POST'])
 def set_initial_password():
     """
