@@ -20,6 +20,7 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useAuth } from "@/contexts/auth-context"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { CalendarWeekGrid } from "./calendar-parts/calendar-week-grid"
@@ -347,7 +348,15 @@ export function CalendarView() {
   }, [appointments, addAppointment, updateAppointment])
 
   /** Delete from dialog. */
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
+
   const handleDelete = useCallback(async (id: string) => {
+    if (!canDeleteAppointment) {
+      console.error("User lacks permission to delete appointments")
+      throw new Error("Only branch administrators and super administrators can delete appointments")
+    }
+
     const appt = appointments.find((a) => a.id === id)
     // If it's part of a recurrence series, show the recurrence action dialog
     if (appt?.recurrence_group_id) {
@@ -367,7 +376,7 @@ export function CalendarView() {
     } catch (err) {
       console.error("Failed to delete appointment:", err)
     }
-  }, [appointments, deleteAppointment, getSeriesAppointments])
+  }, [appointments, deleteAppointment, getSeriesAppointments, canDeleteAppointment])
 
   /** Handle confirmed recurrence action (delete scope). */
   const handleRecurrenceConfirm = useCallback(
