@@ -407,9 +407,16 @@ export function AppointmentDialog({
 
     const startDate = setTimeOnDate(appointmentDate, startMin)
     const endDate   = setTimeOnDate(appointmentDate, endMin)
+
+    /* past date check */
+    const now = new Date()
+    if (startDate < now) {
+      setError("Cannot create appointments in the past. Please select a future date and time.")
+      return
+    }
     const staffMember = staff.find((s) => s.id === staffId)!
 
-    const now = new Date().toISOString()
+    const nowIso = now.toISOString()
     const appt: Appointment = {
       id:               appointment?.id ?? generateId(),
       appointment_type: appointmentType,
@@ -428,8 +435,8 @@ export function AppointmentDialog({
       recurrence_days:  hasPackageSelected ? recurrenceInterval : undefined,
       recurrence_count: hasPackageSelected && recurrenceInterval ? recurrenceCount : undefined,
       recurrence_group_id: appointment?.recurrence_group_id,
-      created_at:       appointment?.created_at ?? now,
-      updated_at:       now,
+      created_at:       appointment?.created_at ?? nowIso,
+      updated_at:       nowIso,
     }
     setSaving(true)
     try {

@@ -57,11 +57,13 @@ def create_app() -> Flask:
     from app.routes.reports import reports_bp
     from app.routes.pos import pos_bp
     from app.routes.staff import staff_bp
+    from app.routes.admin_cleanup import cleanup_bp
     
     app.register_blueprint(accounts_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(pos_bp)
     app.register_blueprint(staff_bp)
+    app.register_blueprint(cleanup_bp)
 
     # ==================== Routes ====================
 
