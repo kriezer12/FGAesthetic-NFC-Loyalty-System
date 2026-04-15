@@ -20,6 +20,7 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { usePasswordVerification } from "@/hooks/use-password-verification"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { CalendarWeekGrid } from "./calendar-parts/calendar-week-grid"
@@ -31,6 +32,7 @@ import {
   type RecurrenceActionScope,
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
+import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
 import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
 
 // ---- localStorage key ----
@@ -88,6 +90,7 @@ export function CalendarView() {
   
   // Fetch appointments from Supabase
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  const { verifyPassword } = usePasswordVerification()
 
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
@@ -242,6 +245,13 @@ export function CalendarView() {
   const [recurrenceActionType, setRecurrenceActionType] = useState<RecurrenceActionType>("delete")
   const [recurrenceTarget, setRecurrenceTarget] = useState<Appointment | null>(null)
 
+  // ---- password verification for deletion ----
+  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [pendingRecurrenceDelete, setPendingRecurrenceDelete] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
+  const [isVerifying, setIsVerifying] = useState(false)
+
   /** Get all appointments belonging to the same recurrence series. */
   const getSeriesAppointments = useCallback(
     (appt: Appointment) => {
@@ -359,15 +369,12 @@ export function CalendarView() {
         return
       }
     }
-    // Single appointment — delete directly
-    try {
-      await deleteAppointment(id)
-      setDialogOpen(false)
-      setEditingAppointment(null)
-    } catch (err) {
-      console.error("Failed to delete appointment:", err)
-    }
-  }, [appointments, deleteAppointment, getSeriesAppointments])
+    // Single appointment — show password verification
+    setPendingDeleteId(id)
+    setPendingRecurrenceDelete(false)
+    setVerificationError(null)
+    setShowPasswordVerification(true)
+  }, [appointments, getSeriesAppointments])
 
   /** Handle confirmed recurrence action (delete scope). */
   const handleRecurrenceConfirm = useCallback(
@@ -375,6 +382,16 @@ export function CalendarView() {
       if (!recurrenceTarget) return
       setRecurrenceDialogOpen(false)
 
+      // For delete action, show password verification instead of directly deleting
+      if (recurrenceActionType === "delete") {
+        setRecurrenceTarget(recurrenceTarget)
+        setPendingRecurrenceDelete(true)
+        setVerificationError(null)
+        setShowPasswordVerification(true)
+        return
+      }
+
+      // Other actions (edit) continue normally
       try {
         const series = getSeriesAppointments(recurrenceTarget)
         const targetIdx = series.findIndex((a) => a.id === recurrenceTarget.id)
@@ -406,8 +423,27 @@ export function CalendarView() {
 
       setRecurrenceTarget(null)
     },
-    [recurrenceTarget, getSeriesAppointments, deleteAppointment],
+    [recurrenceTarget, recurrenceActionType, getSeriesAppointments, deleteAppointment],
   )
+
+  /** Perform actual deletion after password verification. */
+  const handleConfirmedDelete = async () => {
+    if (pendingDeleteId && !pendingRecurrenceDelete) {
+      // Single appointment deletion
+      try {
+        await deleteAppointment(pendingDeleteId)
+        setDialogOpen(false)
+        setEditingAppointment(null)
+      } catch (err) {
+        console.error("Failed to delete appointment:", err)
+        setVerificationError("Failed to delete appointment")
+      }
+    }
+    // Password verification complete
+    setPendingDeleteId(null)
+    setPendingRecurrenceDelete(false)
+    setShowPasswordVerification(false)
+  }
 
   // ---- dialog openers ----
 
@@ -555,6 +591,36 @@ export function CalendarView() {
         onEditInstead={() => {
           if (recurrenceTarget) openEditDialog(recurrenceTarget)
         }}
+      />
+
+      <PasswordVerificationDialog
+        open={showPasswordVerification}
+        onOpenChange={(open) => {
+          if (!open && !isVerifying) {
+            setShowPasswordVerification(false)
+            setPendingDeleteId(null)
+            setPendingRecurrenceDelete(false)
+            setVerificationError(null)
+          }
+        }}
+        onVerify={async (password) => {
+          setIsVerifying(true)
+          setVerificationError(null)
+          try {
+            await verifyPassword(password)
+            await handleConfirmedDelete()
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Verification failed"
+            setVerificationError(message)
+          } finally {
+            setIsVerifying(false)
+          }
+        }}
+        title="Verify Password to Delete Appointment"
+        description="Enter your password to confirm appointment deletion"
+        actionLabel="Verify & Delete"
+        isVerifying={isVerifying}
+        error={verificationError}
       />
     </Card>
   )
