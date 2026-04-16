@@ -1,9 +1,7 @@
 import { Star, Zap, Trophy } from "lucide-react"
-import type { Customer } from "@/types/customer"
 
 type LoyaltyPointsDisplayProps = {
   points: number
-  maxPointsForStars?: number
   showProgression?: boolean
 }
 
@@ -15,13 +13,11 @@ type LoyaltyPointsDisplayProps = {
  */
 export function LoyaltyPointsDisplay({
   points,
-  maxPointsForStars = 1000,
   showProgression = false,
 }: LoyaltyPointsDisplayProps) {
   // Calculate stars (1 star per 50 points, max 5 stars)
   const starsEarned = Math.min(Math.floor(points / 50), 5)
   const pointsToNextStar = points % 50 === 0 ? 50 : 50 - (points % 50)
-  const previousStarThreshold = starsEarned * 50
 
   // Determine tier level
   const getTierInfo = () => {

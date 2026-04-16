@@ -60,7 +60,6 @@ import { CustomerPointsDashboard } from "@/components/features/customers/custome
 import { LoyaltyPointsDisplay } from "@/components/features/customers/customer-info-parts/loyalty-points-display"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
 import { TreatmentHistory } from "@/components/features/customers/treatment-history"
-import { TreatmentStatusManager } from "@/components/features/customers/treatment-status-manager"
 import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
