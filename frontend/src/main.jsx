@@ -41,6 +41,7 @@ const LoyaltyAdminPage = lazy(() => import("./pages/loyalty-admin.tsx"))
 const CheckoutPage = lazy(() => import("./pages/checkout.tsx"))
 const SalesReportsPage = lazy(() => import("./pages/sales-reports.tsx"))
 const PosSettingsPage = lazy(() => import("./pages/pos-settings.tsx"))
+const AppointmentsSettingsPage = lazy(() => import("./pages/appointments-settings.tsx"))
 
 // Loading fallback component
 function PageLoader() {
@@ -97,6 +98,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/dashboard/pos-settings" element={<PosSettingsPage />} />
           <Route path="/dashboard/sales-reports" element={<SalesReportsPage />} />
           <Route path="/dashboard/equipment" element={<EquipmentPage />} />
+          <Route path="/dashboard/appointments-settings" element={<AppointmentsSettingsPage />} />
         </Route>
       </Routes>
     </AuthProvider>

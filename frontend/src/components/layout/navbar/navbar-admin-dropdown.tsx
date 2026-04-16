@@ -8,7 +8,8 @@ import {
   Star, 
   BarChart3, 
   Building2,
-  Wrench
+  Wrench,
+  Calendar
 } from "lucide-react"
 import { useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -53,6 +54,7 @@ const adminCategories: AdminCategory[] = [
     title: "Business",
     links: [
       { title: "Reports", url: "/dashboard/reports", icon: BarChart3 },
+      { title: "Appointment Settings", url: "/dashboard/appointments-settings", icon: Calendar },
     ],
   },
 ]

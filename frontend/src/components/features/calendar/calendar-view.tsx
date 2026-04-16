@@ -20,6 +20,8 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
+import { saveAppointmentSettings } from "@/services/appointment-settings"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { CalendarWeekGrid } from "./calendar-parts/calendar-week-grid"
@@ -89,6 +91,9 @@ export function CalendarView() {
   // Fetch appointments from Supabase
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
+  // Load appointment settings from database (shared across all staff)
+  const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
+
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
@@ -103,8 +108,21 @@ export function CalendarView() {
     loadServices()
   }, [loadServices])
   
-  // Load settings from localStorage (or defaults)
+  // Merge appointment settings from database with calendar-specific settings
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(() => loadSettings())
+
+  // Update calendar settings when appointment settings change
+  useEffect(() => {
+    if (!settingsLoading && appointmentSettings) {
+      setCalendarSettings((prev) => ({
+        ...prev,
+        workHoursStart: appointmentSettings.working_hours_start,
+        workHoursEnd: appointmentSettings.working_hours_end,
+        lunchBreakStart: appointmentSettings.lunch_break_start,
+        lunchBreakEnd: appointmentSettings.lunch_break_end,
+      }))
+    }
+  }, [appointmentSettings, settingsLoading])
 
   // Fetch real staff from database
   const { staff: allStaff = [] } = useStaff()
@@ -435,7 +453,26 @@ export function CalendarView() {
   const handleSettingsSave = useCallback((settings: CalendarSettings) => {
     setCalendarSettings(settings)
     saveSettings(settings)
-  }, [])
+    
+    // Also save work hours and lunch breaks to appointment_settings table
+    // so all staff see the same settings
+    const updatedAppointmentSettings = {
+      ...appointmentSettings,
+      working_hours_start: settings.workHoursStart || appointmentSettings.working_hours_start,
+      working_hours_end: settings.workHoursEnd || appointmentSettings.working_hours_end,
+      lunch_break_start: settings.lunchBreakStart || appointmentSettings.lunch_break_start,
+      lunch_break_end: settings.lunchBreakEnd || appointmentSettings.lunch_break_end,
+    }
+    
+    saveAppointmentSettings(updatedAppointmentSettings)
+      .then(() => {
+        // Refetch settings to sync across all instances
+        refetchSettings()
+      })
+      .catch((err) => {
+        console.error("Failed to save appointment settings:", err)
+      })
+  }, [appointmentSettings, refetchSettings])
 
   /** Switch to day view when clicking a day in week/month view. */
   const handleDayClick = useCallback((date: Date) => {
