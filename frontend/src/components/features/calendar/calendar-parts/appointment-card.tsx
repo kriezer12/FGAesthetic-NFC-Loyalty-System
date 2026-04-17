@@ -11,6 +11,7 @@
 import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { minutesSinceMidnight, formatTime } from "./calendar-utils"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -86,6 +87,9 @@ export function AppointmentCard({
 
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false)
   const [cancelAlertOpen, setCancelAlertOpen] = useState(false)
+
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
 
   return (
     <>
@@ -270,21 +274,23 @@ export function AppointmentCard({
           Edit Appointment
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={(e) => {
-            e.preventDefault()
-            if (appointment.recurrence_group_id) {
-              // Recurring — go straight to the recurrence scope dialog
-              onDelete()
-            } else {
-              setDeleteAlertOpen(true)
-            }
-          }}
-          className="gap-2 text-destructive focus:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete Appointment
-        </ContextMenuItem>
+        {canDeleteAppointment && (
+          <ContextMenuItem
+            onSelect={(e) => {
+              e.preventDefault()
+              if (appointment.recurrence_group_id) {
+                // Recurring — go straight to the recurrence scope dialog
+                onDelete()
+              } else {
+                setDeleteAlertOpen(true)
+              }
+            }}
+            className="gap-2 text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Appointment
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
     </>

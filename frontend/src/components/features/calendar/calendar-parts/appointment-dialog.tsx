@@ -25,7 +25,9 @@ import { TimePicker } from "@/components/ui/time-picker"
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox"
 import { ServicePicker } from "./service-picker"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
 import { useCustomers } from "@/hooks/use-customers"
+import { useAuth } from "@/contexts/auth-context"
 import type { Service } from "@/types/service"
 import type { Treatment } from "@/types/customer"
 import type {
@@ -47,7 +49,7 @@ import {
   setTimeOnDate,
   timeInputToMinutes,
 } from "./calendar-utils"
-import { TriangleAlert, Pencil } from "lucide-react"
+import { TriangleAlert, Pencil, Lock } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -135,8 +137,16 @@ export function AppointmentDialog({
 }: AppointmentDialogProps) {
   const isEdit = Boolean(appointment)
 
+  // ---- role-based restrictions ----
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
+  const isAdmin = userProfile?.role === "branch_admin" || userProfile?.role === "super_admin"
+  const isReadOnly = !isStaff
+
   // ---- hooks ----
   const { customers, loading: customersLoading } = useCustomers()
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
 
   // ---- form state ----
   const [appointmentType, setAppointmentType] = useState<"consultation" | "treatment" | "followup">("treatment")
@@ -358,6 +368,12 @@ export function AppointmentDialog({
 
   // ---- save handler ----
   const handleSave = async () => {
+    /* role-based restriction */
+    if (!isStaff) {
+      setError("Only staff members can create or edit appointments.")
+      return
+    }
+
     /* required fields */
     if (appointmentType !== "consultation" && serviceIds.length === 0) { setError("Please select at least one service."); return }
     if (!customerId && !customerName) { setError("Please select or enter a customer."); return }
@@ -494,7 +510,16 @@ export function AppointmentDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0">
-          <div className="flex flex-col gap-6 px-5 py-5 pb-8" id="appt-dialog-form">
+          {isReadOnly && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 m-4 text-sm text-amber-900">
+              <Lock className="h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">Monitoring Only</p>
+                <p className="text-xs text-amber-800">You can view this appointment, but only staff members can create or edit appointments.</p>
+              </div>
+            </div>
+          )}
+          <div className={`flex flex-col gap-6 px-5 py-5 pb-8 ${isReadOnly ? "opacity-60 pointer-events-none" : ""}`} id="appt-dialog-form">
 
             {/* SECTION: Details */}
             <div className="space-y-4">
@@ -747,7 +772,13 @@ export function AppointmentDialog({
         </ScrollArea>
 
         <DialogFooter className="gap-2 border-t px-5 py-3 shrink-0 bg-background">
-          {isEdit && onDelete && appointment && (
+          {isReadOnly && (
+            <div className="w-full flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 mb-2">
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              <span>Only staff members can create or edit appointments. Admins can view and monitor.</span>
+            </div>
+          )}
+          {isEdit && onDelete && appointment && canDeleteAppointment && (
             <Button
               variant="destructive"
               size="sm"
@@ -759,6 +790,7 @@ export function AppointmentDialog({
                   setConfirmingDelete(true)
                 }
               }}
+              disabled={isReadOnly}
             >
               Delete
             </Button>
@@ -766,7 +798,12 @@ export function AppointmentDialog({
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button 
+            size="sm" 
+            onClick={handleSave} 
+            disabled={saving || isReadOnly}
+            title={isReadOnly ? "Only staff members can create or edit appointments" : undefined}
+          >
             {saving ? "Saving…" : isEdit ? "Save Changes" : "Create"}
           </Button>
         </DialogFooter>

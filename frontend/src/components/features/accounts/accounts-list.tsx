@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EditAccountModal } from "./edit-account-modal"
+import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
 import {
   Dialog,
   DialogContent,
@@ -108,12 +109,14 @@ const AccountAvatarCell = ({ account }: { account: Account }) => {
 }
 
 export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
-  const { updateAccount, deleteAccount } = useAccounts()
+  const { updateAccount, deleteAccount, verifyPassword } = useAccounts()
   const { userProfile } = useAuth()
   const isSuper = userProfile?.role === 'super_admin'
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Account | null>(null)
+  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
 
   // sorting state
   const [sortKey, setSortKey] = useState<keyof Account | null>(null)
@@ -151,18 +154,46 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
+    // First show password verification dialog
+    setVerificationError(null)
+    setShowPasswordVerification(true)
+  }
+
+  const handlePasswordVerified = async (password: string) => {
     if (!deleteConfirm) return
+    
     setIsDeleting(true)
+    setVerificationError(null)
     try {
+      console.log("[Delete Flow] Verifying password...")
+      // Verify the password
+      await verifyPassword(password)
+      console.log("[Delete Flow] Password verified, deleting account...")
+      
+      // Password verified, proceed with deletion
       await deleteAccount(deleteConfirm.id)
+      console.log("[Delete Flow] Account deleted, refreshing list...")
       await onRefresh()
+      console.log("[Delete Flow] Refresh complete")
+      
+      // Close dialogs
+      setShowPasswordVerification(false)
       setDeleteConfirm(null)
     } catch (error) {
-      console.error("Failed to delete account:", error)
+      const message = error instanceof Error ? error.message : "Verification failed"
+      console.error("[Delete Flow] Error:", message)
+      setVerificationError(message)
     } finally {
       setIsDeleting(false)
     }
+  }
+
+  const handleDeleteCancel = () => {
+    console.log("[Delete Flow] Canceling deletion")
+    setDeleteConfirm(null)
+    setShowPasswordVerification(false)
+    setVerificationError(null)
   }
 
   return (
@@ -241,7 +272,9 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
                           )}
                           {(isSuper || account.role === 'staff') && (
                             <DropdownMenuItem
-                              onClick={() => setDeleteConfirm(account)}
+                              onClick={() => {
+                                setDeleteConfirm(account)
+                              }}
                               className="text-red-600"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -266,7 +299,11 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
         onSave={handleEdit}
       />
 
-      <Dialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+      {/* Initial deletion confirmation dialog */}
+      <Dialog 
+        open={deleteConfirm !== null && !showPasswordVerification} 
+        onOpenChange={(open) => !open && handleDeleteCancel()}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Account</DialogTitle>
@@ -278,21 +315,38 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
           <div className="flex gap-2 justify-end">
             <Button
               variant="outline"
-              onClick={() => setDeleteConfirm(null)}
+              onClick={handleDeleteCancel}
               disabled={isDeleting}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "Verifying..." : "Delete"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Password verification dialog */}
+      <PasswordVerificationDialog
+        open={showPasswordVerification}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            console.log("[Password Dialog] Closed by user")
+            handleDeleteCancel()
+          }
+        }}
+        onVerify={handlePasswordVerified}
+        title="Verify Password to Delete Account"
+        description={`Enter your password to confirm deletion of ${deleteConfirm?.email}`}
+        actionLabel="Verify & Delete Account"
+        isVerifying={isDeleting}
+        error={verificationError}
+      />
     </>
   )
 }

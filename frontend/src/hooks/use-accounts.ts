@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
+import { apiCall } from "@/lib/api"
 
 export interface Account {
   id: string
@@ -26,8 +27,8 @@ export function useAccounts() {
     setError(null)
 
     try {
-      const response = await fetch("/api/accounts/list", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+      const response = await apiCall("/accounts/list", {
+        authToken: session.access_token,
       })
       if (!response.ok) {
         throw new Error("Failed to fetch accounts")
@@ -48,12 +49,9 @@ export function useAccounts() {
     updates: Partial<Account>
   ) => {
     try {
-      const response = await fetch(`/api/accounts/${userId}`, {
+      const response = await apiCall(`/accounts/${userId}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        authToken: session?.access_token,
         body: JSON.stringify(updates),
       })
 
@@ -75,11 +73,9 @@ export function useAccounts() {
 
   const deleteAccount = async (userId: string) => {
     try {
-      const response = await fetch(`/api/accounts/${userId}`, {
+      const response = await apiCall(`/accounts/${userId}`, {
         method: "DELETE",
-        headers: {
-          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        authToken: session?.access_token,
       })
 
       if (!response.ok) {
@@ -94,6 +90,32 @@ export function useAccounts() {
     }
   }
 
+  const verifyPassword = async (password: string): Promise<boolean> => {
+    if (!session?.access_token) {
+      throw new Error("Authentication session not found. Please login again.")
+    }
+
+    try {
+      const response = await apiCall("/accounts/verify-password", {
+        method: "POST",
+        authToken: session.access_token,
+        body: JSON.stringify({ password }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        const errorMessage = data.error || `Password verification failed (${response.status})`
+        throw new Error(errorMessage)
+      }
+
+      const data = await response.json()
+      return data.verified === true
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An error occurred"
+      throw new Error(message)
+    }
+  }
+
   useEffect(() => {
     fetchAccounts()
   }, [user])
@@ -105,5 +127,6 @@ export function useAccounts() {
     fetchAccounts,
     updateAccount,
     deleteAccount,
+    verifyPassword,
   }
 }

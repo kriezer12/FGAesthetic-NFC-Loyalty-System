@@ -154,7 +154,12 @@ export function CalendarHeader({
           </Button>
         )}
 
-        <Button size="sm" onClick={onNewAppointment}>
+        <Button 
+          size="sm" 
+          onClick={onNewAppointment}
+          disabled={userProfile?.role !== "staff"}
+          title={userProfile?.role !== "staff" ? "Only staff members can create appointments" : "Create a new appointment"}
+        >
           <CalendarPlus className="mr-1.5 h-4 w-4" />
           New Appointment
         </Button>

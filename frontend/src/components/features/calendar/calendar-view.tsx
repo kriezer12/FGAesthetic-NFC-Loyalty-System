@@ -22,6 +22,8 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId, setTimeOnDate } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useAuth } from "@/contexts/auth-context"
+import { usePasswordVerification } from "@/hooks/use-password-verification"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { CalendarWeekGrid } from "./calendar-parts/calendar-week-grid"
@@ -33,6 +35,7 @@ import {
   type RecurrenceActionScope,
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
+import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
 import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
 
 // ---- localStorage key ----
@@ -110,6 +113,11 @@ function getDayOfWeek(date: Date): string {
 }
 
 export function CalendarView() {
+  // ---- auth state ----
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
+  const isAdmin = userProfile?.role === "branch_admin" || userProfile?.role === "super_admin"
+  
   // ---- core state ----
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [interval, setIntervalMinutes]  = useState<IntervalMinutes>(DEFAULT_INTERVAL)
@@ -122,6 +130,7 @@ export function CalendarView() {
   
   // Fetch appointments from Supabase
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  const { verifyPassword } = usePasswordVerification()
 
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
@@ -340,6 +349,13 @@ export function CalendarView() {
   const [recurrenceActionType, setRecurrenceActionType] = useState<RecurrenceActionType>("delete")
   const [recurrenceTarget, setRecurrenceTarget] = useState<Appointment | null>(null)
 
+  // ---- password verification for deletion ----
+  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [pendingRecurrenceDelete, setPendingRecurrenceDelete] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
+  const [isVerifying, setIsVerifying] = useState(false)
+
   /** Get all appointments belonging to the same recurrence series. */
   const getSeriesAppointments = useCallback(
     (appt: Appointment) => {
@@ -445,7 +461,15 @@ export function CalendarView() {
   }, [appointments, addAppointment, updateAppointment])
 
   /** Delete from dialog. */
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
+
   const handleDelete = useCallback(async (id: string) => {
+    if (!canDeleteAppointment) {
+      console.error("User lacks permission to delete appointments")
+      throw new Error("Only branch administrators and super administrators can delete appointments")
+    }
+
     const appt = appointments.find((a) => a.id === id)
     // If it's part of a recurrence series, show the recurrence action dialog
     if (appt?.recurrence_group_id) {
@@ -465,7 +489,13 @@ export function CalendarView() {
     } catch (err) {
       console.error("Failed to delete appointment:", err)
     }
-  }, [appointments, deleteAppointment, getSeriesAppointments])
+  }, [appointments, deleteAppointment, getSeriesAppointments, canDeleteAppointment])
+    // Single appointment — show password verification
+    setPendingDeleteId(id)
+    setPendingRecurrenceDelete(false)
+    setVerificationError(null)
+    setShowPasswordVerification(true)
+  }, [appointments, getSeriesAppointments])
 
   /** Handle confirmed recurrence action (delete scope). */
   const handleRecurrenceConfirm = useCallback(
@@ -473,6 +503,16 @@ export function CalendarView() {
       if (!recurrenceTarget) return
       setRecurrenceDialogOpen(false)
 
+      // For delete action, show password verification instead of directly deleting
+      if (recurrenceActionType === "delete") {
+        setRecurrenceTarget(recurrenceTarget)
+        setPendingRecurrenceDelete(true)
+        setVerificationError(null)
+        setShowPasswordVerification(true)
+        return
+      }
+
+      // Other actions (edit) continue normally
       try {
         const series = getSeriesAppointments(recurrenceTarget)
         const targetIdx = series.findIndex((a) => a.id === recurrenceTarget.id)
@@ -504,17 +544,40 @@ export function CalendarView() {
 
       setRecurrenceTarget(null)
     },
-    [recurrenceTarget, getSeriesAppointments, deleteAppointment],
+    [recurrenceTarget, recurrenceActionType, getSeriesAppointments, deleteAppointment],
   )
+
+  /** Perform actual deletion after password verification. */
+  const handleConfirmedDelete = async () => {
+    if (pendingDeleteId && !pendingRecurrenceDelete) {
+      // Single appointment deletion
+      try {
+        await deleteAppointment(pendingDeleteId)
+        setDialogOpen(false)
+        setEditingAppointment(null)
+      } catch (err) {
+        console.error("Failed to delete appointment:", err)
+        setVerificationError("Failed to delete appointment")
+      }
+    }
+    // Password verification complete
+    setPendingDeleteId(null)
+    setPendingRecurrenceDelete(false)
+    setShowPasswordVerification(false)
+  }
 
   // ---- dialog openers ----
 
   const openNewDialog = useCallback(() => {
+    if (!isStaff) {
+      console.warn("Only staff members can create appointments")
+      return
+    }
     setEditingAppointment(null)
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const openSlotDialog = useCallback((staffId: string, startMinutes: number) => {
     // Check if the clicked slot is in the past
@@ -532,18 +595,26 @@ export function CalendarView() {
       return
     }
     
+    if (!isStaff) {
+      console.warn("Only staff members can create appointments")
+      return
+    }
     setEditingAppointment(null)
     setPrefillStaffId(staffId)
     setPrefillStartMin(startMinutes)
     setDialogOpen(true)
-  }, [selectedDate])
+  }, [isStaff])
 
   const openEditDialog = useCallback((appt: Appointment) => {
+    if (!isStaff) {
+      console.warn("Only staff members can edit appointments")
+      return
+    }
     setEditingAppointment(appt)
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const handleSettingsSave = useCallback(async (settings: CalendarSettings) => {
     try {
