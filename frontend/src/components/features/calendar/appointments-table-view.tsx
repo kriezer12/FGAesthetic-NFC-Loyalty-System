@@ -6,13 +6,23 @@
  * Admins can see all staff appointments, staff see only their own.
  */
 
-import { useState, useMemo } from "react"
+import React, { useState, useMemo } from "react"
 import { format, parseISO } from "date-fns"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { cn } from "@/lib/utils"
 import { Eye, Edit, Trash2 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface AppointmentsTableViewProps {
   appointments: Appointment[]
@@ -35,6 +45,8 @@ export function AppointmentsTableView({
 }: AppointmentsTableViewProps) {
   const { userProfile } = useAuth()
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const [deleteConfirmAppointment, setDeleteConfirmAppointment] = useState<Appointment | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
 
@@ -82,8 +94,8 @@ export function AppointmentsTableView({
               </tr>
             ) : (
               sortedAppointments.map((appointment) => (
+                <React.Fragment key={appointment.id}>
                 <tr
-                  key={appointment.id}
                   className="border-b hover:bg-muted/50 transition-colors"
                 >
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -149,26 +161,70 @@ export function AppointmentsTableView({
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => onEdit(appointment)}
-                        title="Edit appointment"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => onDelete(appointment)}
-                        title="Delete appointment"
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {!isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onEdit(appointment)}
+                          title="Edit appointment"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setDeleteConfirmAppointment(appointment)}
+                          title="Delete appointment"
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
+                {expandedRow === appointment.id && (
+                  <tr className="bg-muted/30">
+                    <td colSpan={isAdmin ? 6 : 5} className="px-4 py-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <div className="font-semibold text-muted-foreground mb-2">Appointment Details</div>
+                          <div className="space-y-2">
+                            <div>
+                              <span className="font-medium">Type:</span>{" "}
+                              <span className="text-muted-foreground">
+                                {appointment.appointment_type || "N/A"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="font-medium">Location:</span>{" "}
+                              <span className="text-muted-foreground">
+                                {appointment.location_type || "N/A"}
+                              </span>
+                            </div>
+                            {appointment.customer_id && (
+                              <div>
+                                <span className="font-medium">Customer ID:</span>{" "}
+                                <span className="text-muted-foreground">
+                                  {appointment.customer_id}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-muted-foreground mb-2">Notes</div>
+                          <p className="text-muted-foreground whitespace-pre-wrap text-xs">
+                            {appointment.notes || "No notes"}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))
             )}
           </tbody>
@@ -220,6 +276,52 @@ export function AppointmentsTableView({
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteConfirmAppointment} onOpenChange={(open) => !open && setDeleteConfirmAppointment(null)}>
+        <AlertDialogContent className="flex flex-col gap-4">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <span>Delete this appointment?</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirmAppointment && (
+                <>
+                  <span className="font-medium text-foreground">
+                    {deleteConfirmAppointment.title}
+                    {deleteConfirmAppointment.customer_name ? ` — ${deleteConfirmAppointment.customer_name}` : ""}
+                  </span>
+                  <br />
+                </>
+              )}
+              This action is permanent and cannot be undone. Were you trying to make a change instead?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            Deleted appointments are removed permanently and cannot be recovered.
+          </div>
+          <AlertDialogFooter className="gap-3 sm:gap-3 mt-2">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setIsDeleting(true)
+                try {
+                  if (deleteConfirmAppointment) {
+                    await onDelete(deleteConfirmAppointment)
+                  }
+                } finally {
+                  setIsDeleting(false)
+                  setDeleteConfirmAppointment(null)
+                }
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Yes, delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

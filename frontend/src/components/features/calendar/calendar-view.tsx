@@ -13,6 +13,8 @@ import { Card } from "@/components/ui/card"
 import { NotificationToast } from "@/components/ui/notification-toast"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/auth-context"
+import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
+import { usePasswordVerification } from "@/hooks/use-password-verification"
 import type { Appointment, IntervalMinutes, StaffMember, ViewMode } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import {
@@ -206,6 +208,14 @@ export function CalendarView() {
 
   // ---- settings state ----
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+
+  // ---- password verification state ----
+  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [pendingRecurrenceDelete, setPendingRecurrenceDelete] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const { verifyPassword } = usePasswordVerification()
 
   // Build the list of dates that need lunch-break blocked times.
   // Day view = just selectedDate; week view = all 7 days of the week.
@@ -410,15 +420,8 @@ export function CalendarView() {
   }, [appointments, addAppointment, updateAppointment])
 
   /** Delete from dialog. */
-  const { hasRole } = useAuth()
-  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
-
   const handleDelete = useCallback(async (id: string) => {
-    if (!canDeleteAppointment) {
-      console.error("User lacks permission to delete appointments")
-      throw new Error("Only branch administrators and super administrators can delete appointments")
-    }
-
+    // Permission check will happen in deleteAppointment from hook
     const appt = appointments.find((a) => a.id === id)
     // If it's part of a recurrence series, show the recurrence action dialog
     if (appt?.recurrence_group_id) {
@@ -430,15 +433,50 @@ export function CalendarView() {
         return
       }
     }
-    // Single appointment — delete directly
+    // Single appointment — show password verification
+    setPendingDeleteId(id)
+    setPendingRecurrenceDelete(false)
+    setShowPasswordVerification(true)
+  }, [appointments, getSeriesAppointments])
+
+  /** Handle password verification for deletion */
+  const handlePasswordVerified = useCallback(async (password: string) => {
+    setIsVerifying(true)
+    setVerificationError(null)
     try {
-      await deleteAppointment(id)
-      setDialogOpen(false)
-      setEditingAppointment(null)
+      await verifyPassword(password)
+      // Password verified, proceed with deletion
+      if (pendingDeleteId) {
+        await deleteAppointment(pendingDeleteId)
+        setDialogOpen(false)
+        setEditingAppointment(null)
+      } else if (pendingRecurrenceDelete && recurrenceTarget) {
+        // Handle recurring appointment deletion
+        const series = getSeriesAppointments(recurrenceTarget)
+        const targetTime = new Date(recurrenceTarget.start_time).getTime()
+        const toDelete = series.filter(
+          (a) => new Date(a.start_time).getTime() >= targetTime,
+        )
+        for (const appt of toDelete) {
+          await deleteAppointment(appt.id)
+        }
+        setDialogOpen(false)
+        setEditingAppointment(null)
+      }
+      
+      // Clean up
+      setShowPasswordVerification(false)
+      setPendingDeleteId(null)
+      setPendingRecurrenceDelete(false)
+      setVerificationError(null)
+      setRecurrenceTarget(null)
     } catch (err) {
-      console.error("Failed to delete appointment:", err)
+      const message = err instanceof Error ? err.message : "Password verification failed"
+      setVerificationError(message)
+    } finally {
+      setIsVerifying(false)
     }
-  }, [appointments, deleteAppointment, getSeriesAppointments, canDeleteAppointment])
+  }, [pendingDeleteId, pendingRecurrenceDelete, recurrenceTarget, deleteAppointment, verifyPassword, getSeriesAppointments])
 
   /** Handle confirmed recurrence action (delete scope). */
   const handleRecurrenceConfirm = useCallback(
@@ -446,36 +484,12 @@ export function CalendarView() {
       if (!recurrenceTarget) return
       setRecurrenceDialogOpen(false)
 
-      // For delete action, proceed with actual deletion
+      // For delete action, show password verification
       if (recurrenceActionType === "delete") {
-        try {
-          const series = getSeriesAppointments(recurrenceTarget)
-          const targetIdx = series.findIndex((a) => a.id === recurrenceTarget.id)
-          const targetTime = new Date(recurrenceTarget.start_time).getTime()
-
-          let toDelete: Appointment[] = []
-          if (scope === "this") {
-            toDelete = [recurrenceTarget]
-          } else if (scope === "this-and-next-n") {
-            toDelete = series.slice(targetIdx, targetIdx + 1 + (count ?? 1))
-          } else if (scope === "this-and-following") {
-            toDelete = series.filter(
-              (a) => new Date(a.start_time).getTime() >= targetTime,
-            )
-          } else {
-            toDelete = series
-          }
-
-          for (const appt of toDelete) {
-            await deleteAppointment(appt.id)
-          }
-
-          setDialogOpen(false)
-          setEditingAppointment(null)
-        } catch (err) {
-          console.error("Failed to delete recurring appointments:", err)
-        }
-        setRecurrenceTarget(null)
+        // Store the scope for later use
+        setRecurrenceTarget({ ...recurrenceTarget, recurrence_group_id: undefined })
+        setPendingRecurrenceDelete(true)
+        setShowPasswordVerification(true)
         return
       }
 
@@ -520,7 +534,12 @@ export function CalendarView() {
 
   const openNewDialog = useCallback(() => {
     if (!isStaff) {
-      console.warn("Only staff members can create appointments")
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Permission Denied",
+        message: "Only staff members can create appointments.",
+        type: "warning",
+      })
       return
     }
     setEditingAppointment(null)
@@ -546,7 +565,12 @@ export function CalendarView() {
     }
     
     if (!isStaff) {
-      console.warn("Only staff members can create appointments")
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Permission Denied",
+        message: "Only staff members can create appointments.",
+        type: "warning",
+      })
       return
     }
     setEditingAppointment(null)
@@ -557,7 +581,12 @@ export function CalendarView() {
 
   const openEditDialog = useCallback((appt: Appointment) => {
     if (!isStaff) {
-      console.warn("Only staff members can edit appointments")
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Permission Denied",
+        message: "Only staff members can edit appointments.",
+        type: "warning",
+      })
       return
     }
     setEditingAppointment(appt)
@@ -882,6 +911,25 @@ export function CalendarView() {
           </div>
         </div>
       )}
+
+      {/* Password verification dialog for appointment deletion */}
+      <PasswordVerificationDialog
+        open={showPasswordVerification}
+        onOpenChange={(open) => {
+          if (!open && !isVerifying) {
+            setShowPasswordVerification(false)
+            setPendingDeleteId(null)
+            setPendingRecurrenceDelete(false)
+            setVerificationError(null)
+          }
+        }}
+        onVerify={handlePasswordVerified}
+        title="Verify Password to Delete Appointment"
+        description="Enter your password to confirm deletion of this appointment. This action cannot be undone."
+        actionLabel="Verify & Delete"
+        isVerifying={isVerifying}
+        error={verificationError}
+      />
     </Card>
   )
 }

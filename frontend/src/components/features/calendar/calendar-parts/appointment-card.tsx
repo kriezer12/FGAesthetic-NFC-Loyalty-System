@@ -90,6 +90,7 @@ export function AppointmentCard({
 
   const { hasRole } = useAuth()
   const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
+  const isAdmin = hasRole(['super_admin', 'branch_admin'])
 
   return (
     <>
@@ -269,11 +270,15 @@ export function AppointmentCard({
             Go to profile
           </ContextMenuItem>
         )}
-        <ContextMenuItem onClick={onEdit} className="gap-2">
-          <Pencil className="h-4 w-4" />
-          Edit Appointment
-        </ContextMenuItem>
-        <ContextMenuSeparator />
+        {!isAdmin && (
+          <>
+            <ContextMenuItem onClick={onEdit} className="gap-2">
+              <Pencil className="h-4 w-4" />
+              Edit Appointment
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         {canDeleteAppointment && (
           <ContextMenuItem
             onSelect={(e) => {
