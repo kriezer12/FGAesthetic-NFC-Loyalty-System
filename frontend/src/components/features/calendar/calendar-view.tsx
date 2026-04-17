@@ -10,18 +10,21 @@
 import { useCallback, useState, useEffect, useMemo, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { Card } from "@/components/ui/card"
+import { NotificationToast } from "@/components/ui/notification-toast"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
 import type { Appointment, IntervalMinutes, StaffMember, ViewMode } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import {
   DEFAULT_INTERVAL,
 } from "./calendar-parts/calendar-config"
 import { startOfWeek, addDays } from "date-fns"
-import { generateId } from "./calendar-parts/calendar-utils"
+import { generateId, setTimeOnDate } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
 import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
 import { saveAppointmentSettings } from "@/services/appointment-settings"
+import { usePasswordVerification } from "@/hooks/use-password-verification"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { CalendarWeekGrid } from "./calendar-parts/calendar-week-grid"
@@ -33,6 +36,7 @@ import {
   type RecurrenceActionScope,
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
+import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
 import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
 
 // ---- localStorage key ----
@@ -55,24 +59,51 @@ function parseHour(timeStr: string | undefined, fallback: number): number {
   return isNaN(h) ? fallback : h
 }
 
-/** Load settings from localStorage or return defaults */
-function loadSettings(): CalendarSettings {
+/** Load settings from Supabase or return defaults */
+async function loadSettings(): Promise<CalendarSettings> {
   try {
-    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY)
-    if (!stored) return DEFAULT_SETTINGS
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+    const { data, error } = await supabase
+      .from("business_settings")
+      .select("calendar_settings")
+      .eq("id", "default") // Use 'default' ID that POS uses
+      .maybeSingle()
+    
+    if (error) {
+      console.warn("Failed to load calendar settings:", error.message)
+      return DEFAULT_SETTINGS
+    }
+    
+    if (!data?.calendar_settings) {
+      console.info("No calendar settings found, using defaults")
+      return DEFAULT_SETTINGS
+    }
+    
+    try {
+      const parsed = JSON.parse(data.calendar_settings)
+      return { ...DEFAULT_SETTINGS, ...parsed }
+    } catch (parseErr) {
+      console.error("Failed to parse calendar settings JSON:", parseErr)
+      return DEFAULT_SETTINGS
+    }
   } catch (err) {
     console.error("Failed to load calendar settings:", err)
     return DEFAULT_SETTINGS
   }
 }
 
-/** Save settings to localStorage */
-function saveSettings(settings: CalendarSettings): void {
+/** Save settings to Supabase for global sync */
+async function saveSettings(settings: CalendarSettings): Promise<void> {
   try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    // Use the default business_settings record that POS also uses
+    const { error: updateError } = await supabase
+      .from("business_settings")
+      .update({ calendar_settings: JSON.stringify(settings) })
+      .eq("id", "default")
+    
+    if (updateError) throw updateError
   } catch (err) {
     console.error("Failed to save calendar settings:", err)
+    throw err
   }
 }
 
@@ -83,13 +114,24 @@ function getDayOfWeek(date: Date): string {
 }
 
 export function CalendarView() {
+  // ---- auth state ----
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
+  const isAdmin = userProfile?.role === "branch_admin" || userProfile?.role === "super_admin"
+  
   // ---- core state ----
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [interval, setInterval]         = useState<IntervalMinutes>(DEFAULT_INTERVAL)
+  const [interval, setIntervalMinutes]  = useState<IntervalMinutes>(DEFAULT_INTERVAL)
   const [viewMode, setViewMode]         = useState<ViewMode>("day")
+  const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
+  
+  // ---- appointment reminder state ----
+  const [reminderToast, setReminderToast] = useState<{ id: string; appointment: Appointment } | null>(null)
+  const notifiedAppointmentsRef = useRef<Set<string>>(new Set())
   
   // Fetch appointments from Supabase
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  const { verifyPassword } = usePasswordVerification()
 
   // Load appointment settings from database (shared across all staff)
   const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
@@ -260,6 +302,13 @@ export function CalendarView() {
   const [recurrenceActionType, setRecurrenceActionType] = useState<RecurrenceActionType>("delete")
   const [recurrenceTarget, setRecurrenceTarget] = useState<Appointment | null>(null)
 
+  // ---- password verification for deletion ----
+  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [pendingRecurrenceDelete, setPendingRecurrenceDelete] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
+  const [isVerifying, setIsVerifying] = useState(false)
+
   /** Get all appointments belonging to the same recurrence series. */
   const getSeriesAppointments = useCallback(
     (appt: Appointment) => {
@@ -365,7 +414,15 @@ export function CalendarView() {
   }, [appointments, addAppointment, updateAppointment])
 
   /** Delete from dialog. */
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
+
   const handleDelete = useCallback(async (id: string) => {
+    if (!canDeleteAppointment) {
+      console.error("User lacks permission to delete appointments")
+      throw new Error("Only branch administrators and super administrators can delete appointments")
+    }
+
     const appt = appointments.find((a) => a.id === id)
     // If it's part of a recurrence series, show the recurrence action dialog
     if (appt?.recurrence_group_id) {
@@ -385,7 +442,13 @@ export function CalendarView() {
     } catch (err) {
       console.error("Failed to delete appointment:", err)
     }
-  }, [appointments, deleteAppointment, getSeriesAppointments])
+  }, [appointments, deleteAppointment, getSeriesAppointments, canDeleteAppointment])
+    // Single appointment — show password verification
+    setPendingDeleteId(id)
+    setPendingRecurrenceDelete(false)
+    setVerificationError(null)
+    setShowPasswordVerification(true)
+  }, [appointments, getSeriesAppointments])
 
   /** Handle confirmed recurrence action (delete scope). */
   const handleRecurrenceConfirm = useCallback(
@@ -393,6 +456,16 @@ export function CalendarView() {
       if (!recurrenceTarget) return
       setRecurrenceDialogOpen(false)
 
+      // For delete action, show password verification instead of directly deleting
+      if (recurrenceActionType === "delete") {
+        setRecurrenceTarget(recurrenceTarget)
+        setPendingRecurrenceDelete(true)
+        setVerificationError(null)
+        setShowPasswordVerification(true)
+        return
+      }
+
+      // Other actions (edit) continue normally
       try {
         const series = getSeriesAppointments(recurrenceTarget)
         const targetIdx = series.findIndex((a) => a.id === recurrenceTarget.id)
@@ -424,31 +497,77 @@ export function CalendarView() {
 
       setRecurrenceTarget(null)
     },
-    [recurrenceTarget, getSeriesAppointments, deleteAppointment],
+    [recurrenceTarget, recurrenceActionType, getSeriesAppointments, deleteAppointment],
   )
+
+  /** Perform actual deletion after password verification. */
+  const handleConfirmedDelete = async () => {
+    if (pendingDeleteId && !pendingRecurrenceDelete) {
+      // Single appointment deletion
+      try {
+        await deleteAppointment(pendingDeleteId)
+        setDialogOpen(false)
+        setEditingAppointment(null)
+      } catch (err) {
+        console.error("Failed to delete appointment:", err)
+        setVerificationError("Failed to delete appointment")
+      }
+    }
+    // Password verification complete
+    setPendingDeleteId(null)
+    setPendingRecurrenceDelete(false)
+    setShowPasswordVerification(false)
+  }
 
   // ---- dialog openers ----
 
   const openNewDialog = useCallback(() => {
+    if (!isStaff) {
+      console.warn("Only staff members can create appointments")
+      return
+    }
     setEditingAppointment(null)
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const openSlotDialog = useCallback((staffId: string, startMinutes: number) => {
+    // Check if the clicked slot is in the past
+    const slotDate = setTimeOnDate(selectedDate, startMinutes)
+    const now = new Date()
+    
+    if (slotDate < now) {
+      // Show past appointment warning toast
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Cannot Create Appointment",
+        message: "You can't appoint for a time in the past. Please select a future date and time.",
+        type: "warning",
+      })
+      return
+    }
+    
+    if (!isStaff) {
+      console.warn("Only staff members can create appointments")
+      return
+    }
     setEditingAppointment(null)
     setPrefillStaffId(staffId)
     setPrefillStartMin(startMinutes)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const openEditDialog = useCallback((appt: Appointment) => {
+    if (!isStaff) {
+      console.warn("Only staff members can edit appointments")
+      return
+    }
     setEditingAppointment(appt)
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const handleSettingsSave = useCallback((settings: CalendarSettings) => {
     setCalendarSettings(settings)
@@ -473,12 +592,123 @@ export function CalendarView() {
         console.error("Failed to save appointment settings:", err)
       })
   }, [appointmentSettings, refetchSettings])
+  const handleSettingsSave = useCallback(async (settings: CalendarSettings) => {
+    try {
+      setCalendarSettings(settings)
+      await saveSettings(settings)
+      setToast({
+        id: generateId(),
+        title: "Success",
+        message: "Calendar settings updated and synced globally",
+        type: "success",
+      })
+    } catch (err) {
+      console.error("Failed to save settings:", err)
+      setToast({
+        id: generateId(),
+        title: "Error",
+        message: "Failed to save calendar settings",
+        type: "warning",
+      })
+    }
+  }, [])
 
   /** Switch to day view when clicking a day in week/month view. */
   const handleDayClick = useCallback((date: Date) => {
     setSelectedDate(date)
     setViewMode("day")
   }, [])
+
+  /** Handle confirm button on appointment reminder toast. */
+  const handleConfirmAppointment = useCallback(
+    async (appointmentId: string) => {
+      try {
+        await updateAppointment(appointmentId, {
+          status: "in-progress",
+          updated_at: new Date().toISOString(),
+        })
+        setReminderToast(null)
+        notifiedAppointmentsRef.current.delete(appointmentId)
+      } catch (err) {
+        console.error("Failed to confirm appointment:", err)
+      }
+    },
+    [updateAppointment]
+  )
+
+  /** Handle reschedule button on appointment reminder toast. */
+  const handleRescheduleFromReminder = useCallback(
+    (appointment: Appointment) => {
+      setReminderToast(null)
+      setSelectedDate(new Date(appointment.start_time))
+      setEditingAppointment(appointment)
+      setPrefillStaffId(undefined)
+      setPrefillStartMin(undefined)
+      setDialogOpen(true)
+    },
+    []
+  )
+
+  // ---- appointment reminder timer ----
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = new Date()
+      
+      // Check for "scheduled" appointments that have reached their start time
+      const appointmentToRemind = appointments.find((appt) => {
+        if (appt.status !== "scheduled") return false
+        if (notifiedAppointmentsRef.current.has(appt.id)) return false
+        
+        const startTime = new Date(appt.start_time)
+        // Show reminder if appointment time has arrived or is within the next minute
+        return startTime <= now && startTime > new Date(now.getTime() - 60000)
+      })
+      
+      if (appointmentToRemind && !reminderToast) {
+        setReminderToast({
+          id: crypto.randomUUID(),
+          appointment: appointmentToRemind,
+        })
+        notifiedAppointmentsRef.current.add(appointmentToRemind.id)
+      }
+    }
+    
+    // Check every 10 seconds for appointment reminders
+    const interval = setInterval(checkReminders, 10000)
+    return () => clearInterval(interval)
+  }, [appointments, reminderToast])
+
+  // ---- auto-complete appointments timer ----
+  useEffect(() => {
+    const checkCompletions = async () => {
+      const now = new Date()
+      
+      // Find "in-progress" appointments that have passed their end time
+      const appointmentsToComplete = appointments.filter((appt) => {
+        if (appt.status !== "in-progress") return false
+        
+        const endTime = new Date(appt.end_time)
+        // Mark as complete if end time has passed
+        return endTime <= now
+      })
+      
+      // Update each appointment to "completed"
+      for (const appt of appointmentsToComplete) {
+        try {
+          await updateAppointment(appt.id, {
+            status: "completed",
+            updated_at: new Date().toISOString(),
+          })
+        } catch (err) {
+          console.error("Failed to auto-complete appointment:", err)
+        }
+      }
+    }
+    
+    // Check every 30 seconds for appointments to auto-complete
+    const interval = setInterval(checkCompletions, 30000)
+    return () => clearInterval(interval)
+  }, [appointments, updateAppointment])
 
   // ========================================================================
 
@@ -489,7 +719,7 @@ export function CalendarView() {
         interval={interval}
         viewMode={viewMode}
         onDateChange={setSelectedDate}
-        onIntervalChange={setInterval}
+        onIntervalChange={setIntervalMinutes}
         onViewModeChange={setViewMode}
         onNewAppointment={openNewDialog}
         onOpenSettings={() => setSettingsDialogOpen(true)}
@@ -593,6 +823,67 @@ export function CalendarView() {
           if (recurrenceTarget) openEditDialog(recurrenceTarget)
         }}
       />
+
+      {/* Toast notification for past appointment warnings */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <NotificationToast
+            id={toast.id}
+            title={toast.title}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
+        </div>
+      )}
+
+      {/* Appointment reminder toast with action buttons */}
+      {reminderToast && (
+        <div className="fixed bottom-6 right-6 z-50 pointer-events-auto">
+          <div className="w-[420px] overflow-hidden rounded-xl bg-background/95 backdrop-blur-md shadow-2xl ring-1 ring-border border-l-4 border-primary">
+            <div className="p-4">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <svg className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-foreground">Appointment Time Now</p>
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                    {reminderToast.appointment.customer_name && (
+                      <span className="font-semibold">{reminderToast.appointment.customer_name}</span>
+                    )}
+                    {reminderToast.appointment.customer_name && reminderToast.appointment.title && " • "}
+                    {reminderToast.appointment.title}
+                  </p>
+                  {reminderToast.appointment.staff_name && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Staff: <span className="font-medium">{reminderToast.appointment.staff_name}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 pt-3 border-t">
+                <button
+                  onClick={() => handleRescheduleFromReminder(reminderToast.appointment)}
+                  className="flex-1 px-3 py-2 text-sm font-medium rounded-md bg-muted hover:bg-accent text-foreground transition-colors"
+                >
+                  Reschedule
+                </button>
+                <button
+                  onClick={() => handleConfirmAppointment(reminderToast.appointment.id)}
+                  className="flex-1 px-3 py-2 text-sm font-medium rounded-md bg-primary hover:bg-primary/90 text-white transition-colors"
+                >
+                  Confirm & Start
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
