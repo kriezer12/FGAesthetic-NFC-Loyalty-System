@@ -11,6 +11,7 @@ import { useCallback, useState, useEffect, useMemo, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
 import type { Appointment, IntervalMinutes, StaffMember, ViewMode } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import {
@@ -84,6 +85,11 @@ function getDayOfWeek(date: Date): string {
 }
 
 export function CalendarView() {
+  // ---- auth state ----
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
+  const isAdmin = userProfile?.role === "branch_admin" || userProfile?.role === "super_admin"
+  
   // ---- core state ----
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [interval, setInterval]         = useState<IntervalMinutes>(DEFAULT_INTERVAL)
@@ -466,25 +472,37 @@ export function CalendarView() {
   // ---- dialog openers ----
 
   const openNewDialog = useCallback(() => {
+    if (!isStaff) {
+      console.warn("Only staff members can create appointments")
+      return
+    }
     setEditingAppointment(null)
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const openSlotDialog = useCallback((staffId: string, startMinutes: number) => {
+    if (!isStaff) {
+      console.warn("Only staff members can create appointments")
+      return
+    }
     setEditingAppointment(null)
     setPrefillStaffId(staffId)
     setPrefillStartMin(startMinutes)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const openEditDialog = useCallback((appt: Appointment) => {
+    if (!isStaff) {
+      console.warn("Only staff members can edit appointments")
+      return
+    }
     setEditingAppointment(appt)
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [])
+  }, [isStaff])
 
   const handleSettingsSave = useCallback((settings: CalendarSettings) => {
     setCalendarSettings(settings)

@@ -5,10 +5,15 @@
  * Fetches and manages appointments from Supabase with real-time subscriptions.
  * Handles create, update, and delete operations.
  * Real-time sync ensures all clients see changes instantly.
+ *
+ * Role-based restrictions:
+ * - Only staff members can create or edit appointments
+ * - Admins can view appointments (read-only)
  */
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/contexts/auth-context"
 import { logUserAction } from "@/lib/user-log"
 import type { Appointment } from "@/types/appointment"
 
@@ -27,6 +32,11 @@ export function useAppointments(): UseAppointmentsReturn {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
+  // ---- role-based access control ----
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
+  const canCreateOrEdit = isStaff
 
   const fetchAppointments = async () => {
     setLoading(true)
@@ -52,6 +62,14 @@ export function useAppointments(): UseAppointmentsReturn {
   }
 
   const addAppointment = useCallback(async (appt: Appointment) => {
+    // Role-based access control: only staff can create appointments
+    if (!canCreateOrEdit) {
+      const error = new Error("Unauthorized: Only staff members can create appointments")
+      console.error(error.message)
+      setError(error.message)
+      throw error
+    }
+
     try {
       const { error: insertError } = await supabase
         .from("appointments")
@@ -81,9 +99,17 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to add appointment")
       throw err
     }
-  }, [])
+  }, [canCreateOrEdit])
 
   const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>) => {
+    // Role-based access control: only staff can edit appointments
+    if (!canCreateOrEdit) {
+      const error = new Error("Unauthorized: Only staff members can edit appointments")
+      console.error(error.message)
+      setError(error.message)
+      throw error
+    }
+
     try {
       const existing = appointments.find((a) => a.id === id) || null
 
@@ -115,9 +141,17 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to update appointment")
       throw err
     }
-  }, [appointments])
+  }, [appointments, canCreateOrEdit])
 
   const deleteAppointment = useCallback(async (id: string) => {
+    // Role-based access control: only staff can delete appointments
+    if (!canCreateOrEdit) {
+      const error = new Error("Unauthorized: Only staff members can delete appointments")
+      console.error(error.message)
+      setError(error.message)
+      throw error
+    }
+
     try {
       const existing = appointments.find((a) => a.id === id) || null
 
@@ -150,7 +184,7 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to delete appointment")
       throw err
     }
-  }, [appointments])
+  }, [appointments, canCreateOrEdit])
 
   useEffect(() => {
     fetchAppointments()
