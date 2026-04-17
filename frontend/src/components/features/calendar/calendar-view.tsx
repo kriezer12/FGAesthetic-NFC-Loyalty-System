@@ -22,7 +22,8 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId, setTimeOnDate } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
-import { useAuth } from "@/contexts/auth-context"
+import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
+import { saveAppointmentSettings } from "@/services/appointment-settings"
 import { usePasswordVerification } from "@/hooks/use-password-verification"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
@@ -132,6 +133,9 @@ export function CalendarView() {
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
   const { verifyPassword } = usePasswordVerification()
 
+  // Load appointment settings from database (shared across all staff)
+  const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
+
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
@@ -146,73 +150,22 @@ export function CalendarView() {
     loadServices()
   }, [loadServices])
   
-  // Load settings from Supabase (or defaults)
-  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS)
+  // Merge appointment settings from database with calendar-specific settings
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(() => loadSettings())
 
-  // Load global calendar settings and subscribe to changes
+  // Update calendar settings when appointment settings change
   useEffect(() => {
-    let channel: any = null
-    let unsubscribeCleanup: (() => void) | null = null
-    
-    const loadAndSubscribeToSettings = async () => {
-      try {
-        // Load initial settings
-        const settings = await loadSettings()
-        setCalendarSettings(settings)
-        
-        // Subscribe to real-time changes on business_settings 'default' record
-        channel = supabase
-          .channel("business_settings_calendar_changes")
-          .on(
-            "postgres_changes",
-            { 
-              event: "UPDATE", // Only listen for updates
-              schema: "public", 
-              table: "business_settings",
-              filter: "id=eq.default" // Only changes to 'default' record
-            },
-            (payload: any) => {
-              console.log("Received business_settings update:", payload)
-              
-              if (payload.new?.calendar_settings) {
-                try {
-                  const updatedSettings = JSON.parse(payload.new.calendar_settings)
-                  console.log("Updating calendar settings from realtime:", updatedSettings)
-                  setCalendarSettings((prev) => ({ ...prev, ...updatedSettings }))
-                } catch (err) {
-                  console.error("Failed to parse updated settings:", err)
-                }
-              }
-            }
-          )
-          .subscribe((status) => {
-            if (status === "CHANNEL_ERROR") {
-              console.error("Channel subscription error for business_settings")
-            } else if (status === "SUBSCRIBED") {
-              console.log("Successfully subscribed to business_settings changes")
-            }
-          })
-        
-        unsubscribeCleanup = () => {
-          if (channel) {
-            supabase.removeChannel(channel)
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load or subscribe to settings:", err)
-      }
+    if (!settingsLoading && appointmentSettings) {
+      setCalendarSettings((prev) => ({
+        ...prev,
+        workHoursStart: appointmentSettings.working_hours_start,
+        workHoursEnd: appointmentSettings.working_hours_end,
+        lunchBreakStart: appointmentSettings.lunch_break_start,
+        lunchBreakEnd: appointmentSettings.lunch_break_end,
+      }))
     }
-    
-    loadAndSubscribeToSettings()
-    
-    // Return cleanup function
-    return () => {
-      if (unsubscribeCleanup) {
-        unsubscribeCleanup()
-      }
-    }
-  }, [])
-  
+  }, [appointmentSettings, settingsLoading])
+
   // Fetch real staff from database
   const { staff: allStaff = [] } = useStaff()
   
@@ -616,6 +569,29 @@ export function CalendarView() {
     setDialogOpen(true)
   }, [isStaff])
 
+  const handleSettingsSave = useCallback((settings: CalendarSettings) => {
+    setCalendarSettings(settings)
+    saveSettings(settings)
+    
+    // Also save work hours and lunch breaks to appointment_settings table
+    // so all staff see the same settings
+    const updatedAppointmentSettings = {
+      ...appointmentSettings,
+      working_hours_start: settings.workHoursStart || appointmentSettings.working_hours_start,
+      working_hours_end: settings.workHoursEnd || appointmentSettings.working_hours_end,
+      lunch_break_start: settings.lunchBreakStart || appointmentSettings.lunch_break_start,
+      lunch_break_end: settings.lunchBreakEnd || appointmentSettings.lunch_break_end,
+    }
+    
+    saveAppointmentSettings(updatedAppointmentSettings)
+      .then(() => {
+        // Refetch settings to sync across all instances
+        refetchSettings()
+      })
+      .catch((err) => {
+        console.error("Failed to save appointment settings:", err)
+      })
+  }, [appointmentSettings, refetchSettings])
   const handleSettingsSave = useCallback(async (settings: CalendarSettings) => {
     try {
       setCalendarSettings(settings)
