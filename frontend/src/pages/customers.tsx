@@ -57,9 +57,9 @@ import { AppointmentDialog } from "@/components/features/calendar/calendar-parts
 import { CameraCaptureDialog } from "@/components/ui/camera-capture-dialog"
 import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
+import { LoyaltyPointsDisplay } from "@/components/features/customers/customer-info-parts/loyalty-points-display"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
 import { TreatmentHistory } from "@/components/features/customers/treatment-history"
-import { TreatmentStatusManager } from "@/components/features/customers/treatment-status-manager"
 import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
@@ -1469,29 +1469,35 @@ export default function CustomersPage() {
               {modalView === "details" ? (
                 <> {/* details view */}
                   {/* Stats Cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
-                      <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
-                      <CardContent className="p-6 relative z-10">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm tracking-tight font-medium text-foreground/70 dark:text-foreground/70">Total Points</p>
-                            <p className="text-3xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
-                          </div>
-                          <Award className="h-10 w-10 text-primary drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="overflow-hidden border-primary/20">
+                      <CardContent className="p-6">
+                        <LoyaltyPointsDisplay 
+                          key={`loyalty-details-${selectedCustomer?.id}-${selectedCustomer?.points}`}
+                          points={selectedCustomer?.points || 0}
+                          showProgression={false}
+                        />
                       </CardContent>
                     </Card>
                     
-                    <Card className="group relative overflow-hidden border-zinc-500/20 bg-gradient-to-br from-zinc-500/10 to-zinc-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-500/10">
-                      <div className="absolute -right-4 -top-4 rounded-full bg-zinc-500/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
-                      <CardContent className="p-6 relative z-10">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm tracking-tight font-medium text-zinc-500">Total Visits</p>
-                            <p className="text-3xl font-bold text-zinc-700 dark:text-zinc-300">{selectedCustomer?.visits || 0}</p>
+                    <Card className="overflow-hidden border-zinc-500/20 flex flex-col justify-center">
+                      <CardContent className="p-6 flex flex-col justify-center my-auto">
+                        <div className="flex flex-col items-center justify-center gap-4 text-center">
+                          {/* Calendar Icon */}
+                          <Calendar className="w-6 h-6 text-zinc-600 dark:text-zinc-300" />
+                          
+                          {/* Visits Count */}
+                          <div>
+                            <p className="text-5xl font-bold bg-gradient-to-r from-zinc-700 to-zinc-600 dark:from-zinc-200 dark:to-zinc-300 bg-clip-text text-transparent">
+                              {selectedCustomer?.visits || 0}
+                            </p>
+                            <p className="text-xs text-zinc-500 font-medium tracking-wide mt-2 uppercase">Total Visits</p>
                           </div>
-                          <Calendar className="h-10 w-10 text-zinc-500 dark:text-zinc-400" />
+                          
+                          {/* Last Visit */}
+                          {selectedCustomer?.last_visit && (
+                            <p className="text-xs text-zinc-500 mt-2">Last visit: {formatDate(selectedCustomer.last_visit)}</p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1598,17 +1604,13 @@ export default function CustomersPage() {
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
-                        <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
-                        <CardContent className="p-6 relative z-10">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1" aria-live="polite" aria-atomic="true">
-                              <p className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">Available Points</p>
-                              <p className="text-5xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
-                            </div>
-
-                            <Award className="h-16 w-16 text-primary/30" />
-                          </div>
+                      <Card className="overflow-hidden border-primary/20">
+                        <CardContent className="p-6">
+                          <LoyaltyPointsDisplay 
+                            key={`loyalty-${selectedCustomer?.id}-${selectedCustomer?.points}`}
+                            points={selectedCustomer?.points || 0}
+                            showProgression={true}
+                          />
                         </CardContent>
                       </Card>
 
