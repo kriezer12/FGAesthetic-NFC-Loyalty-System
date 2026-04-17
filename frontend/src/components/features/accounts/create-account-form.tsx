@@ -32,7 +32,7 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
     { value: "staff", label: "Staff" },
     { value: "branch_admin", label: "Branch Admin" },
     { value: "super_admin", label: "Super Admin" },
-  ]
+  ].filter(r => !r.value.toLowerCase().includes('customer'))
   const roleOptions = isSuper ? allRoleOptions : allRoleOptions.filter(r => r.value === "staff")
 
   const { branches } = useBranches()

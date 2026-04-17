@@ -115,6 +115,8 @@ export function CalendarView() {
   // ---- auth state ----
   const { userProfile } = useAuth()
   const isStaff = userProfile?.role === "staff"
+  const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+  const canManageAppointments = isStaff || isAdmin
   
   // ---- core state ----
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -533,11 +535,11 @@ export function CalendarView() {
   // ---- dialog openers ----
 
   const openNewDialog = useCallback(() => {
-    if (!isStaff) {
+    if (!canManageAppointments) {
       setToast({
         id: crypto.randomUUID(),
         title: "Permission Denied",
-        message: "Only staff members can create appointments.",
+        message: "Only staff members and admins can create appointments.",
         type: "warning",
       })
       return
@@ -546,7 +548,7 @@ export function CalendarView() {
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [isStaff])
+  }, [canManageAppointments])
 
   const openSlotDialog = useCallback((staffId: string, startMinutes: number) => {
     // Check if the clicked slot is in the past
@@ -564,11 +566,11 @@ export function CalendarView() {
       return
     }
     
-    if (!isStaff) {
+    if (!canManageAppointments) {
       setToast({
         id: crypto.randomUUID(),
         title: "Permission Denied",
-        message: "Only staff members can create appointments.",
+        message: "Only staff members and admins can create appointments.",
         type: "warning",
       })
       return
@@ -577,14 +579,14 @@ export function CalendarView() {
     setPrefillStaffId(staffId)
     setPrefillStartMin(startMinutes)
     setDialogOpen(true)
-  }, [isStaff])
+  }, [canManageAppointments])
 
   const openEditDialog = useCallback((appt: Appointment) => {
-    if (!isStaff) {
+    if (!canManageAppointments) {
       setToast({
         id: crypto.randomUUID(),
         title: "Permission Denied",
-        message: "Only staff members can edit appointments.",
+        message: "Only staff members and admins can edit appointments.",
         type: "warning",
       })
       return
@@ -593,7 +595,7 @@ export function CalendarView() {
     setPrefillStaffId(undefined)
     setPrefillStartMin(undefined)
     setDialogOpen(true)
-  }, [isStaff])
+  }, [canManageAppointments])
 
   const handleSettingsSave = useCallback(async (settings: CalendarSettings) => {
     try {

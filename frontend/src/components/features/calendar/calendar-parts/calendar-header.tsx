@@ -53,7 +53,7 @@ export function CalendarHeader({
   onToggleTableView,
 }: CalendarHeaderProps) {
   const { userProfile } = useAuth()
-  
+  const canCreateAppointments = userProfile?.role === "staff" || userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
   const prev = () => {
     if (viewMode === "day") {
       onDateChange(addDays(selectedDate, -1))
@@ -159,7 +159,7 @@ export function CalendarHeader({
         </div>
         )}
 
-        {!showTableView && userProfile?.role === "staff" && (
+        {!showTableView && canCreateAppointments && (
           <Button 
             size="sm" 
             onClick={onNewAppointment}

@@ -38,7 +38,7 @@ export function useAppointments(): UseAppointmentsReturn {
   const { userProfile } = useAuth()
   const isStaff = userProfile?.role === "staff"
   const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
-  const canCreateOrEdit = isStaff
+  const canCreateOrEdit = isStaff || isAdmin
   const canDelete = isStaff || isAdmin
 
   const fetchAppointments = async () => {
@@ -65,9 +65,9 @@ export function useAppointments(): UseAppointmentsReturn {
   }
 
   const addAppointment = useCallback(async (appt: Appointment) => {
-    // Role-based access control: only staff can create appointments
+    // Role-based access control: staff and admins can create appointments
     if (!canCreateOrEdit) {
-      const error = new Error("Unauthorized: Only staff members can create appointments")
+      const error = new Error("Unauthorized: Only staff members and admins can create appointments")
       console.error(error.message)
       setError(error.message)
       throw error
@@ -105,9 +105,9 @@ export function useAppointments(): UseAppointmentsReturn {
   }, [canCreateOrEdit])
 
   const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>) => {
-    // Role-based access control: only staff can edit appointments
+    // Role-based access control: staff and admins can edit appointments
     if (!canCreateOrEdit) {
-      const error = new Error("Unauthorized: Only staff members can edit appointments")
+      const error = new Error("Unauthorized: Only staff members and admins can edit appointments")
       console.error(error.message)
       setError(error.message)
       throw error

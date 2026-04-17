@@ -25,7 +25,7 @@ const roleOptions = [
   { value: "staff", label: "Staff" },
   { value: "branch_admin", label: "Branch Admin" },
   { value: "super_admin", label: "Super Admin" },
-]
+].filter(r => !r.value.toLowerCase().includes('customer'))
 
 export function EditAccountModal({
   account,
