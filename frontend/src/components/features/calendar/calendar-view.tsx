@@ -24,7 +24,6 @@ import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
 import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
 import { saveAppointmentSettings } from "@/services/appointment-settings"
-import { usePasswordVerification } from "@/hooks/use-password-verification"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
 import { CalendarWeekGrid } from "./calendar-parts/calendar-week-grid"
@@ -36,11 +35,7 @@ import {
   type RecurrenceActionScope,
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
-import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
 import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
-
-// ---- localStorage key ----
-const SETTINGS_STORAGE_KEY = "calendar-settings"
 
 // ---- default settings ----
 const DEFAULT_SETTINGS: CalendarSettings = {
@@ -117,7 +112,6 @@ export function CalendarView() {
   // ---- auth state ----
   const { userProfile } = useAuth()
   const isStaff = userProfile?.role === "staff"
-  const isAdmin = userProfile?.role === "branch_admin" || userProfile?.role === "super_admin"
   
   // ---- core state ----
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -131,7 +125,6 @@ export function CalendarView() {
   
   // Fetch appointments from Supabase
   const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
-  const { verifyPassword } = usePasswordVerification()
 
   // Load appointment settings from database (shared across all staff)
   const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
@@ -151,7 +144,13 @@ export function CalendarView() {
   }, [loadServices])
   
   // Merge appointment settings from database with calendar-specific settings
-  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(() => loadSettings())
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(DEFAULT_SETTINGS)
+
+  useEffect(() => {
+    loadSettings().then(settings => {
+      setCalendarSettings(settings)
+    })
+  }, [])
 
   // Update calendar settings when appointment settings change
   useEffect(() => {
@@ -303,11 +302,6 @@ export function CalendarView() {
   const [recurrenceTarget, setRecurrenceTarget] = useState<Appointment | null>(null)
 
   // ---- password verification for deletion ----
-  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-  const [pendingRecurrenceDelete, setPendingRecurrenceDelete] = useState(false)
-  const [verificationError, setVerificationError] = useState<string | null>(null)
-  const [isVerifying, setIsVerifying] = useState(false)
 
   /** Get all appointments belonging to the same recurrence series. */
   const getSeriesAppointments = useCallback(
@@ -443,12 +437,6 @@ export function CalendarView() {
       console.error("Failed to delete appointment:", err)
     }
   }, [appointments, deleteAppointment, getSeriesAppointments, canDeleteAppointment])
-    // Single appointment — show password verification
-    setPendingDeleteId(id)
-    setPendingRecurrenceDelete(false)
-    setVerificationError(null)
-    setShowPasswordVerification(true)
-  }, [appointments, getSeriesAppointments])
 
   /** Handle confirmed recurrence action (delete scope). */
   const handleRecurrenceConfirm = useCallback(
@@ -456,12 +444,36 @@ export function CalendarView() {
       if (!recurrenceTarget) return
       setRecurrenceDialogOpen(false)
 
-      // For delete action, show password verification instead of directly deleting
+      // For delete action, proceed with actual deletion
       if (recurrenceActionType === "delete") {
-        setRecurrenceTarget(recurrenceTarget)
-        setPendingRecurrenceDelete(true)
-        setVerificationError(null)
-        setShowPasswordVerification(true)
+        try {
+          const series = getSeriesAppointments(recurrenceTarget)
+          const targetIdx = series.findIndex((a) => a.id === recurrenceTarget.id)
+          const targetTime = new Date(recurrenceTarget.start_time).getTime()
+
+          let toDelete: Appointment[] = []
+          if (scope === "this") {
+            toDelete = [recurrenceTarget]
+          } else if (scope === "this-and-next-n") {
+            toDelete = series.slice(targetIdx, targetIdx + 1 + (count ?? 1))
+          } else if (scope === "this-and-following") {
+            toDelete = series.filter(
+              (a) => new Date(a.start_time).getTime() >= targetTime,
+            )
+          } else {
+            toDelete = series
+          }
+
+          for (const appt of toDelete) {
+            await deleteAppointment(appt.id)
+          }
+
+          setDialogOpen(false)
+          setEditingAppointment(null)
+        } catch (err) {
+          console.error("Failed to delete recurring appointments:", err)
+        }
+        setRecurrenceTarget(null)
         return
       }
 
@@ -500,24 +512,7 @@ export function CalendarView() {
     [recurrenceTarget, recurrenceActionType, getSeriesAppointments, deleteAppointment],
   )
 
-  /** Perform actual deletion after password verification. */
-  const handleConfirmedDelete = async () => {
-    if (pendingDeleteId && !pendingRecurrenceDelete) {
-      // Single appointment deletion
-      try {
-        await deleteAppointment(pendingDeleteId)
-        setDialogOpen(false)
-        setEditingAppointment(null)
-      } catch (err) {
-        console.error("Failed to delete appointment:", err)
-        setVerificationError("Failed to delete appointment")
-      }
-    }
-    // Password verification complete
-    setPendingDeleteId(null)
-    setPendingRecurrenceDelete(false)
-    setShowPasswordVerification(false)
-  }
+
 
   // ---- dialog openers ----
 
@@ -569,33 +564,23 @@ export function CalendarView() {
     setDialogOpen(true)
   }, [isStaff])
 
-  const handleSettingsSave = useCallback((settings: CalendarSettings) => {
-    setCalendarSettings(settings)
-    saveSettings(settings)
-    
-    // Also save work hours and lunch breaks to appointment_settings table
-    // so all staff see the same settings
-    const updatedAppointmentSettings = {
-      ...appointmentSettings,
-      working_hours_start: settings.workHoursStart || appointmentSettings.working_hours_start,
-      working_hours_end: settings.workHoursEnd || appointmentSettings.working_hours_end,
-      lunch_break_start: settings.lunchBreakStart || appointmentSettings.lunch_break_start,
-      lunch_break_end: settings.lunchBreakEnd || appointmentSettings.lunch_break_end,
-    }
-    
-    saveAppointmentSettings(updatedAppointmentSettings)
-      .then(() => {
-        // Refetch settings to sync across all instances
-        refetchSettings()
-      })
-      .catch((err) => {
-        console.error("Failed to save appointment settings:", err)
-      })
-  }, [appointmentSettings, refetchSettings])
   const handleSettingsSave = useCallback(async (settings: CalendarSettings) => {
     try {
       setCalendarSettings(settings)
       await saveSettings(settings)
+      
+      // Also save work hours and lunch breaks to appointment_settings table
+      const updatedAppointmentSettings = {
+        ...appointmentSettings,
+        working_hours_start: settings.workHoursStart || appointmentSettings?.working_hours_start,
+        working_hours_end: settings.workHoursEnd || appointmentSettings?.working_hours_end,
+        lunch_break_start: settings.lunchBreakStart || appointmentSettings?.lunch_break_start,
+        lunch_break_end: settings.lunchBreakEnd || appointmentSettings?.lunch_break_end,
+      }
+      
+      await saveAppointmentSettings(updatedAppointmentSettings)
+      await refetchSettings()
+      
       setToast({
         id: generateId(),
         title: "Success",
@@ -611,7 +596,7 @@ export function CalendarView() {
         type: "warning",
       })
     }
-  }, [])
+  }, [appointmentSettings, refetchSettings])
 
   /** Switch to day view when clicking a day in week/month view. */
   const handleDayClick = useCallback((date: Date) => {

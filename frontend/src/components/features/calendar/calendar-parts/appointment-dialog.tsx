@@ -25,7 +25,6 @@ import { TimePicker } from "@/components/ui/time-picker"
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox"
 import { ServicePicker } from "./service-picker"
 import { supabase } from "@/lib/supabase"
-import { useAuth } from "@/contexts/auth-context"
 import { useCustomers } from "@/hooks/use-customers"
 import { useAuth } from "@/contexts/auth-context"
 import type { Service } from "@/types/service"
@@ -140,7 +139,6 @@ export function AppointmentDialog({
   // ---- role-based restrictions ----
   const { userProfile } = useAuth()
   const isStaff = userProfile?.role === "staff"
-  const isAdmin = userProfile?.role === "branch_admin" || userProfile?.role === "super_admin"
   const isReadOnly = !isStaff
 
   // ---- hooks ----
