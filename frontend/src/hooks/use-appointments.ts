@@ -8,7 +8,8 @@
  *
  * Role-based restrictions:
  * - Only staff members can create or edit appointments
- * - Admins can view appointments (read-only)
+ * - Staff and admins can delete appointments
+ * - Admins can view all appointments (read-only, no create/edit)
  */
 
 import { useEffect, useState, useCallback, useRef } from "react"
@@ -36,7 +37,9 @@ export function useAppointments(): UseAppointmentsReturn {
   // ---- role-based access control ----
   const { userProfile } = useAuth()
   const isStaff = userProfile?.role === "staff"
+  const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
   const canCreateOrEdit = isStaff
+  const canDelete = isStaff || isAdmin
 
   const fetchAppointments = async () => {
     setLoading(true)
@@ -144,9 +147,9 @@ export function useAppointments(): UseAppointmentsReturn {
   }, [appointments, canCreateOrEdit])
 
   const deleteAppointment = useCallback(async (id: string) => {
-    // Role-based access control: only staff can delete appointments
-    if (!canCreateOrEdit) {
-      const error = new Error("Unauthorized: Only staff members can delete appointments")
+    // Role-based access control: staff and admins can delete appointments
+    if (!canDelete) {
+      const error = new Error("Unauthorized: Only staff and admins can delete appointments")
       console.error(error.message)
       setError(error.message)
       throw error
@@ -184,7 +187,7 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to delete appointment")
       throw err
     }
-  }, [appointments, canCreateOrEdit])
+  }, [appointments, canDelete])
 
   useEffect(() => {
     fetchAppointments()

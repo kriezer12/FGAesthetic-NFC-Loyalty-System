@@ -6,7 +6,7 @@
  * interval toggle (15 / 30 / 60 min), and a "New Appointment" action button.
  */
 
-import { ChevronLeft, ChevronRight, CalendarPlus, Settings } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, List } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { IntervalMinutes, ViewMode } from "@/types/appointment"
@@ -26,11 +26,12 @@ interface CalendarHeaderProps {
   selectedDate: Date
   interval: IntervalMinutes
   viewMode: ViewMode
+  showTableView: boolean
   onDateChange: (date: Date) => void
   onIntervalChange: (interval: IntervalMinutes) => void
   onViewModeChange: (mode: ViewMode) => void
   onNewAppointment: () => void
-  onOpenSettings: () => void
+  onToggleTableView: () => void
 }
 
 const INTERVALS: IntervalMinutes[] = [15, 30, 60]
@@ -44,11 +45,12 @@ export function CalendarHeader({
   selectedDate,
   interval,
   viewMode,
+  showTableView,
   onDateChange,
   onIntervalChange,
   onViewModeChange,
   onNewAppointment,
-  onOpenSettings,
+  onToggleTableView,
 }: CalendarHeaderProps) {
   const { userProfile } = useAuth()
   
@@ -98,12 +100,27 @@ export function CalendarHeader({
         <Button variant="outline" size="icon-sm" onClick={next} aria-label="Next">
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <h2 className="ml-2 text-base font-semibold sm:text-lg">{dateLabel}</h2>
+        {!showTableView && (
+          <h2 className="ml-2 text-base font-semibold sm:text-lg">{dateLabel}</h2>
+        )}
       </div>
 
       {/* ---- right: view mode + interval toggle + settings + new button ---- */}
       <div className="flex items-center gap-2.5">
-        {/* view mode selector */}
+        {/* table view toggle button */}
+        <Button
+          variant={showTableView ? "default" : "outline"}
+          size="sm"
+          onClick={onToggleTableView}
+          title={showTableView ? "Show calendar view" : "Show table view"}
+          className={showTableView ? "" : ""}
+        >
+          <List className="mr-1.5 h-4 w-4" />
+          {showTableView ? "Calendar" : "Table"}
+        </Button>
+
+        {/* view mode selector (hide when showing table view) */}
+        {!showTableView && (
         <div className="flex items-center rounded-lg border p-1">
           {VIEW_MODES.map((mode) => (
             <button
@@ -120,9 +137,10 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
+        )}
 
-        {/* interval selector (only visible in day/week view) */}
-        {viewMode !== "month" && (
+        {/* interval selector (only visible in day/week view and not in table view) */}
+        {!showTableView && viewMode !== "month" && (
         <div className="flex items-center rounded-lg border p-1">
           {INTERVALS.map((int) => (
             <button
@@ -141,28 +159,16 @@ export function CalendarHeader({
         </div>
         )}
 
-        {/* settings button */}
-        {userProfile?.role !== "staff" && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={onOpenSettings}
-            title="Calendar settings"
-            aria-label="Open calendar settings"
+        {!showTableView && userProfile?.role === "staff" && (
+          <Button 
+            size="sm" 
+            onClick={onNewAppointment}
+            title="Create a new appointment"
           >
-            <Settings className="h-4 w-4" />
+            <CalendarPlus className="mr-1.5 h-4 w-4" />
+            New Appointment
           </Button>
         )}
-
-        <Button 
-          size="sm" 
-          onClick={onNewAppointment}
-          disabled={userProfile?.role !== "staff"}
-          title={userProfile?.role !== "staff" ? "Only staff members can create appointments" : "Create a new appointment"}
-        >
-          <CalendarPlus className="mr-1.5 h-4 w-4" />
-          New Appointment
-        </Button>
       </div>
     </div>
   )

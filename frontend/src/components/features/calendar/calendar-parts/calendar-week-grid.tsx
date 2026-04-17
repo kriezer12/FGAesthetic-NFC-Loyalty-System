@@ -21,6 +21,7 @@ import type {
   IntervalMinutes,
   StaffMember,
 } from "@/types/appointment"
+import { useAuth } from "@/contexts/auth-context"
 import {
   formatTime,
   generateTimeSlots,
@@ -185,6 +186,9 @@ export function CalendarWeekGrid({
   onDeleteAppointment,
   onDayClick,
 }: CalendarWeekGridProps) {
+  const { userProfile } = useAuth()
+  const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+
   const weekStart = useMemo(
     () => startOfWeek(selectedDate, { weekStartsOn: 1 }),
     [selectedDate],
@@ -740,14 +744,18 @@ export function CalendarWeekGrid({
                             </ContextMenuSubContent>
                           </ContextMenuSub>
                           <ContextMenuSeparator />
-                          <ContextMenuItem
-                            onClick={() => onEditAppointment(appt)}
-                            className="gap-2"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Edit Appointment
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
+                          {!isAdmin && (
+                            <>
+                              <ContextMenuItem
+                                onClick={() => onEditAppointment(appt)}
+                                className="gap-2"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Edit Appointment
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                            </>
+                          )}
                           <ContextMenuItem
                             onClick={() => onDeleteAppointment(appt.id)}
                             className="gap-2 text-destructive focus:text-destructive"
