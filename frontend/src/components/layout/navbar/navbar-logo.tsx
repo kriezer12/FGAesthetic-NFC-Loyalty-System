@@ -30,7 +30,7 @@ export function NavbarLogo() {
         <img
           src="/logo/logo-orig.svg"
           alt="FG Aesthetic Centre"
-          className="h-10 w-auto transition duration-300 dark:invert"
+          className="h-8 sm:h-10 w-auto transition duration-300 dark:invert"
         />
         
         {isHovered && (

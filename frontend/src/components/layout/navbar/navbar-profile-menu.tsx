@@ -71,16 +71,16 @@ export function NavbarProfileMenu({ userEmail, onLogout }: NavbarProfileMenuProp
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-10 w-10 rounded-full p-0 text-muted-foreground hover:text-foreground"
+          className="relative h-8 w-8 sm:h-10 sm:w-10 rounded-full p-0 text-muted-foreground hover:text-foreground"
         >
           {avatarUrl ? (
             <img
               src={avatarUrl}
               alt={displayName}
-              className="h-10 w-10 rounded-full object-cover border border-border"
+              className="h-8 w-8 sm:h-10 sm:w-10 rounded-full object-cover border border-border"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
               {userInitial || <User className="h-4 w-4" />}
             </div>
           )}

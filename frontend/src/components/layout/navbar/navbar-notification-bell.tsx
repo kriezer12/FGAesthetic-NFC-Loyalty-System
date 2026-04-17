@@ -58,7 +58,7 @@ export function NavbarNotificationBell() {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className={`relative flex items-center justify-center h-9 w-9 rounded-lg transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/20 ${
+            className={`relative flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-lg transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/20 ${
               count > 0
                 ? "text-primary hover:bg-primary/20 focus-visible:bg-primary/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-secondary/50 focus-visible:text-foreground focus-visible:bg-secondary/50"
@@ -66,7 +66,7 @@ export function NavbarNotificationBell() {
             aria-label={`Notifications${count > 0 ? ` (${count} missed)` : ""}`}
           >
             <Bell
-              className={`h-5 w-5 ${count > 0 ? "bell-shake" : ""}`}
+              className={`h-4 w-4 sm:h-5 sm:w-5 ${count > 0 ? "bell-shake" : ""}`}
               key={count} // Re-trigger animation when count changes
             />
             {count > 0 && (
