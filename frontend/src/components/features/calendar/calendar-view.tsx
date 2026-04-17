@@ -20,6 +20,7 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useAuth } from "@/contexts/auth-context"
 import { usePasswordVerification } from "@/hooks/use-password-verification"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
@@ -357,7 +358,15 @@ export function CalendarView() {
   }, [appointments, addAppointment, updateAppointment])
 
   /** Delete from dialog. */
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
+
   const handleDelete = useCallback(async (id: string) => {
+    if (!canDeleteAppointment) {
+      console.error("User lacks permission to delete appointments")
+      throw new Error("Only branch administrators and super administrators can delete appointments")
+    }
+
     const appt = appointments.find((a) => a.id === id)
     // If it's part of a recurrence series, show the recurrence action dialog
     if (appt?.recurrence_group_id) {
@@ -369,6 +378,15 @@ export function CalendarView() {
         return
       }
     }
+    // Single appointment — delete directly
+    try {
+      await deleteAppointment(id)
+      setDialogOpen(false)
+      setEditingAppointment(null)
+    } catch (err) {
+      console.error("Failed to delete appointment:", err)
+    }
+  }, [appointments, deleteAppointment, getSeriesAppointments, canDeleteAppointment])
     // Single appointment — show password verification
     setPendingDeleteId(id)
     setPendingRecurrenceDelete(false)

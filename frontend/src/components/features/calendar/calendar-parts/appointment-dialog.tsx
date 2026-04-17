@@ -26,6 +26,7 @@ import { Combobox, type ComboboxOption } from "@/components/ui/combobox"
 import { ServicePicker } from "./service-picker"
 import { supabase } from "@/lib/supabase"
 import { useCustomers } from "@/hooks/use-customers"
+import { useAuth } from "@/contexts/auth-context"
 import type { Service } from "@/types/service"
 import type { Treatment } from "@/types/customer"
 import type {
@@ -137,6 +138,8 @@ export function AppointmentDialog({
 
   // ---- hooks ----
   const { customers, loading: customersLoading } = useCustomers()
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
 
   // ---- form state ----
   const [appointmentType, setAppointmentType] = useState<"consultation" | "treatment" | "followup">("treatment")
@@ -740,7 +743,7 @@ export function AppointmentDialog({
         </ScrollArea>
 
         <DialogFooter className="gap-2 border-t px-5 py-3 shrink-0 bg-background">
-          {isEdit && onDelete && appointment && (
+          {isEdit && onDelete && appointment && canDeleteAppointment && (
             <Button
               variant="destructive"
               size="sm"
