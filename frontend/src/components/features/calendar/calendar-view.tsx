@@ -36,6 +36,7 @@ import {
   type RecurrenceActionType,
 } from "./calendar-parts/recurrence-action-dialog"
 import { deductInventoryForAppointment } from "./calendar-parts/inventory-utils"
+import { AppointmentsTableView } from "./appointments-table-view"
 
 // ---- default settings ----
 const DEFAULT_SETTINGS: CalendarSettings = {
@@ -117,6 +118,7 @@ export function CalendarView() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [interval, setIntervalMinutes]  = useState<IntervalMinutes>(DEFAULT_INTERVAL)
   const [viewMode, setViewMode]         = useState<ViewMode>("day")
+  const [showTableView, setShowTableView] = useState(false)
   const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
   
   // ---- appointment reminder state ----
@@ -703,53 +705,64 @@ export function CalendarView() {
         selectedDate={selectedDate}
         interval={interval}
         viewMode={viewMode}
+        showTableView={showTableView}
         onDateChange={setSelectedDate}
         onIntervalChange={setIntervalMinutes}
         onViewModeChange={setViewMode}
         onNewAppointment={openNewDialog}
-        onOpenSettings={() => setSettingsDialogOpen(true)}
+        onToggleTableView={() => setShowTableView(!showTableView)}
       />
 
-      {viewMode === "day" && (
-        <CalendarGrid
-          selectedDate={selectedDate}
-          interval={interval}
-          clinicHours={clinicHours}
-          staff={staff}
+      {showTableView ? (
+        <AppointmentsTableView
           appointments={appointments}
-          blockedTimes={blockedTimes}
-          snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}
-          onAppointmentUpdate={handleAppointmentUpdate}
-          onSlotClick={openSlotDialog}
-          onAppointmentClick={openEditDialog}
-          onEditAppointment={openEditDialog}
-          onDeleteAppointment={handleDelete}
+          onEdit={openEditDialog}
+          onDelete={async (appointment) => handleDelete(appointment.id)}
         />
-      )}
+      ) : (
+        <>
+          {viewMode === "day" && (
+            <CalendarGrid
+              selectedDate={selectedDate}
+              interval={interval}
+              clinicHours={clinicHours}
+              staff={staff}
+              appointments={appointments}
+              blockedTimes={blockedTimes}
+              snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}
+              onAppointmentUpdate={handleAppointmentUpdate}
+              onSlotClick={openSlotDialog}
+              onAppointmentClick={openEditDialog}
+              onEditAppointment={openEditDialog}
+              onDeleteAppointment={handleDelete}
+            />
+          )}
 
-      {viewMode === "week" && (
-        <CalendarWeekGrid
-          selectedDate={selectedDate}
-          interval={interval}
-          clinicHours={clinicHours}
-          staff={staff}
-          appointments={appointments}
-          blockedTimes={blockedTimes}
-          onSlotClick={openSlotDialog}
-          onAppointmentUpdate={handleAppointmentUpdate}
-          onEditAppointment={openEditDialog}
-          onDeleteAppointment={handleDelete}
-          onDayClick={handleDayClick}
-        />
-      )}
+          {viewMode === "week" && (
+            <CalendarWeekGrid
+              selectedDate={selectedDate}
+              interval={interval}
+              clinicHours={clinicHours}
+              staff={staff}
+              appointments={appointments}
+              blockedTimes={blockedTimes}
+              onSlotClick={openSlotDialog}
+              onAppointmentUpdate={handleAppointmentUpdate}
+              onEditAppointment={openEditDialog}
+              onDeleteAppointment={handleDelete}
+              onDayClick={handleDayClick}
+            />
+          )}
 
-      {viewMode === "month" && (
-        <CalendarMonthGrid
-          selectedDate={selectedDate}
-          staff={staff}
-          appointments={appointments}
-          onDayClick={handleDayClick}
-        />
+          {viewMode === "month" && (
+            <CalendarMonthGrid
+              selectedDate={selectedDate}
+              staff={staff}
+              appointments={appointments}
+              onDayClick={handleDayClick}
+            />
+          )}
+        </>
       )}
 
       <AppointmentDialog
