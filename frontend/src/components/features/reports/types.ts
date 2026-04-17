@@ -34,3 +34,22 @@ export interface TopStaffSales {
 }
 
 export type StaffSales = TopStaffSales
+
+export interface AppointmentStats {
+  total_appointments: number
+  completed_appointments: number
+  upcoming_appointments: number
+  cancelled_appointments: number
+  completion_rate: number
+  avg_appointments_per_client: number
+}
+
+export interface StaffAppointments {
+  staff_id: string
+  staff_name: string
+  total_appointments: number
+  completed_appointments: number
+  cancelled_appointments: number
+  completion_rate: number
+  unique_clients: number
+}

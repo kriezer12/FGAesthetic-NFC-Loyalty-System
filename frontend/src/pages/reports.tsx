@@ -8,12 +8,12 @@ import {
   ExportSection,
   ArchivedClientsTable,
   TreatmentSummaryTable,
-  StaffSalesTable,
+  StaffAppointmentsTable,
   EmptyState,
 } from "@/components/features/reports"
-import type { ClientCounts, ArchivedClient, TreatmentSummary, TopStaffSales } from "@/components/features/reports"
+import type { ClientCounts, ArchivedClient, TreatmentSummary, AppointmentStats } from "@/components/features/reports"
 
-type ReportType = "full" | "clients" | "treatments" | "staff_sales"
+type ReportType = "full" | "clients" | "treatments" | "appointments"
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api"
 
@@ -48,7 +48,7 @@ export default function ReportsPage() {
   const [clientCounts, setClientCounts] = useState<ClientCounts | null>(null)
   const [archivedClients, setArchivedClients] = useState<ArchivedClient[]>([])
   const [treatmentSummary, setTreatmentSummary] = useState<TreatmentSummary[]>([])
-  const [topStaffSales, setTopStaffSales] = useState<TopStaffSales | null>(null)
+  const [appointmentStats, setAppointmentStats] = useState<AppointmentStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,19 +59,19 @@ export default function ReportsPage() {
     try {
       console.log(`[Reports] Fetching from ${API_BASE}`)
 
-      const [countsData, archivedData, treatmentData, topStaffData] = await Promise.all([
+      const [countsData, archivedData, treatmentData, appointmentData] = await Promise.all([
         fetchWithErrorMsg<ClientCounts>("/reports/clients/counts", "Client Counts"),
         fetchWithErrorMsg<ArchivedClient[]>("/reports/clients/archived", "Archived Clients"),
         fetchWithErrorMsg<TreatmentSummary[]>("/reports/treatments/summary", "Treatment Summary"),
-        fetchWithErrorMsg<TopStaffSales | null>("/reports/staff/top-sales", "Top Staff Sales"),
+        fetchWithErrorMsg<AppointmentStats | null>("/reports/appointments/stats", "Appointment Stats"),
       ])
 
-      console.log("[Reports] Data fetched:", { countsData, archivedData, treatmentData, topStaffData })
+      console.log("[Reports] Data fetched:", { countsData, archivedData, treatmentData, appointmentData })
 
       setClientCounts(countsData)
       setArchivedClients(Array.isArray(archivedData) ? archivedData : [])
       setTreatmentSummary(Array.isArray(treatmentData) ? treatmentData : [])
-      setTopStaffSales(topStaffData)
+      setAppointmentStats(appointmentData)
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load reports"
       setError(message)
@@ -156,12 +156,12 @@ export default function ReportsPage() {
         {/* Key Metrics Section */}
         <section className="space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both delay-100">
           <div className="px-1">
-            <h2 className="text-xl font-bold tracking-tight text-foreground">Client Overview & Top Performance</h2>
-            <p className="text-sm text-muted-foreground mt-1">Status distribution and sales metrics</p>
+            <h2 className="text-xl font-bold tracking-tight text-foreground">Appointments & Treatment Overview</h2>
+            <p className="text-sm text-muted-foreground mt-1">Client and appointment statistics</p>
           </div>
           <ClientStatusCards 
             clientCounts={clientCounts} 
-            topStaffSales={topStaffSales}
+            appointmentStats={appointmentStats}
             loading={loading} 
           />
         </section>
@@ -179,9 +179,9 @@ export default function ReportsPage() {
               <TreatmentSummaryTable treatmentSummary={treatmentSummary} loading={loading} />
             </div>
 
-            {/* Staff Sales Table */}
+            {/* Staff Appointments Table */}
             <div className="transition-all duration-300 hover:shadow-xl rounded-xl ring-1 ring-border/50 hover:ring-border flex flex-col h-full">
-              <StaffSalesTable />
+              <StaffAppointmentsTable />
             </div>
           </div>
 

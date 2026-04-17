@@ -382,6 +382,178 @@ def get_treatment_detail():
         return jsonify({"error": str(e), "message": "Failed to fetch treatment detail"}), 500
 
 
+@reports_bp.route('/appointments/stats', methods=['GET'])
+def get_appointment_stats():
+    """
+    Get overall appointment statistics focused on appointments and treatments.
+    
+    Returns:
+        {
+            "total_appointments": int,
+            "completed_appointments": int,
+            "upcoming_appointments": int,
+            "cancelled_appointments": int,
+            "completion_rate": float,
+            "avg_appointments_per_client": float
+        }
+    """
+    try:
+        from datetime import timezone
+        supabase = get_supabase_admin()
+        
+        # Fetch all appointments
+        appts_resp = supabase.table("appointments").select("id, status, customer_id, start_time").execute()
+        appointments = appts_resp.data or []
+        
+        # Categorize appointments by status
+        total = len(appointments)
+        completed = sum(1 for a in appointments if a.get("status") == "completed")
+        cancelled = sum(1 for a in appointments if a.get("status") == "cancelled")
+        
+        # Count upcoming (not completed, not cancelled, and start_time is in future)
+        now = datetime.now(timezone.utc)
+        upcoming = 0
+        for a in appointments:
+            if a.get("status") not in ["completed", "cancelled"] and a.get("start_time"):
+                try:
+                    start_str = a["start_time"]
+                    # Parse ISO format datetime
+                    if isinstance(start_str, str):
+                        start_time = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    else:
+                        continue
+                    if start_time > now:
+                        upcoming += 1
+                except (ValueError, TypeError):
+                    # Skip if datetime parsing fails
+                    continue
+        
+        # Count unique clients
+        unique_clients = len(set(a.get("customer_id") for a in appointments if a.get("customer_id")))
+        avg_per_client = total / unique_clients if unique_clients > 0 else 0
+        
+        completion_rate = (completed / total * 100) if total > 0 else 0
+        
+        print(f"[REPORTS] Appointment stats - Total: {total}, Completed: {completed}, Upcoming: {upcoming}, Cancelled: {cancelled}", file=sys.stderr)
+        
+        return jsonify({
+            "total_appointments": total,
+            "completed_appointments": completed,
+            "upcoming_appointments": upcoming,
+            "cancelled_appointments": cancelled,
+            "completion_rate": round(completion_rate, 1),
+            "avg_appointments_per_client": round(avg_per_client, 1),
+        }), 200
+        
+    except Exception as e:
+        print(f"[REPORTS ERROR] get_appointment_stats: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e), "message": "Failed to fetch appointment stats"}), 500
+
+
+@reports_bp.route('/staff/appointments', methods=['GET'])
+def get_staff_appointments():
+    """
+    Get staff member appointment statistics (appointments, treatments, completion rate).
+    
+    Query params:
+        period: "daily" | "weekly" | "monthly" | "yearly" | "all" (default "all")
+    
+    Returns:
+        List of {
+            "staff_id": str,
+            "staff_name": str,
+            "total_appointments": int,
+            "completed_appointments": int,
+            "cancelled_appointments": int,
+            "completion_rate": float,
+            "unique_clients": int
+        }
+    """
+    try:
+        from datetime import timezone
+        supabase = get_supabase_admin()
+        period = request.args.get('period', 'all').lower()
+        
+        # Calculate date filter based on period
+        now = datetime.now(timezone.utc)
+        start_date = None
+        
+        if period == 'daily':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'weekly':
+            start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'monthly':
+            start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif period == 'yearly':
+            start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Build query for appointments
+        query = supabase.table("appointments").select("staff_id, staff_name, status, customer_id, end_time")
+        
+        if start_date:
+            query = query.gte("end_time", start_date.isoformat())
+        
+        appts_resp = query.execute()
+        appointments = appts_resp.data or []
+        
+        staff_stats = {}
+        for appt in appointments:
+            staff_id = appt.get("staff_id")
+            staff_name = appt.get("staff_name") or "Unknown Staff"
+            status = appt.get("status", "")
+            customer_id = appt.get("customer_id")
+            
+            if not staff_id:
+                continue
+            
+            if staff_id not in staff_stats:
+                staff_stats[staff_id] = {
+                    "staff_id": staff_id,
+                    "staff_name": staff_name,
+                    "total_appointments": 0,
+                    "completed_appointments": 0,
+                    "cancelled_appointments": 0,
+                    "_client_ids": set(),
+                }
+            
+            staff_stats[staff_id]["total_appointments"] += 1
+            if customer_id:
+                staff_stats[staff_id]["_client_ids"].add(customer_id)
+            
+            if status == "completed":
+                staff_stats[staff_id]["completed_appointments"] += 1
+            elif status == "cancelled":
+                staff_stats[staff_id]["cancelled_appointments"] += 1
+        
+        # Calculate completion rates and format for response
+        result = []
+        for stats in staff_stats.values():
+            total = stats["total_appointments"]
+            completed = stats["completed_appointments"]
+            completion_rate = (completed / total * 100) if total > 0 else 0
+            
+            result.append({
+                "staff_id": stats["staff_id"],
+                "staff_name": stats["staff_name"],
+                "total_appointments": total,
+                "completed_appointments": completed,
+                "cancelled_appointments": stats["cancelled_appointments"],
+                "completion_rate": round(completion_rate, 1),
+                "unique_clients": len(stats["_client_ids"]),
+            })
+        
+        # Sort by total appointments descending
+        result.sort(key=lambda x: x["total_appointments"], reverse=True)
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"[REPORTS ERROR] get_staff_appointments: {str(e)}", file=sys.stderr)
+        return jsonify({"error": str(e), "message": "Failed to fetch staff appointments"}), 500
+
+
 @reports_bp.route('/export/csv', methods=['GET'])
 def export_report_csv():
     """
