@@ -1356,22 +1356,26 @@ export default function CheckoutPage() {
               <Box className="mr-2 h-4 w-4" />
               Inventory
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/pos-settings")}> 
-              <Settings2 className="mr-2 h-4 w-4" />
-              Settings
-            </Button>
-            <Button
-              type="button"
-              variant={activeView === "logs" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveView("logs")
-                void loadLogs()
-              }}
-            >
-              <Clock3 className="mr-2 h-4 w-4" />
-              Logs
-            </Button>
+            {userProfile?.role !== "staff" && (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/pos-settings")}> 
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeView === "logs" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setActiveView("logs")
+                    void loadLogs()
+                  }}
+                >
+                  <Clock3 className="mr-2 h-4 w-4" />
+                  Logs
+                </Button>
+              </>
+            )}
             <Button
               type="button"
               variant={activeView === "checkout" ? "default" : "outline"}
@@ -1480,9 +1484,11 @@ export default function CheckoutPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-muted-foreground">Adjustments (Discounts / Promos)</p>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => navigate("/dashboard/pos-settings")}>
-                      Configure in Settings
-                    </Button>
+                    {userProfile?.role !== "staff" && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => navigate("/dashboard/pos-settings")}>
+                        Configure in Settings
+                      </Button>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
