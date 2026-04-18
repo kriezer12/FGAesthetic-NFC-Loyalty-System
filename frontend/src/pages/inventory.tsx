@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { Navigate } from "react-router-dom"
 import { useInventory, Stock, Product } from "@/hooks/use-inventory"
+import { useStockTransfer } from "@/hooks/use-stock-transfer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { 
@@ -14,7 +15,8 @@ import {
   AlertTriangle,
   ChevronDown,
   Settings2,
-  Trash2
+  Trash2,
+  ArrowRight
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,6 +25,8 @@ import { format } from "date-fns"
 import { supabase } from "@/lib/supabase"
 import { ProductModal } from "@/components/features/inventory/product-modal"
 import { StockAdjustmentModal } from "@/components/features/inventory/stock-adjustment-modal"
+import { StockTransferModal } from "@/components/features/inventory/stock-transfer-modal"
+import { TransfersList } from "@/components/features/inventory/transfers-list"
 import { 
   Select,
   SelectContent,
@@ -62,6 +66,16 @@ export default function InventoryPage() {
     adjustStock
   } = useInventory()
 
+  const {
+    transfers,
+    loading: transfersLoading,
+    fetchTransfers,
+    initiateTransfer,
+    approveTransfer,
+    receiveTransfer,
+    cancelTransfer
+  } = useStockTransfer()
+
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState("stocks")
   const [branches, setBranches] = useState<{id: string, name: string}[]>([])
@@ -72,6 +86,8 @@ export default function InventoryPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [stockModalOpen, setStockModalOpen] = useState(false)
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null)
+  const [transferModalOpen, setTransferModalOpen] = useState(false)
+  const [transferStock, setTransferStock] = useState<Stock | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
 
@@ -84,6 +100,12 @@ export default function InventoryPage() {
     }
     fetchBranchesList()
   }, [userProfile])
+
+  useEffect(() => {
+    if (userProfile) {
+      fetchTransfers()
+    }
+  }, [userProfile, fetchTransfers])
 
   const filteredStocks = useMemo(() => {
     let base = stocks
@@ -180,6 +202,11 @@ export default function InventoryPage() {
     setStockModalOpen(true)
   }
 
+  const handleTransferStock = (stock: Stock) => {
+    setTransferStock(stock)
+    setTransferModalOpen(true)
+  }
+
   const handleSaveProduct = async (data: any) => {
     if (editingProduct) {
       await updateProduct(editingProduct.id, data)
@@ -187,6 +214,11 @@ export default function InventoryPage() {
       await createProduct(data)
     }
     fetchProducts()
+  }
+
+  const handleTransferSubmit = async (params: any) => {
+    await initiateTransfer(params)
+    fetchStocks() // Refresh stocks after transfer
   }
 
   return (
@@ -270,6 +302,10 @@ export default function InventoryPage() {
             <TabsTrigger value="products" className="gap-2">
               <Package className="h-4 w-4" />
               Products
+            </TabsTrigger>
+            <TabsTrigger value="transfers" className="gap-2">
+              <ArrowRight className="h-4 w-4" />
+              Transfers
             </TabsTrigger>
             <TabsTrigger value="transactions" className="gap-2">
               <History className="h-4 w-4" />
@@ -402,9 +438,17 @@ export default function InventoryPage() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             {!isReadOnly && (
-                              <Button size="sm" variant="outline" onClick={() => handleAdjustStock(stock)}>
-                                Adjust
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" onClick={() => handleAdjustStock(stock)}>
+                                  Adjust
+                                </Button>
+                                {userProfile?.role !== 'staff' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleTransferStock(stock)}>
+                                    <ArrowRight className="h-4 w-4 mr-1" />
+                                    Transfer
+                                  </Button>
+                                )}
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -459,6 +503,24 @@ export default function InventoryPage() {
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="transfers">
+          <Card>
+            <CardHeader>
+              <CardTitle>Stock Transfers</CardTitle>
+              <CardDescription>View and manage inter-branch stock transfers.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <TransfersList
+                transfers={transfers}
+                onApprove={approveTransfer}
+                onReceive={receiveTransfer}
+                onCancel={cancelTransfer}
+                loading={transfersLoading}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -541,6 +603,13 @@ export default function InventoryPage() {
         onOpenChange={setStockModalOpen}
         stock={selectedStock}
         onAdjust={adjustStock}
+      />
+
+      <StockTransferModal
+        open={transferModalOpen}
+        onOpenChange={setTransferModalOpen}
+        stock={transferStock}
+        onTransfer={handleTransferSubmit}
       />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
