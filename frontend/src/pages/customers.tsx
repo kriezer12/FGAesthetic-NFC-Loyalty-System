@@ -26,6 +26,7 @@ import {
   Plus,
   Camera,
   Upload,
+  Gift,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -77,6 +78,22 @@ import type { Customer } from "@/types/customer"
 import type { Appointment, IntervalMinutes } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
+
+const isBirthdayToday = (dob: string | null | undefined): boolean => {
+  if (!dob) return false
+  try {
+    const today = new Date()
+    const parts = dob.split("T")[0].split("-")
+    if (parts.length !== 3) return false
+    const birthMonth = parseInt(parts[1], 10)
+    const birthDay = parseInt(parts[2], 10)
+    const currentMonth = today.getMonth() + 1
+    const currentDay = today.getDate()
+    return birthMonth === currentMonth && birthDay === currentDay
+  } catch (e) {
+    return false
+  }
+}
 
 export default function CustomersPage() {
   const navigate = useNavigate()
@@ -910,6 +927,12 @@ export default function CustomersPage() {
     } else {
       // default: sort by status then by recent creation date
       filtered.sort((a, b) => {
+        const aBirthday = isBirthdayToday(a.date_of_birth)
+        const bBirthday = isBirthdayToday(b.date_of_birth)
+        
+        if (aBirthday && !bBirthday) return -1
+        if (!aBirthday && bBirthday) return 1
+
         const rankDiff = statusRank(a) - statusRank(b)
         if (rankDiff !== 0) return rankDiff
         return new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime()
@@ -1260,7 +1283,7 @@ export default function CustomersPage() {
                                   </span>
                                 </div>
                                 <div>
-                                  <div className="font-medium">
+                                  <div className="font-medium flex items-center">
                                     {(() => {
                                       let displayName = customer.name || 'Unknown'
                                       if (customer.first_name || customer.last_name) {
@@ -1275,6 +1298,13 @@ export default function CustomersPage() {
                                       }
                                       return displayName
                                     })()}
+                                    {isBirthdayToday(customer.date_of_birth) && (
+                                      <div title="It's their birthday today!" className="ml-3 relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-primary/10 via-primary/20 to-primary/10 px-3 py-1 border border-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)] overflow-hidden group cursor-default">
+                                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent transition-transform duration-1000 group-hover:translate-x-full"></div>
+                                        <Gift className="h-3.5 w-3.5 text-primary animate-bounce relative z-10" />
+                                        <span className="text-[10px] uppercase font-extrabold tracking-widest text-primary relative z-10 drop-shadow-sm">Birthday Today!</span>
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="text-xs capitalize text-muted-foreground">
                                     {customer.skin_type && `${customer.skin_type} skin`}
