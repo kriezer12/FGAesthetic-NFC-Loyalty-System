@@ -12,6 +12,7 @@ export interface Account {
   branch_id?: string | null
   branch_name?: string | null
   avatar_url?: string | null
+  deleted_at?: string | null
 }
 
 export function useAccounts() {
@@ -27,7 +28,7 @@ export function useAccounts() {
     setError(null)
 
     try {
-      const response = await apiCall("/accounts/list", {
+      const response = await apiCall("/accounts/list?status=all", {
         authToken: session.access_token,
       })
       if (!response.ok) {
@@ -79,7 +80,37 @@ export function useAccounts() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to delete account")
+        const data = await response.json().catch(() => ({}))
+        const errorMessage = data.error || "Failed to delete account"
+        throw new Error(errorMessage)
+      }
+
+      const now = new Date().toISOString()
+      setAccounts((prev) =>
+        prev.map((acc) =>
+          acc.id === userId
+            ? { ...acc, is_active: false, deleted_at: now }
+            : acc
+        )
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An error occurred"
+      setError(message)
+      throw err
+    }
+  }
+
+  const hardDeleteAccount = async (userId: string) => {
+    try {
+      const response = await apiCall(`/accounts/${userId}/hard`, {
+        method: "DELETE",
+        authToken: session?.access_token,
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        const errorMessage = data.error || "Failed to permanently delete account"
+        throw new Error(errorMessage)
       }
 
       setAccounts((prev) => prev.filter((acc) => acc.id !== userId))
@@ -127,6 +158,7 @@ export function useAccounts() {
     fetchAccounts,
     updateAccount,
     deleteAccount,
+    hardDeleteAccount,
     verifyPassword,
   }
 }

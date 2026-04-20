@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RefreshCw, Plus, Search, X } from "lucide-react"
 import { AddAccountModal } from "@/components/features/accounts"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function AccountsPage() {
   useEffect(() => {
@@ -87,6 +88,8 @@ export default function AccountsPage() {
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           type="text"
+          name="account_search_query"
+          autoComplete="off"
           placeholder="Search by email, name, or branch..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -125,7 +128,25 @@ export default function AccountsPage() {
       </div>
 
       {/* Accounts table */}
-      <AccountsList accounts={filteredAccounts} onRefresh={fetchAccounts} />
+      <Tabs defaultValue="active" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="active">Active Accounts</TabsTrigger>
+          <TabsTrigger value="deleted">Recently Deleted</TabsTrigger>
+        </TabsList>
+        <TabsContent value="active" className="mt-0">
+          <AccountsList 
+            accounts={filteredAccounts.filter(a => a.is_active)} 
+            onRefresh={fetchAccounts} 
+          />
+        </TabsContent>
+        <TabsContent value="deleted" className="mt-0">
+          <AccountsList 
+            accounts={filteredAccounts.filter(a => !a.is_active)} 
+            onRefresh={fetchAccounts} 
+            isDeletedTab={true}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Add Account Modal */}
       <AddAccountModal

@@ -98,6 +98,17 @@ export function PasswordVerificationDialog({
 
           {/* Password input */}
           <div className="space-y-2">
+            {/* Hidden decoy username input to trap password managers */}
+            <input 
+              type="text" 
+              name="fake_username" 
+              autoComplete="username" 
+              className="sr-only" 
+              aria-hidden="true" 
+              tabIndex={-1}
+              defaultValue="verification" 
+            />
+            
             <label className="text-sm font-medium">Password</label>
             <div className="relative">
               <Input
