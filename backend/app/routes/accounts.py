@@ -236,9 +236,17 @@ def list_accounts():
             # Other roles (e.g. staff) are not authorized to list accounts
             return jsonify({'error': 'Unauthorized: Insufficient permissions'}), 403
             
-        # Filter to only show active (non-deleted) accounts
-        # Deleted accounts are soft-deleted by setting is_active = False
-        query = query.eq('is_active', True)
+        # Check status query parameter
+        status_param = request.args.get('status', 'active')
+        
+        # Filter accounts based on status parameter
+        if status_param == 'active':
+            query = query.eq('is_active', True)
+        elif status_param == 'deleted':
+            query = query.eq('is_active', False).not_.is_null('deleted_at')
+        elif status_param == 'all':
+            # No filtering by is_active needed
+            pass
         
         # Fetch filtered user profiles
         response = query.execute()
@@ -359,6 +367,10 @@ def update_account(user_id):
             }), 500
         
         user_obj = response.data[0]
+        # Also clean up deleted_at if account is restored (is_active becomes True)
+        if update_data.get('is_active') is True:
+            supabase.table('user_profiles').update({'deleted_at': None}).eq('id', user_id).execute()
+        
         # fetch branch_name if branch_id present
         if user_obj.get('branch_id'):
             try:
@@ -424,41 +436,139 @@ def delete_account(user_id):
         except Exception as e:
             return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
 
-        supabase_admin = get_supabase_admin()
-        
-        # Soft delete: mark as inactive
-        # This preserves user_logs for history and audit trail
+        # Soft delete: update user_profiles to set is_active=False and deleted_at=now()
         try:
-            # Update user profile: mark as deleted/inactive
+            supabase_admin = get_supabase_admin()
+            
+            # Fetch user profile to verify valid user
+            prof = supabase_admin.table('user_profiles').select('id').eq('id', user_id).single().execute()
+            if not prof.data:
+                return jsonify({'error': 'User not found'}), 404
+            
+            from datetime import datetime
+            now_iso = datetime.utcnow().isoformat()
+            
             update_response = supabase_admin.table('user_profiles').update({
-                'is_active': False
+                'is_active': False,
+                'deleted_at': now_iso
             }).eq('id', user_id).execute()
             
-            # Attempt to disable auth user (if possible with admin API)
-            try:
-                supabase_admin.auth.admin.update_user_by_id(user_id, {
-                    "user_metadata": {
-                        "account_deleted": True
-                    }
-                })
-            except Exception as auth_err:
-                # Continue anyway - profile was marked deleted
-                pass
-            
+            if not update_response.data:
+                return jsonify({'error': 'Failed to soft delete user profile'}), 500
+
             return jsonify({
                 'success': True,
-                'message': 'Account deleted successfully. User logs preserved for audit trail.'
+                'message': 'Account soft deleted successfully.'
             }), 200
         
         except Exception as delete_err:
+            import traceback
+            err_str = str(delete_err)
+            with open('delete_err.txt', 'w', encoding='utf-8') as f:
+                f.write(traceback.format_exc())
+            
+            # If the user is already deleted, treat it as a success!
+            if 'User not found' in err_str or '404' in getattr(delete_err, 'message', ''):
+                return jsonify({
+                    'success': True,
+                    'message': 'User was already deleted.'
+                }), 200
+                
             return jsonify({
-                'error': f'Delete failed: {str(delete_err)}'
+                'error': f'Hard delete failed: {err_str}. Please ensure all database constraints are updated.'
+            }), 500
+        
+        except Exception as e:
+            return jsonify({
+                'error': f'Soft delete failed: {str(e)}'
             }), 500
         
     except Exception as e:
         return jsonify({
             'error': f'Delete failed: {str(e)}'
         }), 500
+
+@accounts_bp.route('/<user_id>/hard', methods=['DELETE'])
+def hard_delete_account(user_id):
+    """
+    Hard delete a user account permanently.
+    Only accessible by authorized admins.
+    """
+    try:
+        # authorization check before deleting
+        try:
+            caller_id = get_user_from_token()
+            supabase_admin = get_supabase_admin()
+            caller_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
+            caller_role = caller_prof.data.get('role') if caller_prof.data else None
+            caller_branch_id = caller_prof.data.get('branch_id')
+
+            if caller_role == 'branch_admin':
+                target_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).single().execute()
+                if not target_prof.data:
+                    return jsonify({'error': 'Target user not found'}), 404
+                
+                target_role = target_prof.data.get('role')
+                target_branch_id = target_prof.data.get('branch_id')
+
+                if target_role != 'staff':
+                    return jsonify({'error': 'Branch admin may only hard delete staff accounts'}), 403
+                
+                if target_branch_id != caller_branch_id:
+                    return jsonify({'error': 'Branch admin may only hard delete staff in their own branch'}), 403
+            elif caller_role != 'super_admin':
+                return jsonify({'error': 'Unauthorized'}), 403
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
+        except Exception as e:
+            return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
+
+        # Bypass any potentially cached global client state
+        from supabase import create_client
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv(override=True)
+        fresh_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        fresh_url = os.getenv("SUPABASE_URL", "")
+        
+        fresh_supabase_admin = create_client(fresh_url, fresh_service_key)
+        
+        # Hard delete: remove from auth.users
+        # Due to ON DELETE CASCADE on user_profiles, this will also remove the profile.
+        try:
+            delete_response = fresh_supabase_admin.auth.admin.delete_user(user_id)
+            
+            # Check for error in response if applicable (Supabase-py behavior)
+            if hasattr(delete_response, 'error') and delete_response.error:
+                return jsonify({
+                    'error': f'Auth delete failed: {str(delete_response.error)}'
+                }), 500
+
+            return jsonify({
+                'success': True,
+                'message': 'Account hard deleted successfully.'
+            }), 200
+        
+        except Exception as delete_err:
+            import traceback
+            err_str = str(delete_err)
+            
+            if 'User not found' in err_str or '404' in getattr(delete_err, 'message', ''):
+                return jsonify({
+                    'success': True,
+                    'message': 'User was already deleted.'
+                }), 200
+                
+            return jsonify({
+                'error': f'Hard delete failed: {err_str}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'Delete failed: {str(e)}'
+        }), 500
+
 
 
 @accounts_bp.route('/verify-password', methods=['POST'])
@@ -507,7 +617,6 @@ def verify_password():
         
         # Attempt to verify password using the auth API
         try:
-            from app.services.supabase_client import get_supabase
             # Use the existing anon client to verify credentials
             supabase_verify = get_supabase()
             
