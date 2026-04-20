@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { cn } from "@/lib/utils"
-import { Eye, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
+import { Eye, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,8 @@ interface AppointmentsTableViewProps {
   appointments: Appointment[]
   onEdit: (appointment: Appointment) => void
   onDelete: (appointment: Appointment) => void
+  /** Set of appointment IDs that have already been checked out/transacted */
+  checkedOutAppointmentIds?: Set<string>
 }
 
 const STATUS_COLORS: Record<AppointmentStatus, string> = {
@@ -42,6 +44,7 @@ export function AppointmentsTableView({
   appointments,
   onEdit,
   onDelete,
+  checkedOutAppointmentIds,
 }: AppointmentsTableViewProps) {
   const { userProfile } = useAuth()
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
@@ -400,6 +403,28 @@ export function AppointmentsTableView({
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            {!checkedOutAppointmentIds?.has(appointment.id) && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => window.location.href = `/dashboard/checkout?appointmentId=${appointment.id}`}
+                                title="Proceed to checkout"
+                                className="text-green-600 hover:text-green-700"
+                              >
+                                <ShoppingCart className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {checkedOutAppointmentIds?.has(appointment.id) && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                disabled
+                                title="Already checked out"
+                                className="text-muted-foreground"
+                              >
+                                <ShoppingCart className="h-4 w-4" />
+                              </Button>
+                            )}
                             {isAdmin && (
                               <Button
                                 variant="ghost"

@@ -84,6 +84,8 @@ interface CalendarGridProps {
   onAppointmentClick: (appointment: Appointment) => void
   onEditAppointment: (appointment: Appointment) => void
   onDeleteAppointment: (id: string) => void
+  /** Set of appointment IDs that have already been checked out/transacted */
+  checkedOutAppointmentIds?: Set<string>
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +105,7 @@ export function CalendarGrid({
   onAppointmentClick,
   onEditAppointment,
   onDeleteAppointment,
+  checkedOutAppointmentIds,
 }: CalendarGridProps) {
   const navigate = useNavigate()
   const gridRef = useRef<HTMLDivElement>(null)
@@ -621,6 +624,7 @@ export function CalendarGrid({
                         },
                       })
                     }}
+                    isCheckedOut={checkedOutAppointmentIds?.has(appt.id) ?? false}
                   />
                 )
               })}

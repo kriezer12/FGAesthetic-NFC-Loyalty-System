@@ -361,6 +361,17 @@ export default function CheckoutPage() {
     }
   }, [userProfile?.branch_id])
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const initialApptId = params.get("appointmentId")
+    if (initialApptId && appointments.length > 0 && services.length > 0 && selectedAppointmentId === "") {
+      // Clear the query string to avoid re-triggering if user clears cart
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+      addAppointmentServicesToCart(initialApptId)
+    }
+  }, [location.search, appointments, services, selectedAppointmentId])
+
   const billableAppointments = useMemo(() => {
     const sorted = [...appointments].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
     const groupHasBilled = new Map<string, boolean>()
@@ -1225,6 +1236,11 @@ export default function CheckoutPage() {
       return
     }
 
+    if (paid < totalDue) {
+      setErrorMessage(`Insufficient payment. Amount must be at least ₱${totalDue.toFixed(2)}.`)
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -1589,7 +1605,7 @@ export default function CheckoutPage() {
 
             {isCheckoutStage && (
               <div className="grid grid-cols-1 gap-2 pt-1">
-                <Button type="button" disabled={isLoading} onClick={completeSale}>{isLoading ? 'Processing...' : 'Confirm'}</Button>
+                <Button type="button" disabled={isLoading || paid < totalDue} onClick={completeSale}>{isLoading ? 'Processing...' : 'Confirm'}</Button>
               </div>
             )}
 

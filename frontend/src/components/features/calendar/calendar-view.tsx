@@ -25,6 +25,7 @@ import { generateId, setTimeOnDate } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
 import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
+import { useCheckedOutAppointments } from "@/hooks/use-checked-out-appointments"
 import { saveAppointmentSettings } from "@/services/appointment-settings"
 import { CalendarHeader } from "./calendar-parts/calendar-header"
 import { CalendarGrid } from "./calendar-parts/calendar-grid"
@@ -136,6 +137,9 @@ export function CalendarView() {
 
   // Load appointment settings from database (shared across all staff)
   const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
+
+  // Load checked-out appointments
+  const { checkedOutAppointmentIds } = useCheckedOutAppointments()
 
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
@@ -799,6 +803,7 @@ export function CalendarView() {
           appointments={filteredTableAppointments}
           onEdit={openEditDialog}
           onDelete={async (appointment) => handleDelete(appointment.id)}
+          checkedOutAppointmentIds={checkedOutAppointmentIds}
         />
       ) : (
         <>
@@ -816,6 +821,7 @@ export function CalendarView() {
               onAppointmentClick={openEditDialog}
               onEditAppointment={openEditDialog}
               onDeleteAppointment={handleDelete}
+              checkedOutAppointmentIds={checkedOutAppointmentIds}
             />
           )}
 

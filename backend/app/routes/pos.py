@@ -172,6 +172,12 @@ def create_transaction():
 
     totals = _calc_vat_values(subtotal, discount_amount)
 
+    if amount_paid < totals["total_due"]:
+        return jsonify({
+            "error": "Insufficient payment",
+            "details": f"Amount paid ({amount_paid}) is less than total due ({totals['total_due']})"
+        }), 400
+
     transaction_id = str(uuid.uuid4())
 
     transaction_payload = {

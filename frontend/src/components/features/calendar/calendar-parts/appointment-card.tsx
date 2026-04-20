@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useState } from "react"
-import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X } from "lucide-react"
+import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X, ShoppingCart } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -65,6 +65,8 @@ interface AppointmentCardProps {
   onStatusChange?: (status: AppointmentStatus) => void
   /** Navigate to customer profile */
   onGoToProfile?: () => void
+  /** Whether this appointment has already been checked out/transacted */
+  isCheckedOut?: boolean
 }
 
 export function AppointmentCard({
@@ -79,6 +81,7 @@ export function AppointmentCard({
   onDelete,
   onStatusChange,
   onGoToProfile,
+  isCheckedOut = false,
 }: AppointmentCardProps) {
   const startLabel = formatTime(minutesSinceMidnight(appointment.start_time))
   const endLabel   = formatTime(minutesSinceMidnight(appointment.end_time))
@@ -277,6 +280,24 @@ export function AppointmentCard({
             <ContextMenuItem onClick={onEdit} className="gap-2">
               <Pencil className="h-4 w-4" />
               Edit Appointment
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {!isCheckedOut && (
+          <>
+            <ContextMenuItem onClick={() => window.location.href = `/dashboard/checkout?appointmentId=${appointment.id}`} className="gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Proceed to Checkout
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {isCheckedOut && (
+          <>
+            <ContextMenuItem disabled className="gap-2 text-muted-foreground">
+              <ShoppingCart className="h-4 w-4" />
+              Already checked out
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
