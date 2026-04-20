@@ -426,8 +426,14 @@ export function AppointmentDialog({
 
     /* past date check */
     const now = new Date()
-    if (startDate < now) {
-      setError("Cannot create appointments in the past. Please select a future date and time.")
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
+    
+    const apptDateOnly = new Date(startDate)
+    apptDateOnly.setHours(0, 0, 0, 0)
+
+    if (apptDateOnly < today) {
+      setError("Cannot create appointments on past dates. Please select today or a future date.")
       return
     }
     const staffMember = staff.find((s) => s.id === staffId)!

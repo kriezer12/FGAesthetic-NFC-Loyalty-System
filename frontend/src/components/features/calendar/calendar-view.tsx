@@ -550,17 +550,23 @@ export function CalendarView() {
     setDialogOpen(true)
   }, [canManageAppointments])
 
-  const openSlotDialog = useCallback((staffId: string, startMinutes: number) => {
+  const openSlotDialog = useCallback((staffId: string, startMinutes: number, slotDateOverride?: Date) => {
+    const baseDate = slotDateOverride || selectedDate
     // Check if the clicked slot is in the past
-    const slotDate = setTimeOnDate(selectedDate, startMinutes)
+    const slotDate = setTimeOnDate(baseDate, startMinutes)
     const now = new Date()
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
+
+    const slotDateOnly = new Date(slotDate)
+    slotDateOnly.setHours(0, 0, 0, 0)
     
-    if (slotDate < now) {
+    if (slotDateOnly < today) {
       // Show past appointment warning toast
       setToast({
         id: crypto.randomUUID(),
         title: "Cannot Create Appointment",
-        message: "You can't appoint for a time in the past. Please select a future date and time.",
+        message: "You can't appoint for a past date. Please select today or a future date.",
         type: "warning",
       })
       return
@@ -575,11 +581,14 @@ export function CalendarView() {
       })
       return
     }
+    if (slotDateOverride) {
+      setSelectedDate(slotDateOverride)
+    }
     setEditingAppointment(null)
     setPrefillStaffId(staffId)
     setPrefillStartMin(startMinutes)
     setDialogOpen(true)
-  }, [canManageAppointments])
+  }, [canManageAppointments, selectedDate])
 
   const openEditDialog = useCallback((appt: Appointment) => {
     if (!canManageAppointments) {

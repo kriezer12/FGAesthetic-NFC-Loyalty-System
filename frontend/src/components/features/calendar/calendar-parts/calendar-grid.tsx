@@ -80,7 +80,7 @@ interface CalendarGridProps {
   /** When true, columns stretch to fill the available width instead of fixed 200px */
   snapColumnsToFit?: boolean
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
-  onSlotClick: (staffId: string, startMinutes: number) => void
+  onSlotClick: (staffId: string, startMinutes: number, date?: Date) => void
   onAppointmentClick: (appointment: Appointment) => void
   onEditAppointment: (appointment: Appointment) => void
   onDeleteAppointment: (id: string) => void
@@ -302,6 +302,19 @@ export function CalendarGrid({
       // validate blocked times
       if (hasBlockedTimeConflict(newStaffId, newStartMin, newEndMin, selectedDate, blockedTimes)) {
         setValidationError("Cannot schedule during a blocked time.")
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
+      }
+
+      // validate past date
+      const apptDateOnly = new Date(selectedDate)
+      apptDateOnly.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (apptDateOnly < today) {
+        setValidationError("Cannot move appointments to past dates. Please select today or a future date.")
         dragRef.current = null
         lastPreviewRef.current = null
         setDragPreview(null)
