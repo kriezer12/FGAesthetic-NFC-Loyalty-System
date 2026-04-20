@@ -61,6 +61,7 @@ import { CustomerPointsDashboard } from "@/components/features/customers/custome
 import { LoyaltyPointsDisplay } from "@/components/features/customers/customer-info-parts/loyalty-points-display"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
 import { TreatmentHistory } from "@/components/features/customers/treatment-history"
+import { DigitalConsentDialog } from "@/components/features/customers/digital-consent-dialog"
 import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
@@ -360,6 +361,7 @@ export default function CustomersPage() {
   const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' | 'other' }>>([])
   const [treatmentConsentPath, setTreatmentConsentPath] = useState<string>("")
   const [treatmentConsentUrl, setTreatmentConsentUrl] = useState<string>("")
+  const [treatmentConsentPdfUrl, setTreatmentConsentPdfUrl] = useState<string>("")
   const [treatmentConsentUploaded, setTreatmentConsentUploaded] = useState(false)
   const [treatmentGalleryError, setTreatmentGalleryError] = useState("")
   const [treatmentConsentError, setTreatmentConsentError] = useState("")
@@ -368,6 +370,8 @@ export default function CustomersPage() {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
   const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false)
   const [cameraCaptureType, setCameraCaptureType] = useState<"before" | "after" | "other" | "consent" | "none">("none")
+  const [digitalConsentOpen, setDigitalConsentOpen] = useState(false)
+  const [confirmDeleteConsent, setConfirmDeleteConsent] = useState(false)
   
   const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
@@ -763,15 +767,29 @@ export default function CustomersPage() {
         .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 
       if (consentFiles.length > 0) {
-        const mostRecentFile = consentFiles[0]
-        const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentFile.name}`
-        const signedUrl = await getSignedUrl("customer-picture", path, 604800)
-        setTreatmentConsentPath(path)
-        setTreatmentConsentUrl(signedUrl)
-        setTreatmentConsentUploaded(true)
+        // Find most recent image and most recent PDF
+        const mostRecentImage = consentFiles.find(f => f.name.endsWith('.webp') || f.name.endsWith('.png'))
+        const mostRecentPdf = consentFiles.find(f => f.name.endsWith('.pdf'))
+        
+        if (mostRecentImage) {
+          const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentImage.name}`
+          const signedUrl = await getSignedUrl("customer-picture", path, 604800)
+          setTreatmentConsentPath(path)
+          setTreatmentConsentUrl(signedUrl)
+          setTreatmentConsentUploaded(true)
+        }
+
+        if (mostRecentPdf) {
+          const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentPdf.name}`
+          const signedUrl = await getSignedUrl("customer-picture", path, 604800)
+          setTreatmentConsentPdfUrl(signedUrl)
+        } else {
+          setTreatmentConsentPdfUrl("")
+        }
       } else {
         setTreatmentConsentPath("")
         setTreatmentConsentUrl("")
+        setTreatmentConsentPdfUrl("")
         setTreatmentConsentUploaded(false)
       }
     } catch (err) {
@@ -855,14 +873,23 @@ export default function CustomersPage() {
     
     setTreatmentConsentError("")
     try {
+      const pathsToDelete = [treatmentConsentPath]
+      // Derive PDF path from image path (they share the same timestamp and folder)
+      if (treatmentConsentPath.endsWith('.webp')) {
+        pathsToDelete.push(treatmentConsentPath.replace('.webp', '.pdf'))
+      } else if (treatmentConsentPath.endsWith('.png')) {
+        pathsToDelete.push(treatmentConsentPath.replace('.png', '.pdf'))
+      }
+
       const { error } = await supabase.storage
         .from("customer-picture")
-        .remove([treatmentConsentPath])
+        .remove(pathsToDelete)
       
       if (error) throw error
       
       setTreatmentConsentPath("")
       setTreatmentConsentUrl("")
+      setTreatmentConsentPdfUrl("")
       setTreatmentConsentUploaded(false)
       setTreatmentConsentError("")
     } catch (err) {
@@ -2628,31 +2655,74 @@ export default function CustomersPage() {
                           <div className="relative overflow-hidden rounded-xl border bg-muted">
                             <button
                               type="button"
-                              className="absolute inset-0"
-                              onClick={() => setEnlargedImage(treatmentConsentUrl)}
+                              className="absolute inset-0 cursor-pointer"
+                              onClick={() => {
+                                if (treatmentConsentPdfUrl) {
+                                  window.open(treatmentConsentPdfUrl, '_blank')
+                                } else {
+                                  setEnlargedImage(treatmentConsentUrl)
+                                }
+                              }}
                             />
                             <img
                               src={treatmentConsentUrl}
                               alt="Consent Form"
-                              className="h-40 w-full object-cover"
+                              className="h-80 w-full object-cover object-top bg-white"
                             />
                           </div>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')}
+                              onClick={() => {
+                                if (treatmentConsentPdfUrl) {
+                                  window.open(treatmentConsentPdfUrl, '_blank')
+                                } else {
+                                  downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')
+                                }
+                              }}
                             >
-                              Download
+                              Download {treatmentConsentPdfUrl ? 'PDF' : ''}
                             </Button>
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={handleDeleteTreatmentConsentForm}
+                              onClick={() => setConfirmDeleteConsent(true)}
                             >
                               Delete
                             </Button>
                           </div>
+
+                          {/* Delete Confirmation Modal */}
+                          <Dialog open={confirmDeleteConsent} onOpenChange={setConfirmDeleteConsent}>
+                            <DialogContent className="max-w-sm">
+                              <DialogHeader>
+                                <DialogTitle>Delete Consent Form</DialogTitle>
+                                <DialogDescription>
+                                  Are you sure you want to delete this consent form? This action cannot be undone.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="flex justify-end gap-2 pt-4">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setConfirmDeleteConsent(false)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    setConfirmDeleteConsent(false)
+                                    handleDeleteTreatmentConsentForm()
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
@@ -2678,6 +2748,16 @@ export default function CustomersPage() {
                             >
                               <Upload className="w-4 h-4 mr-2" />
                               Upload
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => setDigitalConsentOpen(true)}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Edit className="w-4 h-4 mr-2" />
+                              Sign Digitally
                             </Button>
                           </div>
                         </div>
@@ -2871,6 +2951,20 @@ export default function CustomersPage() {
             handleTreatmentConsentFormUpload(file)
           } else if (cameraCaptureType !== "none") {
             handleTreatmentPhotoUpload(file, cameraCaptureType)
+          }
+        }}
+      />
+
+      <DigitalConsentDialog
+        open={digitalConsentOpen}
+        onOpenChange={setDigitalConsentOpen}
+        customerName={selectedCustomer?.name || `${selectedCustomer?.first_name || ''} ${selectedCustomer?.last_name || ''}`.trim()}
+        customerId={selectedCustomer?.id || ''}
+        appointmentId={selectedAppointment?.id || ''}
+        treatmentName={selectedAppointment?.treatment_name}
+        onSuccess={() => {
+          if (selectedAppointment) {
+            loadTreatmentConsentForm(selectedAppointment.id, selectedAppointment.customer_id)
           }
         }}
       />
