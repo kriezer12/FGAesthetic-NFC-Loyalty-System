@@ -11,6 +11,7 @@ import { useEffect, useState } from "react"
 import type { StaffMember } from "@/types/appointment"
 import { STAFF_COLORS } from "@/components/features/calendar/calendar-parts/calendar-config"
 import { useAuth } from "@/contexts/auth-context"
+import { apiCall } from "@/lib/api"
 
 interface UserProfile {
   id: string
@@ -42,8 +43,8 @@ export function useStaff(): UseStaffReturn {
         return
       }
 
-      const response = await fetch("/api/staff/list", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+      const response = await apiCall("/staff/list", {
+        authToken: session.access_token,
       })
 
       if (!response.ok) {

@@ -139,7 +139,9 @@ export function AppointmentDialog({
   // ---- role-based restrictions ----
   const { userProfile } = useAuth()
   const isStaff = userProfile?.role === "staff"
-  const isReadOnly = !isStaff
+  const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+  const canCreateOrEdit = isStaff || isAdmin
+  const isReadOnly = !canCreateOrEdit
 
   // ---- hooks ----
   const { customers, loading: customersLoading } = useCustomers()
@@ -367,8 +369,8 @@ export function AppointmentDialog({
   // ---- save handler ----
   const handleSave = async () => {
     /* role-based restriction */
-    if (!isStaff) {
-      setError("Only staff members can create or edit appointments.")
+    if (!canCreateOrEdit) {
+      setError("You don't have permission to create or edit appointments.")
       return
     }
 
@@ -513,7 +515,7 @@ export function AppointmentDialog({
               <Lock className="h-4 w-4 shrink-0" />
               <div>
                 <p className="font-medium">Monitoring Only</p>
-                <p className="text-xs text-amber-800">You can view this appointment, but only staff members can create or edit appointments.</p>
+                <p className="text-xs text-amber-800">You can view this appointment, but only staff members and admins can create or edit appointments.</p>
               </div>
             </div>
           )}

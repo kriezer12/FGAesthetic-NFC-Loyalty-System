@@ -30,9 +30,10 @@ export default function AccountsPage() {
   const [searchTerm, setSearchTerm] = useState("")
 
   const filteredAccounts = useMemo(() => {
-    if (!searchTerm) return accounts
+    let filtered = accounts.filter((a) => !a.role.toLowerCase().includes('customer'))
+    if (!searchTerm) return filtered
     const term = searchTerm.toLowerCase()
-    return accounts.filter((a) =>
+    return filtered.filter((a) =>
       a.email.toLowerCase().includes(term) ||
       (a.full_name && a.full_name.toLowerCase().includes(term)) ||
       (a.branch_name && a.branch_name.toLowerCase().includes(term))

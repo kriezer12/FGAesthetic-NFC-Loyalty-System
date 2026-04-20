@@ -161,16 +161,14 @@ export function AppointmentsTableView({
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {!isAdmin && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => onEdit(appointment)}
-                          title="Edit appointment"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onEdit(appointment)}
+                        title="Edit appointment"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                       {isAdmin && (
                         <Button
                           variant="ghost"
