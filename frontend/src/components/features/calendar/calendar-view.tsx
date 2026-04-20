@@ -123,6 +123,8 @@ export function CalendarView() {
   const [interval, setIntervalMinutes]  = useState<IntervalMinutes>(DEFAULT_INTERVAL)
   const [viewMode, setViewMode]         = useState<ViewMode>("day")
   const [showTableView, setShowTableView] = useState(false)
+  const [tableSearchQuery, setTableSearchQuery] = useState("")
+  const [tableStatusFilter, setTableStatusFilter] = useState("")
   const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
   
   // ---- appointment reminder state ----
@@ -138,6 +140,8 @@ export function CalendarView() {
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
+
+
 
   const loadServices = useCallback(async () => {
     const { data } = await supabase.from("services").select("*")
@@ -207,6 +211,32 @@ export function CalendarView() {
     open: parseHour(calendarSettings.workHoursStart, 9),
     close: parseHour(calendarSettings.workHoursEnd, 18),
   }), [calendarSettings.workHoursStart, calendarSettings.workHoursEnd])
+
+  // Filtered appointments for the table view
+  const filteredTableAppointments = useMemo(() => {
+    if (!showTableView) return appointments;
+    
+    return appointments.filter((appt) => {
+      // Filter by status
+      if (tableStatusFilter && appt.status !== tableStatusFilter) {
+        return false;
+      }
+      
+      // Filter by search query
+      if (tableSearchQuery) {
+        const query = tableSearchQuery.toLowerCase();
+        const customerMatch = appt.customer_name?.toLowerCase().includes(query) || false;
+        const titleMatch = appt.title?.toLowerCase().includes(query) || false;
+        const staffMatch = (staff.find(s => s.id === appt.staff_id)?.name || appt.staff_name || "").toLowerCase().includes(query) || false;
+        
+        if (!customerMatch && !titleMatch && !staffMatch) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [appointments, showTableView, tableStatusFilter, tableSearchQuery, staff]);
 
   // ---- settings state ----
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
@@ -740,7 +770,7 @@ export function CalendarView() {
   // ========================================================================
 
   return (
-    <Card className="flex h-[calc(100vh-7rem)] flex-col overflow-hidden">
+    <Card className="flex h-[calc(100vh-7rem)] flex-col overflow-hidden gap-0 p-0">
       <CalendarHeader
         selectedDate={selectedDate}
         interval={interval}
@@ -751,11 +781,15 @@ export function CalendarView() {
         onViewModeChange={setViewMode}
         onNewAppointment={openNewDialog}
         onToggleTableView={() => setShowTableView(!showTableView)}
+        searchQuery={tableSearchQuery}
+        onSearchChange={setTableSearchQuery}
+        statusFilter={tableStatusFilter}
+        onStatusFilterChange={setTableStatusFilter}
       />
 
       {showTableView ? (
         <AppointmentsTableView
-          appointments={appointments}
+          appointments={filteredTableAppointments}
           onEdit={openEditDialog}
           onDelete={async (appointment) => handleDelete(appointment.id)}
         />

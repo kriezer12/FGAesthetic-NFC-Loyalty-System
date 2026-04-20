@@ -6,7 +6,15 @@
  * interval toggle (15 / 30 / 60 min), and a "New Appointment" action button.
  */
 
-import { ChevronLeft, ChevronRight, CalendarPlus, List } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, List, Search, ChevronDown } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { IntervalMinutes, ViewMode } from "@/types/appointment"
@@ -32,6 +40,10 @@ interface CalendarHeaderProps {
   onViewModeChange: (mode: ViewMode) => void
   onNewAppointment: () => void
   onToggleTableView: () => void
+  searchQuery?: string
+  onSearchChange?: (val: string) => void
+  statusFilter?: string
+  onStatusFilterChange?: (val: string) => void
 }
 
 const INTERVALS: IntervalMinutes[] = [15, 30, 60]
@@ -51,6 +63,10 @@ export function CalendarHeader({
   onViewModeChange,
   onNewAppointment,
   onToggleTableView,
+  searchQuery,
+  onSearchChange,
+  statusFilter,
+  onStatusFilterChange,
 }: CalendarHeaderProps) {
   const { userProfile } = useAuth()
   const canCreateAppointments = userProfile?.role === "staff" || userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
@@ -107,6 +123,39 @@ export function CalendarHeader({
 
       {/* ---- right: view mode + interval toggle + settings + new button ---- */}
       <div className="flex items-center gap-2.5">
+        {/* table view filters */}
+        {showTableView && (
+          <div className="flex items-center gap-2 border-r pr-3 mr-1">
+            <div className="relative">
+              <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search appointments..."
+                className="pl-7 h-8 w-[150px] sm:w-[200px] border-primary/20 text-xs"
+                value={searchQuery || ""}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+              />
+            </div>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs border-primary/20">
+                  Status: {statusFilter ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : "All"}
+                  <ChevronDown className="ml-1.5 h-3 w-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup value={statusFilter || ""} onValueChange={onStatusFilterChange}>
+                  <DropdownMenuRadioItem value="">All</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="scheduled">Scheduled</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="confirmed">Confirmed</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="in-progress">In Progress</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="completed">Completed</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="cancelled">Cancelled</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
         {/* table view toggle button */}
         <Button
           variant={showTableView ? "default" : "outline"}
