@@ -191,20 +191,27 @@ export function CalendarView() {
     }
   }, [allStaff])
   
-  // Filter staff based on selected staff in settings AND working days
-  const dayOfWeek = getDayOfWeek(selectedDate)
-  const staff = allStaff.filter((s: StaffMember) => {
-    // Must be in the selected staff list
-    if (!calendarSettings.selectedStaff?.includes(s.id)) return false
-    // Must be working on the selected day (if schedules configured)
-    if (calendarSettings.staffSchedules?.[s.id]) {
-      return calendarSettings.staffSchedules[s.id].includes(dayOfWeek as any)
-    }
-    // If no schedule configured, show by default
-    return true
-  })
-  
-  let blockedTimes: any[] = []
+// Filter staff based on selected staff in settings.
+    // Removed "working days" check so columns don't disappear when switching views on off-days.
+    const staff = useMemo(() => {
+      return allStaff.filter((s: StaffMember) => {
+        // If current user is staff, ONLY show their own schedule column
+        if (isStaff && s.id !== userProfile?.id) return false
+        // Must be in the selected staff list
+        if (!calendarSettings.selectedStaff?.includes(s.id)) return false
+        
+        return true
+      })
+    }, [allStaff, isStaff, userProfile?.id, calendarSettings.selectedStaff]);
+
+    let blockedTimes: any[] = []
+
+    // Ensure appointments ONLY belong to the currently visible staff columns.
+    // This perfectly restricts Admin filtering and prevents Monthly views showing hidden staff.
+    const visibleAppointments = useMemo(() => {
+      const visibleStaffIds = new Set(staff.map((s) => s.id));
+      return appointments.filter((a) => visibleStaffIds.has(a.staff_id));
+    }, [appointments, staff]);
 
   // Derive clinic hours from settings (work hours)
   const clinicHours = useMemo(() => ({
@@ -214,9 +221,9 @@ export function CalendarView() {
 
   // Filtered appointments for the table view
   const filteredTableAppointments = useMemo(() => {
-    if (!showTableView) return appointments;
+    if (!showTableView) return visibleAppointments;
     
-    return appointments.filter((appt) => {
+    return visibleAppointments.filter((appt) => {
       // Filter by status
       if (tableStatusFilter && appt.status !== tableStatusFilter) {
         return false;
@@ -792,9 +799,9 @@ export function CalendarView() {
               interval={interval}
               clinicHours={clinicHours}
               staff={staff}
-              appointments={appointments}
+              appointments={visibleAppointments}
               blockedTimes={blockedTimes}
-              snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}
+              snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}      
               onAppointmentUpdate={handleAppointmentUpdate}
               onSlotClick={openSlotDialog}
               onAppointmentClick={openEditDialog}
@@ -809,7 +816,7 @@ export function CalendarView() {
               interval={interval}
               clinicHours={clinicHours}
               staff={staff}
-              appointments={appointments}
+              appointments={visibleAppointments}
               blockedTimes={blockedTimes}
               onSlotClick={openSlotDialog}
               onAppointmentUpdate={handleAppointmentUpdate}
@@ -823,7 +830,7 @@ export function CalendarView() {
             <CalendarMonthGrid
               selectedDate={selectedDate}
               staff={staff}
-              appointments={appointments}
+              appointments={visibleAppointments}
               onDayClick={handleDayClick}
             />
           )}
@@ -852,7 +859,7 @@ export function CalendarView() {
         selectedDate={selectedDate}
         interval={interval}
         clinicHours={clinicHours}
-        appointments={appointments}
+        appointments={visibleAppointments}
         blockedTimes={blockedTimes}
         onSave={handleSave}
         onDelete={handleDelete}
