@@ -1331,7 +1331,11 @@ export default function CustomersPage() {
                               </div>
                             </td>
                             <td className="p-4">
-                              <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                              {customer.nfc_uid ? (
+                                <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">No card</span>
+                              )}
                             </td>
                             <td className="p-4">
                               {customer.branch_name ? (
@@ -1574,7 +1578,26 @@ export default function CustomersPage() {
                     <div className="grid grid-cols-2 gap-4 pl-6">
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-muted-foreground">NFC Card</p>
-                        <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer?.nfc_uid}</code>
+                        {selectedCustomer?.nfc_uid ? (
+                          <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer.nfc_uid}</code>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground italic">No card</span>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 px-2 text-[10px] font-medium"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setScanMessage(null)
+                                setReassignPrompt(null)
+                                setAssignNfcModalOpen(true)
+                              }}
+                            >
+                              Link NFC Card
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {selectedCustomer?.date_of_birth && (
