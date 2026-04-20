@@ -35,21 +35,28 @@ export function useAppointments(): UseAppointmentsReturn {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   // ---- role-based access control ----
-  const { userProfile } = useAuth()
+  const { userProfile, loading: authLoading } = useAuth()
   const isStaff = userProfile?.role === "staff"
   const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
   const canCreateOrEdit = isStaff || isAdmin
   const canDelete = isStaff || isAdmin
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const { data, error: queryError } = await supabase
+      let query = supabase
         .from("appointments")
         .select("*")
         .order("start_time", { ascending: true })
+
+      // Filter by staff_id if the current user is a staff member
+      if (isStaff && userProfile?.id) {
+        query = query.eq('staff_id', userProfile.id)
+      }
+
+      const { data, error: queryError } = await query
 
       if (queryError) throw queryError
 
@@ -62,7 +69,7 @@ export function useAppointments(): UseAppointmentsReturn {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isStaff, userProfile?.id])
 
   const addAppointment = useCallback(async (appt: Appointment) => {
     // Role-based access control: staff and admins can create appointments
@@ -190,17 +197,27 @@ export function useAppointments(): UseAppointmentsReturn {
   }, [appointments, canDelete])
 
   useEffect(() => {
+    // Return early if auth state is still loading
+    if (authLoading) return;
+    
+    // If the user is staff, we need their ID to fetch ONLY their own appointments.
+    // Return early if the user profile hasn't loaded yet.
+    if (isStaff && !userProfile?.id) return;
+
     fetchAppointments()
 
     // Subscribe to real-time changes so all clients stay in sync
+    const channelName = isStaff ? `appointments-realtime-staff-${userProfile?.id}` : "appointments-realtime"
     const channel = supabase
-      .channel("appointments-realtime")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments" },
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newAppt = payload.new as Appointment
+            if (isStaff && newAppt.staff_id !== userProfile?.id) return;
+            
             setAppointments((prev) => {
               // Avoid duplicates (we also update locally on insert)
               if (prev.some((a) => a.id === newAppt.id)) return prev
@@ -208,6 +225,8 @@ export function useAppointments(): UseAppointmentsReturn {
             })
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Appointment
+            if (isStaff && updated.staff_id !== userProfile?.id) return;
+            
             setAppointments((prev) =>
               prev.map((a) => (a.id === updated.id ? updated : a))
             )
@@ -226,7 +245,7 @@ export function useAppointments(): UseAppointmentsReturn {
         supabase.removeChannel(channelRef.current)
       }
     }
-  }, [])
+  }, [authLoading, fetchAppointments, isStaff, userProfile?.id])
 
   return {
     appointments,
