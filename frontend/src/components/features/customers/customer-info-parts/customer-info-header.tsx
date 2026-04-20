@@ -21,7 +21,7 @@ export function CustomerInfoHeader({ customer, displayName }: CustomerInfoHeader
       </h2>
       <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
         <CreditCard className="h-4 w-4" />
-        {customer.nfc_uid}
+        {customer.nfc_uid || "No card linked"}
       </p>
       {customer.skin_type && (
         <p className="text-xs text-muted-foreground capitalize mt-1">

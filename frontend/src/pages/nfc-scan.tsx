@@ -13,7 +13,7 @@ export default function NFCScanPage() {
   const navigate = useNavigate()
   const { userProfile } = useAuth()
   const [viewState, setViewState] = useState<ViewState>("scanning")
-  const [pendingNfcUid, setPendingNfcUid] = useState<string | null>(null)
+  const [pendingNfcUid, setPendingNfcUid] = useState<string | null | undefined>(undefined)
   const [isRegisterMode, setIsRegisterMode] = useState(false)
   const [registerError, setRegisterError] = useState<string | null>(null)
   const location = useLocation()
@@ -60,7 +60,7 @@ export default function NFCScanPage() {
     })
   }
 
-  const handleNewCard = (nfcUid: string) => {
+  const handleNewCard = (nfcUid: string | null) => {
     setRegisterError(null)
     setPendingNfcUid(nfcUid)
     setViewState("register")
@@ -143,13 +143,14 @@ export default function NFCScanPage() {
             <NFCScanner
               onCustomerFound={handleCustomerFound}
               onNewCard={handleNewCard}
+              onSkipScan={() => handleNewCard(null)}
               mode={isRegisterMode ? "register" : "scan"}
             />
           </>
         )}
 
-        {viewState === "register" && pendingNfcUid && (
-          <RegisterCard nfcUid={pendingNfcUid} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
+        {viewState === "register" && pendingNfcUid !== undefined && (
+          <RegisterCard nfcUid={pendingNfcUid || undefined} onSuccess={handleRegistrationSuccess} onCancel={handleClose} />
         )}
       </div>
     </div>

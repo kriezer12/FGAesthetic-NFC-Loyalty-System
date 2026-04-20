@@ -13,6 +13,7 @@ import { CustomerContactDetails } from "./customer-info-parts/customer-contact-d
 import { CustomerInfoHeader } from "./customer-info-parts/customer-info-header"
 import { CustomerPointsDashboard } from "./customer-info-parts/customer-points-dashboard"
 import { CustomerStatsGrid } from "./customer-info-parts/customer-stats-grid"
+import { NFCScanner } from "../nfc/nfc-scanner"
 import type { LoyaltyReward } from "@/pages/loyalty-admin"
 
 import type { Customer, Treatment } from "@/types/customer"
@@ -28,6 +29,7 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
   const [isUpdating, setIsUpdating] = React.useState(false)
   const [showHistory, setShowHistory] = React.useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = React.useState(0)
+  const [isScanning, setIsScanning] = React.useState(false)
 
   // treatment UI state
   const [showTreatmentHistory, setShowTreatmentHistory] = React.useState(false)
@@ -151,7 +153,55 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
     }
   }
 
+  const linkCard = async (uid: string) => {
+    setIsUpdating(true)
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .update({ nfc_uid: uid })
+        .eq("id", customer.id)
+        .select()
+        .single()
+        
+      if (error) throw error
+      if (data) {
+        onUpdate(data)
+        setIsScanning(false)
+      }
+    } catch (err: any) {
+      console.error("Error linking card:", err)
+      alert(`Failed to link card: ${err.message}`)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const displayName = customer.name || `${customer.first_name || ''} ${customer.middle_name || ''} ${customer.last_name || ''}`.trim()
+
+  if (isScanning) {
+    return (
+      <Card className="w-full max-w-md mx-auto overflow-hidden">
+        <CardHeader className="bg-primary/5 pb-6">
+          <h2 className="text-xl font-bold text-center">Link NFC Card</h2>
+          <p className="text-sm text-muted-foreground text-center">Scan an unassigned card to link it to {customer.first_name}</p>
+        </CardHeader>
+        <CardContent className="pt-8">
+          <NFCScanner
+            onCustomerFound={(c) => {
+              alert(`This card is already assigned to ${c.name || 'another customer'}. Please use a new card.`)
+            }}
+            onNewCard={linkCard}
+            mode="register"
+          />
+        </CardContent>
+        <CardFooter className="bg-background pt-2">
+          <Button variant="ghost" className="w-full" onClick={() => setIsScanning(false)}>
+            Cancel Scanning
+          </Button>
+        </CardFooter>
+      </Card>
+    )
+  }
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -165,6 +215,19 @@ export function CustomerInfo({ customer, onClose, onUpdate }: CustomerInfoProps)
         <Separator />
 
         <CustomerContactDetails customer={customer} formatDate={formatDate} />
+
+        {!customer.nfc_uid && (
+          <div className="mt-2 text-center p-3 rounded-xl bg-primary/5 border border-primary/10 border-dashed">
+            <p className="text-xs text-muted-foreground mb-3 font-medium">No physical NFC card is linked to this profile.</p>
+            <Button 
+              size="sm" 
+              className="w-full shadow-sm"
+              onClick={() => setIsScanning(true)}
+            >
+              Link NFC Card Now
+            </Button>
+          </div>
+        )}
 
         <Separator />
 
