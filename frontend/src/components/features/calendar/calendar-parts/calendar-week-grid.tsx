@@ -162,7 +162,7 @@ interface CalendarWeekGridProps {
   staff: StaffMember[]
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
-  onSlotClick: (staffId: string, startMinutes: number) => void
+  onSlotClick: (staffId: string, startMinutes: number, date?: Date) => void
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
   onEditAppointment: (appointment: Appointment) => void
   onDeleteAppointment: (id: string) => void
@@ -445,6 +445,18 @@ export function CalendarWeekGrid({
         return
       }
 
+      const apptDateOnly = new Date(targetDay)
+      apptDateOnly.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (apptDateOnly < today) {
+        setValidationError("Cannot move appointments to past dates. Please select today or a future date.")
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
+      }
+
       onAppointmentUpdate(drag.appointmentId, {
         start_time: setTimeOnDate(targetDay, newStartMin).toISOString(),
         end_time: setTimeOnDate(targetDay, newEndMin).toISOString(),
@@ -616,7 +628,7 @@ export function CalendarWeekGrid({
                       style={{ height: slotHeight }}
                       onClick={() => {
                         if (dragRef.current) return
-                        if (staff.length > 0) onSlotClick(staff[0].id, minutes)
+                        if (staff.length > 0) onSlotClick(staff[0].id, minutes, day)
                       }}
                     />
                   ))}
