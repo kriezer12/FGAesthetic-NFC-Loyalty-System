@@ -1,5 +1,14 @@
-import { useEffect, useState } from "react"
-import { Calendar, Settings2, Clock, Zap } from "lucide-react"
+import { useEffect, useState, useCallback } from "react"
+import { Calendar, Settings2, Clock, Zap, Building2, ChevronDown } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { useBranches } from "@/hooks/use-branches"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,6 +30,11 @@ const defaultSettings: AppointmentSettings = {
 }
 
 export default function AppointmentsSettingsPage() {
+  const { userProfile } = useAuth()
+  const isSuperAdmin = userProfile?.role === "super_admin"
+  const { branches } = useBranches()
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(userProfile?.branch_id || "")
+
   const [settings, setSettings] = useState<AppointmentSettings>(defaultSettings)
   const [changes, setChanges] = useState<Partial<AppointmentSettings>>({})
   const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
@@ -31,27 +45,29 @@ export default function AppointmentsSettingsPage() {
     document.title = "Appointment Settings - FG Aesthetic Centre"
   }, [])
 
-  // Load settings from database on mount
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        setIsLoading(true)
-        const loadedSettings = await fetchAppointmentSettings()
-        setSettings(loadedSettings)
-      } catch (error) {
-        console.error("Error loading settings:", error)
-        setToast({
-          id: crypto.randomUUID(),
-          title: "Load Error",
-          message: "Could not load settings from database, using defaults.",
-          type: "warning",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+  // Load settings from database on mount or when branch changes
+  const loadSettings = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const loadedSettings = await fetchAppointmentSettings(selectedBranchId)
+      setSettings(loadedSettings)
+      setChanges({}) // Clear changes when switching branches
+    } catch (error) {
+      console.error("Error loading settings:", error)
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Load Error",
+        message: "Could not load settings for this branch.",
+        type: "warning",
+      })
+    } finally {
+      setIsLoading(false)
     }
+  }, [selectedBranchId])
+
+  useEffect(() => {
     loadSettings()
-  }, [])
+  }, [loadSettings])
 
   const handleChange = (key: keyof AppointmentSettings, value: any) => {
     setChanges((prev) => ({
@@ -110,7 +126,7 @@ export default function AppointmentsSettingsPage() {
       return
     }
 
-    const newSettings = { ...settings, ...changes }
+    const newSettings = { ...settings, ...changes, branch_id: selectedBranchId }
     setIsSaving(true)
     
     try {
@@ -156,7 +172,7 @@ export default function AppointmentsSettingsPage() {
     setChanges({})
     
     // Also save defaults to database
-    saveAppointmentSettings(defaultSettings).then(() => {
+    saveAppointmentSettings({ ...defaultSettings, branch_id: selectedBranchId }).then(() => {
       setToast({
         id: crypto.randomUUID(),
         title: "Success",
@@ -197,6 +213,31 @@ export default function AppointmentsSettingsPage() {
         <div className="flex items-center gap-2">
           <Calendar className="h-8 w-8 text-primary" />
           <h1 className="text-3xl font-bold">Appointment Settings</h1>
+          
+          {isSuperAdmin && branches && branches.length > 0 && (
+            <div className="ml-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-10 border-primary/30 bg-primary/5 min-w-[200px]">
+                    <Building2 className="mr-2 h-4 w-4 text-primary" />
+                    <span>
+                      {branches.find(b => b.id === selectedBranchId)?.name || "Select Branch"}
+                    </span>
+                    <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[200px]">
+                  <DropdownMenuRadioGroup value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                    {branches.map((branch) => (
+                      <DropdownMenuRadioItem key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">

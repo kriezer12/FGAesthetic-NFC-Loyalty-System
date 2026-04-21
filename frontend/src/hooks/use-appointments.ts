@@ -28,7 +28,7 @@ interface UseAppointmentsReturn {
   refetch: () => Promise<void>
 }
 
-export function useAppointments(): UseAppointmentsReturn {
+export function useAppointments(branchId?: string): UseAppointmentsReturn {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -56,6 +56,11 @@ export function useAppointments(): UseAppointmentsReturn {
         query = query.eq('staff_id', userProfile.id)
       }
 
+      // Filter by branch_id if provided
+      if (branchId) {
+        query = query.eq('branch_id', branchId)
+      }
+
       const { data, error: queryError } = await query
 
       if (queryError) throw queryError
@@ -69,7 +74,7 @@ export function useAppointments(): UseAppointmentsReturn {
     } finally {
       setLoading(false)
     }
-  }, [isStaff, userProfile?.id])
+  }, [isStaff, userProfile?.id, branchId])
 
   const addAppointment = useCallback(async (appt: Appointment) => {
     // Role-based access control: staff and admins can create appointments
@@ -217,6 +222,7 @@ export function useAppointments(): UseAppointmentsReturn {
           if (payload.eventType === "INSERT") {
             const newAppt = payload.new as Appointment
             if (isStaff && newAppt.staff_id !== userProfile?.id) return;
+            if (branchId && newAppt.branch_id !== branchId) return;
             
             setAppointments((prev) => {
               // Avoid duplicates (we also update locally on insert)
@@ -226,6 +232,7 @@ export function useAppointments(): UseAppointmentsReturn {
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Appointment
             if (isStaff && updated.staff_id !== userProfile?.id) return;
+            if (branchId && updated.branch_id !== branchId) return;
             
             setAppointments((prev) =>
               prev.map((a) => (a.id === updated.id ? updated : a))

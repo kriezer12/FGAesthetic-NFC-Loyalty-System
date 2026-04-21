@@ -37,7 +37,7 @@ def list_staff():
         # Calendar roles we want to display
         calendar_roles = ["staff"]
         
-        query = supabase.table('user_profiles').select('id, full_name, role, avatar_url').in_('role', calendar_roles)
+        query = supabase.table('user_profiles').select('id, full_name, role, avatar_url, branch_id').in_('role', calendar_roles)
         
         if caller_role == 'staff':
             query = query.eq('id', caller_id)

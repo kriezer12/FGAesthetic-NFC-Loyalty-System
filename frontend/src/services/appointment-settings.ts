@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 
 export interface AppointmentSettings {
   id?: string
-  business_id?: string
+  branch_id?: string
   default_duration: number
   buffer_time: number
   max_daily_appointments: number
@@ -34,45 +34,52 @@ const DEFAULT_SETTINGS: AppointmentSettings = {
 const LOCAL_STORAGE_KEY = 'fg_appointment_settings'
 
 /**
- * Get business ID - try to get from auth or use a default business ID
- * In a real app, this might come from user profile or organization settings
+ * Get branch ID - try to get from auth or use a default branch ID
  */
-async function getBusinessId(): Promise<string> {
+async function getBranchId(): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
-    if (user?.user_metadata?.business_id) {
-      return user.user_metadata.business_id
+    if (user?.user_metadata?.branch_id) {
+      return user.user_metadata.branch_id
     }
+    
+    // Check user_profiles table if not in metadata
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('branch_id')
+      .eq('id', user?.id)
+      .single()
+    
+    if (profile?.branch_id) return profile.branch_id
   } catch (error) {
-    console.error('Error getting business ID from auth:', error)
+    console.error('Error getting branch ID:', error)
   }
   
   // Fallback to localStorage
-  const stored = localStorage.getItem('business_id')
+  const stored = localStorage.getItem('branch_id')
   if (stored) return stored
   
-  // Default business ID - in production, this should be dynamic
-  return 'default-business-id'
+  return 'default-branch-id'
 }
 
 /**
  * Fetch appointment settings from database
  */
-export async function fetchAppointmentSettings(): Promise<AppointmentSettings> {
+export async function fetchAppointmentSettings(branchId?: string): Promise<AppointmentSettings> {
   try {
-    const businessId = await getBusinessId()
+    const targetBranchId = branchId || await getBranchId()
     
     const { data, error } = await supabase
       .from('appointment_settings')
       .select('*')
-      .eq('business_id', businessId)
+      .eq('branch_id', targetBranchId)
       .maybeSingle()
 
     // If record doesn't exist, return defaults (it will be created on first save)
     if (error && error.code !== 'PGRST116') {
       console.warn('Could not fetch from database, using defaults:', error)
       // Try localStorage as fallback
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
+      const stored = localStorage.getItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`)
       if (stored) {
         return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
       }
@@ -83,7 +90,7 @@ export async function fetchAppointmentSettings(): Promise<AppointmentSettings> {
     if (data) {
       return {
         id: data.id,
-        business_id: data.business_id,
+        branch_id: data.branch_id,
         default_duration: data.default_duration,
         buffer_time: data.buffer_time,
         max_daily_appointments: data.max_daily_appointments,
@@ -100,7 +107,7 @@ export async function fetchAppointmentSettings(): Promise<AppointmentSettings> {
     }
 
     // If no record found, try localStorage fallback
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
+    const stored = localStorage.getItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`)
     if (stored) {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
     }
@@ -108,11 +115,6 @@ export async function fetchAppointmentSettings(): Promise<AppointmentSettings> {
     return DEFAULT_SETTINGS
   } catch (error) {
     console.error('Error fetching appointment settings:', error)
-    // Fallback to localStorage
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
-    if (stored) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
-    }
     return DEFAULT_SETTINGS
   }
 }
@@ -122,11 +124,11 @@ export async function fetchAppointmentSettings(): Promise<AppointmentSettings> {
  */
 export async function saveAppointmentSettings(settings: AppointmentSettings): Promise<{ success: boolean; error?: string }> {
   try {
-    const businessId = await getBusinessId()
+    const targetBranchId = settings.branch_id || await getBranchId()
 
     // Prepare data with snake_case for database
     const dbData = {
-      business_id: businessId,
+      branch_id: targetBranchId,
       default_duration: settings.default_duration,
       buffer_time: settings.buffer_time,
       max_daily_appointments: settings.max_daily_appointments,
@@ -148,49 +150,45 @@ export async function saveAppointmentSettings(settings: AppointmentSettings): Pr
         .update(dbData)
         .eq('id', settings.id)
     } else {
-      // Upsert on business_id - create if doesn't exist, update if it does
+      // Upsert on branch_id
       result = await supabase
         .from('appointment_settings')
-        .upsert([dbData], { onConflict: 'business_id' })
+        .upsert([dbData], { onConflict: 'branch_id' })
     }
 
     if (result.error) {
       console.error('Database error:', result.error)
-      // Fallback to localStorage
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
+      localStorage.setItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`, JSON.stringify(settings))
       return { success: true, error: 'Saved locally (database unavailable)' }
     }
 
-    // Also save to localStorage as backup
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
+    localStorage.setItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`, JSON.stringify(settings))
 
     return { success: true }
   } catch (error) {
     console.error('Error saving appointment settings:', error)
-    // Fallback to localStorage
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
-    return { success: true, error: 'Saved locally (database error)' }
+    return { success: false, error: String(error) }
   }
 }
 
 /**
  * Delete appointment settings
  */
-export async function deleteAppointmentSettings(): Promise<{ success: boolean; error?: string }> {
+export async function deleteAppointmentSettings(branchId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const businessId = await getBusinessId()
+    const targetBranchId = branchId || await getBranchId()
 
     const { error } = await supabase
       .from('appointment_settings')
       .delete()
-      .eq('business_id', businessId)
+      .eq('branch_id', targetBranchId)
 
     if (error) {
       return { success: false, error: error.message }
     }
 
     // Also clear localStorage
-    localStorage.removeItem(LOCAL_STORAGE_KEY)
+    localStorage.removeItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`)
 
     return { success: true }
   } catch (error) {
