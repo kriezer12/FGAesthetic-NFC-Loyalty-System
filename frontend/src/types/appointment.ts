@@ -38,6 +38,7 @@ export interface Appointment {
   appointment_type?: "consultation" | "treatment" | "followup"
   location_type?: "branch" | "home_based"
   notes?: string
+  branch_id?: string
   created_at?: string
   updated_at?: string
 }
@@ -47,6 +48,7 @@ export interface StaffMember {
   name: string
   role: string
   color: string // hex color used for appointment cards
+  branch_id?: string
 }
 
 export interface BlockedTime {

@@ -6,8 +6,9 @@
  * interval toggle (15 / 30 / 60 min), and a "New Appointment" action button.
  */
 
-import { ChevronLeft, ChevronRight, CalendarPlus, List, Search, ChevronDown } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, List, Search, ChevronDown, Building2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import type { Branch } from "@/hooks/use-branches"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -44,6 +45,9 @@ interface CalendarHeaderProps {
   onSearchChange?: (val: string) => void
   statusFilter?: string
   onStatusFilterChange?: (val: string) => void
+  branches?: Branch[]
+  selectedBranchId?: string
+  onBranchChange?: (id: string) => void
 }
 
 const INTERVALS: IntervalMinutes[] = [15, 30, 60]
@@ -67,8 +71,12 @@ export function CalendarHeader({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  branches,
+  selectedBranchId,
+  onBranchChange,
 }: CalendarHeaderProps) {
   const { userProfile } = useAuth()
+  const isSuperAdmin = userProfile?.role === "super_admin"
   const canCreateAppointments = userProfile?.role === "staff" || userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
   const prev = () => {
     if (viewMode === "day") {
@@ -167,6 +175,31 @@ export function CalendarHeader({
           <List className="mr-1.5 h-4 w-4" />
           {showTableView ? "Calendar" : "Table"}
         </Button>
+
+        {/* Branch Selector for Super Admin */}
+        {isSuperAdmin && branches && branches.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 border-primary/30 bg-primary/5">
+                <Building2 className="mr-2 h-4 w-4 text-primary" />
+                <span className="max-w-[100px] truncate">
+                  {branches.find(b => b.id === selectedBranchId)?.name || "All Branches"}
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              <DropdownMenuRadioGroup value={selectedBranchId || "all"} onValueChange={(val) => onBranchChange?.(val === "all" ? "" : val)}>
+                <DropdownMenuRadioItem value="all">All Branches</DropdownMenuRadioItem>
+                {branches.map((branch) => (
+                  <DropdownMenuRadioItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         {/* view mode selector (hide when showing table view) */}
         {!showTableView && (

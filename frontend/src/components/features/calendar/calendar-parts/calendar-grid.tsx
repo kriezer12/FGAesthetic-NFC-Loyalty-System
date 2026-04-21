@@ -468,38 +468,45 @@ export function CalendarGrid({
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Sticky headers - outside scroll area */}
-      <div className="flex border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-20">
-        <div
-          className="shrink-0 border-r bg-background/95"
-          style={{ width: TIME_GUTTER_WIDTH }}
-        />
-        {staff.map((s) => (
-          <div
-            key={s.id}
-            className="flex items-center gap-1.5 border-r px-3 py-2"
-            style={
-              snapColumnsToFit
-                ? { flex: `1 1 0%`, minWidth: `${MIN_COL_WIDTH}px` }
-                : { width: `${MIN_COL_WIDTH}px`, minWidth: `${MIN_COL_WIDTH}px` }
-            }
-          >
-            <div
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: s.color }}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium leading-tight">{s.name}</p>
-              <p className="truncate text-[10px] text-muted-foreground leading-tight">
-                {s.role}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Scrollable grid body */}
+      {/* Scrollable grid body — header is inside so it scrolls horizontally together */}
       <ScrollArea className="flex-1 overflow-hidden">
+        <div
+          style={{
+            minWidth: snapColumnsToFit
+              ? undefined
+              : `${TIME_GUTTER_WIDTH + staff.length * MIN_COL_WIDTH}px`,
+          }}
+        >
+        {/* Sticky staff header — inside the scroll container */}
+        <div className="flex border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-20">
+          <div
+            className="shrink-0 border-r bg-background/95"
+            style={{ width: TIME_GUTTER_WIDTH }}
+          />
+          {staff.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-1.5 border-r px-3 py-2"
+              style={
+                snapColumnsToFit
+                  ? { flex: `1 1 0%`, minWidth: `${MIN_COL_WIDTH}px` }
+                  : { width: `${MIN_COL_WIDTH}px`, minWidth: `${MIN_COL_WIDTH}px` }
+              }
+            >
+              <div
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: s.color }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium leading-tight">{s.name}</p>
+                <p className="truncate text-[10px] text-muted-foreground leading-tight">
+                  {s.role}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div
           ref={gridRef}
           className={cn(
@@ -507,9 +514,6 @@ export function CalendarGrid({
             dragPreview && "select-none cursor-grabbing",
           )}
           style={{
-            minWidth: snapColumnsToFit
-              ? undefined
-              : `${TIME_GUTTER_WIDTH + staff.length * MIN_COL_WIDTH}px`,
             paddingTop: "0.5rem",
           }}
         >
@@ -664,6 +668,7 @@ export function CalendarGrid({
             </div>
           </div>
         )}
+        </div>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>

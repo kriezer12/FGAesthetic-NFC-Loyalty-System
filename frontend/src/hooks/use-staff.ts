@@ -18,6 +18,7 @@ interface UserProfile {
   full_name: string | null
   role: string | null
   avatar_url: string | null
+  branch_id: string | null
 }
 
 interface UseStaffReturn {
@@ -59,6 +60,7 @@ export function useStaff(): UseStaffReturn {
           name: profile.full_name || "Unknown Staff",
           role: profile.role || "Staff",
           color: STAFF_COLORS[index % STAFF_COLORS.length],
+          branch_id: profile.branch_id || undefined,
         })
       )
 

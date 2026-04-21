@@ -24,6 +24,7 @@ import { startOfWeek, addDays } from "date-fns"
 import { generateId, setTimeOnDate } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useBranches } from "@/hooks/use-branches"
 import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
 import { useCheckedOutAppointments } from "@/hooks/use-checked-out-appointments"
 import { saveAppointmentSettings } from "@/services/appointment-settings"
@@ -106,11 +107,6 @@ async function saveSettings(settings: CalendarSettings): Promise<void> {
   }
 }
 
-/** Get day-of-week string from Date (MON, TUE, etc.) */
-function getDayOfWeek(date: Date): string {
-  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
-  return days[date.getDay()]
-}
 
 export function CalendarView() {
   // ---- auth state ----
@@ -126,17 +122,21 @@ export function CalendarView() {
   const [showTableView, setShowTableView] = useState(false)
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [tableStatusFilter, setTableStatusFilter] = useState("")
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(userProfile?.branch_id || "")
   const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
   
   // ---- appointment reminder state ----
   const [reminderToast, setReminderToast] = useState<{ id: string; appointment: Appointment } | null>(null)
   const notifiedAppointmentsRef = useRef<Set<string>>(new Set())
   
-  // Fetch appointments from Supabase
-  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  // Fetch appointments from Supabase (filtered by branch if super_admin selects one)
+  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments(selectedBranchId)
+  
+  // Load branches for filter
+  const { branches } = useBranches()
 
-  // Load appointment settings from database (shared across all staff)
-  const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
+  // Load appointment settings from database (filtered by branch)
+  const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings(selectedBranchId)
 
   // Load checked-out appointments
   const { checkedOutAppointmentIds } = useCheckedOutAppointments()
@@ -184,29 +184,32 @@ export function CalendarView() {
   
   // Initialize selectedStaff with all staff on first load
   useEffect(() => {
-    if (
-      allStaff.length > 0 &&
-      (!calendarSettings.selectedStaff || calendarSettings.selectedStaff.length === 0)
-    ) {
+    if (allStaff.length > 0) {
+      // Filter by branch if a branch is selected
+      const branchStaff = selectedBranchId
+        ? allStaff.filter(s => s.branch_id === selectedBranchId)
+        : allStaff
       setCalendarSettings((prev) => ({
         ...prev,
-        selectedStaff: allStaff.map((s) => s.id),
+        selectedStaff: branchStaff.map((s) => s.id),
       }))
     }
-  }, [allStaff])
+  }, [allStaff, selectedBranchId])
   
 // Filter staff based on selected staff in settings.
-    // Removed "working days" check so columns don't disappear when switching views on off-days.
+    // Also filter by branch when super_admin has a branch selected.
     const staff = useMemo(() => {
       return allStaff.filter((s: StaffMember) => {
         // If current user is staff, ONLY show their own schedule column
         if (isStaff && s.id !== userProfile?.id) return false
+        // If super_admin has a branch selected, only show that branch's staff
+        if (selectedBranchId && s.branch_id !== selectedBranchId) return false
         // Must be in the selected staff list
         if (!calendarSettings.selectedStaff?.includes(s.id)) return false
         
         return true
       })
-    }, [allStaff, isStaff, userProfile?.id, calendarSettings.selectedStaff]);
+    }, [allStaff, isStaff, userProfile?.id, calendarSettings.selectedStaff, selectedBranchId]);
 
     let blockedTimes: any[] = []
 
@@ -796,6 +799,9 @@ export function CalendarView() {
         onSearchChange={setTableSearchQuery}
         statusFilter={tableStatusFilter}
         onStatusFilterChange={setTableStatusFilter}
+        branches={branches}
+        selectedBranchId={selectedBranchId}
+        onBranchChange={setSelectedBranchId}
       />
 
       {showTableView ? (

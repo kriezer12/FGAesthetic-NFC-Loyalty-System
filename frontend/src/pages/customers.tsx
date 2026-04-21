@@ -2079,11 +2079,13 @@ export default function CustomersPage() {
             <div className="space-y-2">
               <label id="label-dob" className="text-sm font-medium">Date of Birth</label>
               <DatePicker
-                value={profileForm.date_of_birth ? new Date(profileForm.date_of_birth) : undefined}
+                value={profileForm.date_of_birth ? (() => { const [y, m, d] = profileForm.date_of_birth.split("-").map(Number); return new Date(y, m - 1, d); })() : undefined}
                 onChange={(date) =>
                   setProfileForm((prev) => ({
                     ...prev,
-                    date_of_birth: date ? date.toISOString().slice(0, 10) : "",
+                    date_of_birth: date
+                      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+                      : "",
                   }))
                 }
                 captionLayout="dropdown"
