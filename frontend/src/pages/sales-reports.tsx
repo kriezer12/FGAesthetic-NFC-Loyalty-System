@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { CheckCircle2, RefreshCw, Send, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -58,6 +58,7 @@ type BranchMap = Record<string, { name?: string | null; address?: string | null 
 type UserProfileMap = Record<string, { full_name?: string | null; email?: string | null }>
 
 const formatMoney = (value: number) => `P${Number(value || 0).toFixed(2)}`
+const walkInCustomerNotePrefix = "Walk-in Customer:"
 
 const hashSeal = async (input: string) => {
   if (typeof window === "undefined" || !window.crypto?.subtle) {
@@ -228,6 +229,17 @@ export default function SalesReportsPage() {
     void fetchData()
   }, [])
 
+  const parseWalkInCustomerName = useCallback((notes?: string | null) => {
+    if (!notes) return ""
+    const match = notes.match(new RegExp(`${walkInCustomerNotePrefix}\\s*(.*)`, "i"))
+    return match?.[1]?.trim() || ""
+  }, [])
+
+  const resolveTxCustomerName = useCallback((tx: Tx) => {
+    if (tx.customer_id) return customerMap[tx.customer_id] || "Walk-in"
+    return parseWalkInCustomerName(tx.notes) || "Walk-in"
+  }, [customerMap, parseWalkInCustomerName])
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
       const q = search.trim().toLowerCase()
@@ -235,7 +247,8 @@ export default function SalesReportsPage() {
         !q ||
         tx.receipt_number?.toLowerCase().includes(q) ||
         tx.id.toLowerCase().includes(q) ||
-        (staffMap[tx.staff_id || ""]?.full_name || "").toLowerCase().includes(q)
+        (staffMap[tx.staff_id || ""]?.full_name || "").toLowerCase().includes(q) ||
+        resolveTxCustomerName(tx).toLowerCase().includes(q)
 
       if (!inSearch) return false
 
@@ -253,7 +266,7 @@ export default function SalesReportsPage() {
 
       return true
     })
-  }, [transactions, search, dateFrom, dateTo, staffMap])
+  }, [transactions, search, dateFrom, dateTo, staffMap, resolveTxCustomerName])
 
   const grandTotalSales = useMemo(
     () => filteredTransactions.reduce((sum, tx) => sum + Number(tx.total_due || 0), 0),
@@ -284,7 +297,7 @@ export default function SalesReportsPage() {
 
   const parsePaymentReference = (notes?: string | null) => {
     if (!notes) return ""
-    const match = notes.match(/Payment Reference \([^)]*\):\s*(.*)$/i)
+    const match = notes.match(/Payment Reference \([^)]*\):\s*(.*)/i)
     return match?.[1]?.trim() || ""
   }
 
@@ -308,7 +321,7 @@ export default function SalesReportsPage() {
       posSerialNo: settings?.pos_serial_no || undefined,
       transactionDate: new Date(tx.created_at).toLocaleString(),
       receiptNo: tx.receipt_number,
-      customerName: customerMap[tx.customer_id || ""] || undefined,
+      customerName: resolveTxCustomerName(tx) || undefined,
       branchName: branch?.name || undefined,
       items: (itemsByTx[tx.id] || []).map((item) => ({
         description: item.description,
@@ -465,6 +478,7 @@ export default function SalesReportsPage() {
                 <tr>
                   <th className="px-3 py-2 text-left">Transaction Ref</th>
                   <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Customer</th>
                   <th className="px-3 py-2 text-left">Cashier</th>
                   <th className="px-3 py-2 text-left">Payment</th>
                   <th className="px-3 py-2 text-right">Total</th>
@@ -473,12 +487,13 @@ export default function SalesReportsPage() {
               </thead>
               <tbody>
                 {filteredTransactions.length === 0 ? (
-                  <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">No transactions found.</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No transactions found.</td></tr>
                 ) : (
                   filteredTransactions.map((tx) => (
                     <tr key={tx.id} className="border-t">
                       <td className="px-3 py-2 font-medium">{tx.receipt_number}</td>
                       <td className="px-3 py-2">{new Date(tx.created_at).toLocaleString()}</td>
+                      <td className="px-3 py-2">{resolveTxCustomerName(tx)}</td>
                       <td className="px-3 py-2">{staffMap[tx.staff_id || ""]?.full_name || "Unknown"}</td>
                       <td className="px-3 py-2">{tx.payment_method || "cash"}</td>
                       <td className="px-3 py-2 text-right">{formatMoney(Number(tx.total_due || 0))}</td>
@@ -519,6 +534,7 @@ export default function SalesReportsPage() {
               <div className="rounded border p-3">
                 <p>Transaction Ref: <strong>{selectedTx.receipt_number}</strong></p>
                 <p>Date: {new Date(selectedTx.created_at).toLocaleString()}</p>
+                <p>Customer: {resolveTxCustomerName(selectedTx)}</p>
                 <p>Cashier: {staffMap[selectedTx.staff_id || ""]?.full_name || "Unknown"}</p>
                 <p>Payment: {selectedTx.payment_method || "cash"}</p>
                 <p>Verification Seal: <strong>{verificationSeal || "Generating..."}</strong></p>
