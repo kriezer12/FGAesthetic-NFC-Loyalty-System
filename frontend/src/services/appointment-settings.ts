@@ -33,15 +33,34 @@ const DEFAULT_SETTINGS: AppointmentSettings = {
 // Fallback to localStorage key for settings
 const LOCAL_STORAGE_KEY = 'fg_appointment_settings'
 
+function sanitizeBusinessId(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const value = raw.trim()
+  if (!value) return null
+
+  // Reject obvious URL/corrupted values that break PostgREST filter parsing.
+  if (value.includes('http://') || value.includes('https://') || value.includes('/rest/v1/')) {
+    return null
+  }
+
+  // Keep a conservative allowlist for stable query parameters.
+  if (!/^[a-zA-Z0-9._-]{1,80}$/.test(value)) {
+    return null
+  }
+
+  return value
+}
+
 /**
  * Get business ID - try to get from auth or use a default business ID
  * In a real app, this might come from user profile or organization settings
  */
-async function getBusinessId(): Promise<string> {
+async function getBusinessId(): Promise<string | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
-    if (user?.user_metadata?.business_id) {
-      return user.user_metadata.business_id
+    const authBusinessId = sanitizeBusinessId(user?.user_metadata?.business_id)
+    if (authBusinessId) {
+      return authBusinessId
     }
   } catch (error) {
     console.error('Error getting business ID from auth:', error)
@@ -49,10 +68,16 @@ async function getBusinessId(): Promise<string> {
   
   // Fallback to localStorage
   const stored = localStorage.getItem('business_id')
-  if (stored) return stored
+  const storedBusinessId = sanitizeBusinessId(stored)
+  if (storedBusinessId) return storedBusinessId
+
+  // Clean up invalid/corrupted local value to avoid repeated bad requests.
+  if (stored) {
+    localStorage.removeItem('business_id')
+  }
   
-  // Default business ID - in production, this should be dynamic
-  return 'default-business-id'
+  // No valid business context available.
+  return null
 }
 
 /**
@@ -61,6 +86,14 @@ async function getBusinessId(): Promise<string> {
 export async function fetchAppointmentSettings(): Promise<AppointmentSettings> {
   try {
     const businessId = await getBusinessId()
+
+    if (!businessId) {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
+      if (stored) {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+      }
+      return DEFAULT_SETTINGS
+    }
     
     const { data, error } = await supabase
       .from('appointment_settings')
@@ -124,6 +157,11 @@ export async function saveAppointmentSettings(settings: AppointmentSettings): Pr
   try {
     const businessId = await getBusinessId()
 
+    if (!businessId) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
+      return { success: true, error: 'Saved locally (no business context)' }
+    }
+
     // Prepare data with snake_case for database
     const dbData = {
       business_id: businessId,
@@ -179,6 +217,11 @@ export async function saveAppointmentSettings(settings: AppointmentSettings): Pr
 export async function deleteAppointmentSettings(): Promise<{ success: boolean; error?: string }> {
   try {
     const businessId = await getBusinessId()
+
+    if (!businessId) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY)
+      return { success: true }
+    }
 
     const { error } = await supabase
       .from('appointment_settings')
