@@ -72,8 +72,9 @@ export function AppointmentsTableView({
     if (!appointment.branch_id) return null
     const branchName = branchNameById?.[appointment.branch_id] || "Unknown branch"
     const isCrossBranch = Boolean(
-      userProfile?.role === "super_admin" ||
-      (userProfile?.branch_id && appointment.branch_id !== userProfile.branch_id),
+      userProfile?.role !== "super_admin" &&
+      userProfile?.branch_id &&
+      appointment.branch_id !== userProfile.branch_id,
     )
 
     return (

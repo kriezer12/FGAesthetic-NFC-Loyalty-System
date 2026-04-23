@@ -28,7 +28,7 @@ interface UseAppointmentsReturn {
   refetch: () => Promise<void>
 }
 
-export function useAppointments(branchId?: string): UseAppointmentsReturn {
+export function useAppointments(branchId?: string, rangeStart?: string, rangeEnd?: string): UseAppointmentsReturn {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +42,9 @@ export function useAppointments(branchId?: string): UseAppointmentsReturn {
   const canDelete = isStaff || isAdmin
 
   const fetchAppointments = useCallback(async () => {
+    // Only fetch if we have a user profile (except for public views if any)
+    if (!userProfile?.id) return
+
     setLoading(true)
     setError(null)
 
@@ -51,16 +54,32 @@ export function useAppointments(branchId?: string): UseAppointmentsReturn {
         .select("*")
         .order("start_time", { ascending: true })
 
-      // Filter by staff_id if the current user is a staff member
-      if (isStaff && userProfile?.id) {
-        query = query.eq('staff_id', userProfile.id)
-      } else if (userProfile?.role === "branch_admin" && userProfile?.branch_id) {
-        query = query.eq('branch_id', userProfile.branch_id)
+      // Filter by date range if provided - CRITICAL for performance
+      if (rangeStart) {
+        query = query.gte('start_time', rangeStart)
+      }
+      if (rangeEnd) {
+        query = query.lte('start_time', rangeEnd)
       }
 
-      // Filter by branch_id if provided
-      if (branchId) {
-        query = query.eq('branch_id', branchId)
+      // Filter logic:
+      // 1. Staff: See ONLY their own appointments, but across ANY branch.
+      // 2. Branch Admin: See all appointments in their branch.
+      // 3. Super Admin: See all appointments (filtered by branchId if provided).
+      
+      if (isStaff) {
+        // Staff should see their schedule regardless of which branch they are currently viewing.
+        // This fixes the "disappearing cross-branch appointments" issue.
+        query = query.eq('staff_id', userProfile.id)
+      } else if (userProfile?.role === "branch_admin") {
+        // Branch admins see everything in their home branch.
+        // (They might also see "borrowed" staff appointments if they are in their branch).
+        query = query.eq('branch_id', userProfile.branch_id)
+      } else if (userProfile?.role === "super_admin") {
+        // Super admins can filter by branch if they want.
+        if (branchId) {
+          query = query.eq('branch_id', branchId)
+        }
       }
 
       const { data, error: queryError } = await query
@@ -71,12 +90,11 @@ export function useAppointments(branchId?: string): UseAppointmentsReturn {
     } catch (err) {
       console.error("Error fetching appointments:", err)
       setError(err instanceof Error ? err.message : "Failed to fetch appointments")
-      // Return empty array on error to allow app to continue
       setAppointments([])
     } finally {
       setLoading(false)
     }
-  }, [isStaff, userProfile?.branch_id, userProfile?.id, userProfile?.role, branchId])
+  }, [isStaff, userProfile?.id, userProfile?.role, userProfile?.branch_id, branchId, rangeStart, rangeEnd])
 
   const addAppointment = useCallback(async (appt: Appointment) => {
     // Role-based access control: staff and admins can create appointments
@@ -267,9 +285,15 @@ export function useAppointments(branchId?: string): UseAppointmentsReturn {
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newAppt = payload.new as Appointment
-            if (isStaff && newAppt.staff_id !== userProfile?.id) return;
-            if (branchId && newAppt.branch_id !== branchId) return;
-            if (userProfile?.role === "branch_admin" && userProfile?.branch_id && newAppt.branch_id !== userProfile.branch_id) return;
+            
+            // Filtering logic for real-time matches the fetchAppointments logic:
+            if (isStaff) {
+              if (newAppt.staff_id !== userProfile?.id) return;
+            } else if (userProfile?.role === "branch_admin") {
+              if (newAppt.branch_id !== userProfile.branch_id) return;
+            } else if (userProfile?.role === "super_admin") {
+              if (branchId && newAppt.branch_id !== branchId) return;
+            }
             
             setAppointments((prev) => {
               // Avoid duplicates (we also update locally on insert)
@@ -278,17 +302,22 @@ export function useAppointments(branchId?: string): UseAppointmentsReturn {
             })
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Appointment
-            if (branchId && updated.branch_id !== branchId) {
-              setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
-              return;
-            }
-            if (isStaff && updated.staff_id !== userProfile?.id) {
-              setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
-              return;
-            }
-            if (userProfile?.role === "branch_admin" && userProfile?.branch_id && updated.branch_id !== userProfile.branch_id) {
-              setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
-              return;
+            
+            if (isStaff) {
+              if (updated.staff_id !== userProfile?.id) {
+                setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
+                return;
+              }
+            } else if (userProfile?.role === "branch_admin") {
+              if (updated.branch_id !== userProfile.branch_id) {
+                setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
+                return;
+              }
+            } else if (userProfile?.role === "super_admin") {
+              if (branchId && updated.branch_id !== branchId) {
+                setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
+                return;
+              }
             }
             
             setAppointments((prev) =>
@@ -309,7 +338,7 @@ export function useAppointments(branchId?: string): UseAppointmentsReturn {
         supabase.removeChannel(channelRef.current)
       }
     }
-  }, [authLoading, fetchAppointments, isStaff, userProfile?.branch_id, userProfile?.id, userProfile?.role])
+  }, [authLoading, fetchAppointments, isStaff, userProfile?.branch_id, userProfile?.id, userProfile?.role, branchId])
 
   return {
     appointments,
