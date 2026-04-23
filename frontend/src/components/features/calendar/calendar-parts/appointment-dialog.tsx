@@ -437,10 +437,13 @@ export function AppointmentDialog({
       return
     }
     const staffMember = staff.find((s) => s.id === staffId)!
+    const branchOwnerId = appointment?.branch_id
+      ?? (isStaff ? userProfile?.branch_id : (staffMember.branch_id ?? userProfile?.branch_id))
 
     const nowIso = now.toISOString()
     const appt: Appointment = {
       id:               appointment?.id ?? generateId(),
+      branch_id:        branchOwnerId,
       appointment_type: appointmentType,
       customer_id:      customerId || appointment?.customer_id,
       customer_name:    customerName || undefined,

@@ -27,23 +27,24 @@ interface UseAppointmentSettingsReturn {
   settings: AppointmentSettings
   loading: boolean
   error: string | null
-  refetch: () => Promise<void>
+  refetch: (id?: string) => Promise<void>
 }
 
 /**
  * Hook to fetch and cache appointment settings from the database
- * Settings are shared globally across all staff
+ * Settings are now branch-specific
  */
-export function useAppointmentSettings(): UseAppointmentSettingsReturn {
+export function useAppointmentSettings(branchId?: string): UseAppointmentSettingsReturn {
   const [settings, setSettings] = useState<AppointmentSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchSettings = useCallback(async () => {
+  const fetchSettings = useCallback(async (id?: string) => {
     try {
       setLoading(true)
       setError(null)
-      const dbSettings = await fetchAppointmentSettings()
+      const targetId = id || branchId
+      const dbSettings = await fetchAppointmentSettings(targetId)
       setSettings(dbSettings)
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to fetch settings"
@@ -54,7 +55,7 @@ export function useAppointmentSettings(): UseAppointmentSettingsReturn {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [branchId])
 
   useEffect(() => {
     fetchSettings()

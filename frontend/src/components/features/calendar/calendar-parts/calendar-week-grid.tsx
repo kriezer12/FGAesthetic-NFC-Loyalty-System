@@ -41,6 +41,7 @@ import {
   MIN_APPOINTMENT_DURATION,
 } from "./calendar-config"
 import { AppointmentDetailPopover } from "./appointment-detail-popover"
+import { Badge } from "@/components/ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
   ContextMenu,
@@ -52,7 +53,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuSubContent,
 } from "@/components/ui/context-menu"
-import { Pencil, Trash2, Repeat } from "lucide-react"
+import { Pencil, Trash2, Repeat, Briefcase, Building2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   startOfWeek,
@@ -162,6 +163,7 @@ interface CalendarWeekGridProps {
   staff: StaffMember[]
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
+  branchNameById?: Record<string, string>
   onSlotClick: (staffId: string, startMinutes: number, date?: Date) => void
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
   onEditAppointment: (appointment: Appointment) => void
@@ -180,6 +182,7 @@ export function CalendarWeekGrid({
   staff,
   appointments,
   blockedTimes,
+  branchNameById,
   onSlotClick,
   onAppointmentUpdate,
   onEditAppointment,
@@ -239,6 +242,12 @@ export function CalendarWeekGrid({
   const staffColorMap = useMemo(() => {
     const map = new Map<string, string>()
     staff.forEach((s) => map.set(s.id, s.color))
+    return map
+  }, [staff])
+    
+  const staffById = useMemo(() => {
+    const map = new Map<string, StaffMember>()
+    staff.forEach((s) => map.set(s.id, s))
     return map
   }, [staff])
 
@@ -323,6 +332,22 @@ export function CalendarWeekGrid({
         const dy = Math.abs(e.clientY - drag.startClientY)
         if (dx < THRESHOLD && dy < THRESHOLD) return
         drag.activated = true
+            
+            const activeAppointment = appointments.find((a) => a.id === drag.appointmentId)
+            if (
+              userProfile?.role === "staff" &&
+              userProfile?.branch_id &&
+              activeAppointment?.branch_id &&
+              activeAppointment.branch_id !== userProfile.branch_id
+            ) {
+              setValidationError(
+                "Cannot modify appointment because its a cross-branch appointment. Contact branch admin of that branch.",
+              )
+              dragRef.current = null
+              lastPreviewRef.current = null
+              setDragPreview(null)
+              return
+            }
       }
 
       const gridRect = gridRef.current.getBoundingClientRect()
@@ -670,6 +695,10 @@ export function CalendarWeekGrid({
                       : getHeightFromDuration(appt.start_time, appt.end_time)
                     const renderHeight = Math.max(height - 2, 20)
                     const color = staffColorMap.get(appt.staff_id) ?? "#6366f1"
+                    const staffMember = staffById.get(appt.staff_id)
+                    const staffBranchId = staffMember?.branch_id
+                    const branchName = appt.branch_id ? branchNameById?.[appt.branch_id] : null
+                    const isCrossBranch = Boolean(appt.branch_id && staffBranchId && appt.branch_id !== staffBranchId)
                     const leftOffset = column * CASCADE_INDENT
                     const zIndex = isDragging ? 50 : 10 + column
 
@@ -712,9 +741,23 @@ export function CalendarWeekGrid({
                                   )}
                                 </p>
                                 {renderHeight > 30 && (
-                                  <p className="truncate text-[9px] text-muted-foreground">
-                                    {staffNameMap.get(appt.staff_id) ?? appt.staff_name}
-                                  </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                                    <Badge variant="secondary" className="h-5 gap-1 px-2 py-0 text-[9px] font-medium">
+                                      <Briefcase className="h-3 w-3" />
+                                      <span className="truncate max-w-[7rem]">
+                                        {staffNameMap.get(appt.staff_id) ?? appt.staff_name}
+                                      </span>
+                                    </Badge>
+                                    {branchName && (
+                                      <Badge variant={isCrossBranch ? "warning" : "outline"} className="h-5 gap-1 px-2 py-0 text-[9px] font-medium">
+                                        <Building2 className="h-3 w-3" />
+                                        <span className="truncate max-w-[8rem]">
+                                          {isCrossBranch ? "Cross-Branch" : "Branch"}
+                                          {branchName ? `: ${branchName}` : ""}
+                                        </span>
+                                      </Badge>
+                                    )}
+                                  </div>
                                 )}
                                 {renderHeight > 44 && (
                                   <p className="text-[9px] tabular-nums text-muted-foreground">

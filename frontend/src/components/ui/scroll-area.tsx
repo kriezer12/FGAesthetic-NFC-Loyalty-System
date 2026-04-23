@@ -33,21 +33,13 @@ function ScrollArea({
     const preferVertical = Math.abs(event.deltaY) >= Math.abs(event.deltaX)
 
     if (canScrollY && (preferVertical || !canScrollX)) {
-      const previousTop = viewport.scrollTop
       viewport.scrollTop += event.deltaY
-      if (viewport.scrollTop !== previousTop) {
-        event.preventDefault()
-      }
       return
     }
 
     if (canScrollX) {
-      const previousLeft = viewport.scrollLeft
       const delta = event.deltaX || event.deltaY
       viewport.scrollLeft += delta
-      if (viewport.scrollLeft !== previousLeft) {
-        event.preventDefault()
-      }
     }
   }
 

@@ -20,10 +20,11 @@ import type { Service } from "@/types/service"
 import {
   DEFAULT_INTERVAL,
 } from "./calendar-parts/calendar-config"
-import { startOfWeek, addDays } from "date-fns"
+import { addDays, endOfDay, endOfMonth, endOfWeek, startOfDay, startOfMonth, startOfWeek } from "date-fns"
 import { generateId, setTimeOnDate } from "./calendar-parts/calendar-utils"
 import { useStaff } from "@/hooks/use-staff"
 import { useAppointments } from "@/hooks/use-appointments"
+import { useBranches } from "@/hooks/use-branches"
 import { useAppointmentSettings } from "@/hooks/use-appointment-settings"
 import { useCheckedOutAppointments } from "@/hooks/use-checked-out-appointments"
 import { saveAppointmentSettings } from "@/services/appointment-settings"
@@ -106,11 +107,6 @@ async function saveSettings(settings: CalendarSettings): Promise<void> {
   }
 }
 
-/** Get day-of-week string from Date (MON, TUE, etc.) */
-function getDayOfWeek(date: Date): string {
-  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
-  return days[date.getDay()]
-}
 
 export function CalendarView() {
   // ---- auth state ----
@@ -126,17 +122,21 @@ export function CalendarView() {
   const [showTableView, setShowTableView] = useState(false)
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [tableStatusFilter, setTableStatusFilter] = useState("")
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(userProfile?.branch_id || "")
   const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
   
   // ---- appointment reminder state ----
   const [reminderToast, setReminderToast] = useState<{ id: string; appointment: Appointment } | null>(null)
   const notifiedAppointmentsRef = useRef<Set<string>>(new Set())
   
-  // Fetch appointments from Supabase
-  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
+  // Fetch appointments from Supabase (filtered by branch if super_admin selects one)
+  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments(selectedBranchId)
 
-  // Load appointment settings from database (shared across all staff)
-  const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings()
+  // Load branches for filter
+  const { branches } = useBranches()
+
+  // Load appointment settings from database (filtered by branch)
+  const { settings: appointmentSettings, loading: settingsLoading, refetch: refetchSettings } = useAppointmentSettings(selectedBranchId)
 
   // Load checked-out appointments
   const { checkedOutAppointmentIds } = useCheckedOutAppointments()
@@ -144,6 +144,7 @@ export function CalendarView() {
   // Load services so we can derive titles for follow-up appointments
   const [services, setServices] = useState<Service[]>([])
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
+  const branchNameById = useMemo(() => Object.fromEntries(branches.map((branch) => [branch.id, branch.name])), [branches])
 
 
 
@@ -179,34 +180,115 @@ export function CalendarView() {
     }
   }, [appointmentSettings, settingsLoading])
 
+  const visibleRange = useMemo(() => {
+    if (viewMode === "week") {
+      return {
+        start: startOfWeek(selectedDate, { weekStartsOn: 1 }).toISOString(),
+        end: endOfWeek(selectedDate, { weekStartsOn: 1 }).toISOString(),
+      }
+    }
+
+    if (viewMode === "month") {
+      return {
+        start: startOfMonth(selectedDate).toISOString(),
+        end: endOfMonth(selectedDate).toISOString(),
+      }
+    }
+
+    return {
+      start: startOfDay(selectedDate).toISOString(),
+      end: endOfDay(selectedDate).toISOString(),
+    }
+  }, [selectedDate, viewMode])
+
   // Fetch real staff from database
-  const { staff: allStaff = [] } = useStaff()
+  const { staff: allStaff = [] } = useStaff({
+    rangeStart: visibleRange.start,
+    rangeEnd: visibleRange.end,
+  })
+
+  const augmentedStaff = useMemo(() => {
+    if (userProfile?.role !== "branch_admin" || !userProfile?.branch_id) {
+      return allStaff
+    }
+
+    const baseById = new Map(allStaff.map((member) => [member.id, member]))
+    const missingBranchOwned = appointments.filter(
+      (appt) =>
+        appt.branch_id === userProfile.branch_id &&
+        appt.staff_id &&
+        !baseById.has(appt.staff_id),
+    )
+
+    if (missingBranchOwned.length === 0) return allStaff
+
+    const added: StaffMember[] = []
+    for (const appt of missingBranchOwned) {
+      if (baseById.has(appt.staff_id)) continue
+      const fallback: StaffMember = {
+        id: appt.staff_id,
+        name: appt.staff_name || "Temporary Staff",
+        role: "Temporary assignment",
+        branch_id: userProfile.branch_id,
+        color: "#0ea5e9",
+      }
+      baseById.set(appt.staff_id, fallback)
+      added.push(fallback)
+    }
+
+    return [...allStaff, ...added]
+  }, [allStaff, appointments, userProfile?.branch_id, userProfile?.role])
+
+  useEffect(() => {
+    if (!isAdmin || augmentedStaff.length === 0) return
+
+    const selectedStaffSet = new Set(calendarSettings.selectedStaff || [])
+    const temporaryStaffToAdd = augmentedStaff
+      .filter((member) => member.role.startsWith("Temporary"))
+      .map((member) => member.id)
+      .filter((id) => !selectedStaffSet.has(id))
+
+    if (temporaryStaffToAdd.length > 0) {
+      setCalendarSettings((prev) => ({
+        ...prev,
+        selectedStaff: [...new Set([...(prev.selectedStaff || []), ...temporaryStaffToAdd])],
+      }))
+    }
+  }, [augmentedStaff, calendarSettings.selectedStaff, isAdmin])
   
   // Initialize selectedStaff with all staff on first load
   useEffect(() => {
     if (
-      allStaff.length > 0 &&
+      augmentedStaff.length > 0 &&
       (!calendarSettings.selectedStaff || calendarSettings.selectedStaff.length === 0)
     ) {
+      const branchFiltered = selectedBranchId
+        ? augmentedStaff.filter((s) => s.branch_id === selectedBranchId)
+        : augmentedStaff
       setCalendarSettings((prev) => ({
         ...prev,
-        selectedStaff: allStaff.map((s) => s.id),
+        selectedStaff: branchFiltered.map((s) => s.id),
       }))
     }
-  }, [allStaff])
+  }, [augmentedStaff, calendarSettings.selectedStaff, selectedBranchId])
   
 // Filter staff based on selected staff in settings.
-    // Removed "working days" check so columns don't disappear when switching views on off-days.
+    // Also filter by branch when super_admin has a branch selected.
     const staff = useMemo(() => {
-      return allStaff.filter((s: StaffMember) => {
+      return augmentedStaff.filter((s: StaffMember) => {
         // If current user is staff, ONLY show their own schedule column
         if (isStaff && s.id !== userProfile?.id) return false
+        // If super_admin has a branch selected, only show that branch's staff
+        if (selectedBranchId && s.branch_id !== selectedBranchId) return false
+        // Branch admins should always see temporary staff columns so borrowed schedules
+        // cannot disappear due to persisted per-user staff filter preferences.
+        if (userProfile?.role === "branch_admin" && s.role.startsWith("Temporary")) return true
         // Must be in the selected staff list
         if (!calendarSettings.selectedStaff?.includes(s.id)) return false
         
         return true
       })
-    }, [allStaff, isStaff, userProfile?.id, calendarSettings.selectedStaff]);
+        }, [augmentedStaff, isStaff, userProfile?.id, userProfile?.role, calendarSettings.selectedStaff, selectedBranchId]);
 
     let blockedTimes: any[] = []
 
@@ -214,8 +296,14 @@ export function CalendarView() {
     // This perfectly restricts Admin filtering and prevents Monthly views showing hidden staff.
     const visibleAppointments = useMemo(() => {
       const visibleStaffIds = new Set(staff.map((s) => s.id));
-      return appointments.filter((a) => visibleStaffIds.has(a.staff_id));
-    }, [appointments, staff]);
+      return appointments.filter((a) => {
+        if (visibleStaffIds.has(a.staff_id)) return true
+        if (userProfile?.role === "branch_admin" && userProfile?.branch_id) {
+          return a.branch_id === userProfile.branch_id
+        }
+        return false
+      });
+    }, [appointments, staff, userProfile?.branch_id, userProfile?.role]);
 
   // Derive clinic hours from settings (work hours)
   const clinicHours = useMemo(() => ({
@@ -487,7 +575,10 @@ export function CalendarView() {
     setIsVerifying(true)
     setVerificationError(null)
     try {
-      await verifyPassword(password)
+      const verified = await verifyPassword(password)
+      if (!verified) {
+        throw new Error("Incorrect password")
+      }
       // Password verified, proceed with deletion
       if (pendingDeleteId) {
         await deleteAppointment(pendingDeleteId)
@@ -796,11 +887,15 @@ export function CalendarView() {
         onSearchChange={setTableSearchQuery}
         statusFilter={tableStatusFilter}
         onStatusFilterChange={setTableStatusFilter}
+        branches={branches}
+        selectedBranchId={selectedBranchId}
+        onBranchChange={setSelectedBranchId}
       />
 
       {showTableView ? (
         <AppointmentsTableView
           appointments={filteredTableAppointments}
+          branchNameById={branchNameById}
           onEdit={openEditDialog}
           onDelete={async (appointment) => handleDelete(appointment.id)}
           checkedOutAppointmentIds={checkedOutAppointmentIds}
@@ -815,6 +910,7 @@ export function CalendarView() {
               staff={staff}
               appointments={visibleAppointments}
               blockedTimes={blockedTimes}
+              branchNameById={branchNameById}
               snapColumnsToFit={calendarSettings.snapColumnsToFit ?? true}      
               onAppointmentUpdate={handleAppointmentUpdate}
               onSlotClick={openSlotDialog}
@@ -833,6 +929,7 @@ export function CalendarView() {
               staff={staff}
               appointments={visibleAppointments}
               blockedTimes={blockedTimes}
+              branchNameById={branchNameById}
               onSlotClick={openSlotDialog}
               onAppointmentUpdate={handleAppointmentUpdate}
               onEditAppointment={openEditDialog}
