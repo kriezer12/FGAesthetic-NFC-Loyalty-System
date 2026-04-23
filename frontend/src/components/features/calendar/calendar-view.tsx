@@ -129,8 +129,33 @@ export function CalendarView() {
   const [reminderToast, setReminderToast] = useState<{ id: string; appointment: Appointment } | null>(null)
   const notifiedAppointmentsRef = useRef<Set<string>>(new Set())
   
+  const visibleRange = useMemo(() => {
+    if (viewMode === "week") {
+      return {
+        start: startOfWeek(selectedDate, { weekStartsOn: 1 }).toISOString(),
+        end: endOfWeek(selectedDate, { weekStartsOn: 1 }).toISOString(),
+      }
+    }
+
+    if (viewMode === "month") {
+      return {
+        start: startOfMonth(selectedDate).toISOString(),
+        end: endOfMonth(selectedDate).toISOString(),
+      }
+    }
+
+    return {
+      start: startOfDay(selectedDate).toISOString(),
+      end: endOfDay(selectedDate).toISOString(),
+    }
+  }, [selectedDate, viewMode])
+
   // Fetch appointments from Supabase (filtered by branch if super_admin selects one)
-  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments(selectedBranchId)
+  const { appointments, loading: appointmentsLoading, addAppointment, updateAppointment, deleteAppointment } = useAppointments(
+    selectedBranchId,
+    visibleRange.start,
+    visibleRange.end
+  )
 
   // Load branches for filter
   const { branches } = useBranches()
@@ -145,8 +170,6 @@ export function CalendarView() {
   const [services, setServices] = useState<Service[]>([])
   const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services])
   const branchNameById = useMemo(() => Object.fromEntries(branches.map((branch) => [branch.id, branch.name])), [branches])
-
-
 
   const loadServices = useCallback(async () => {
     const { data } = await supabase.from("services").select("*")
@@ -180,27 +203,6 @@ export function CalendarView() {
     }
   }, [appointmentSettings, settingsLoading])
 
-  const visibleRange = useMemo(() => {
-    if (viewMode === "week") {
-      return {
-        start: startOfWeek(selectedDate, { weekStartsOn: 1 }).toISOString(),
-        end: endOfWeek(selectedDate, { weekStartsOn: 1 }).toISOString(),
-      }
-    }
-
-    if (viewMode === "month") {
-      return {
-        start: startOfMonth(selectedDate).toISOString(),
-        end: endOfMonth(selectedDate).toISOString(),
-      }
-    }
-
-    return {
-      start: startOfDay(selectedDate).toISOString(),
-      end: endOfDay(selectedDate).toISOString(),
-    }
-  }, [selectedDate, viewMode])
-
   // Fetch real staff from database
   const { staff: allStaff = [] } = useStaff({
     rangeStart: visibleRange.start,
@@ -208,14 +210,15 @@ export function CalendarView() {
   })
 
   const augmentedStaff = useMemo(() => {
-    if (userProfile?.role !== "branch_admin" || !userProfile?.branch_id) {
+    const activeBranchId = selectedBranchId || userProfile?.branch_id
+    if (!activeBranchId) {
       return allStaff
     }
 
     const baseById = new Map(allStaff.map((member) => [member.id, member]))
     const missingBranchOwned = appointments.filter(
       (appt) =>
-        appt.branch_id === userProfile.branch_id &&
+        appt.branch_id === activeBranchId &&
         appt.staff_id &&
         !baseById.has(appt.staff_id),
     )
@@ -229,7 +232,7 @@ export function CalendarView() {
         id: appt.staff_id,
         name: appt.staff_name || "Temporary Staff",
         role: "Temporary assignment",
-        branch_id: userProfile.branch_id,
+        branch_id: activeBranchId,
         color: "#0ea5e9",
       }
       baseById.set(appt.staff_id, fallback)
@@ -237,7 +240,7 @@ export function CalendarView() {
     }
 
     return [...allStaff, ...added]
-  }, [allStaff, appointments, userProfile?.branch_id, userProfile?.role])
+  }, [allStaff, appointments, selectedBranchId, userProfile?.branch_id])
 
   useEffect(() => {
     if (!isAdmin || augmentedStaff.length === 0) return
@@ -278,17 +281,29 @@ export function CalendarView() {
       return augmentedStaff.filter((s: StaffMember) => {
         // If current user is staff, ONLY show their own schedule column
         if (isStaff && s.id !== userProfile?.id) return false
-        // If super_admin has a branch selected, only show that branch's staff
-        if (selectedBranchId && s.branch_id !== selectedBranchId) return false
+        
+        // If a branch is selected (via header or home branch)
+        if (selectedBranchId) {
+          // Show if they belong to this branch
+          if (s.branch_id === selectedBranchId) return true
+          // OR show if they have appointments in this branch in the current visible range
+          // (This ensures "borrowed" staff columns don't disappear)
+          const hasApptInBranch = appointments.some(a => a.staff_id === s.id && a.branch_id === selectedBranchId)
+          if (hasApptInBranch) return true
+          
+          return false
+        }
+        
         // Branch admins should always see temporary staff columns so borrowed schedules
         // cannot disappear due to persisted per-user staff filter preferences.
         if (userProfile?.role === "branch_admin" && s.role.startsWith("Temporary")) return true
+        
         // Must be in the selected staff list
         if (!calendarSettings.selectedStaff?.includes(s.id)) return false
         
         return true
       })
-        }, [augmentedStaff, isStaff, userProfile?.id, userProfile?.role, calendarSettings.selectedStaff, selectedBranchId]);
+    }, [augmentedStaff, isStaff, userProfile?.id, userProfile?.role, calendarSettings.selectedStaff, selectedBranchId, appointments]);
 
     let blockedTimes: any[] = []
 
