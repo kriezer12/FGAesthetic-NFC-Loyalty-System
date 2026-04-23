@@ -10,9 +10,10 @@ import React, { useState, useMemo } from "react"
 import { format, parseISO } from "date-fns"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { cn } from "@/lib/utils"
-import { Eye, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart } from "lucide-react"
+import { Eye, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown, ShoppingCart, Building2 } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,7 @@ import {
 
 interface AppointmentsTableViewProps {
   appointments: Appointment[]
+  branchNameById?: Record<string, string>
   onEdit: (appointment: Appointment) => void
   onDelete: (appointment: Appointment) => void
   /** Set of appointment IDs that have already been checked out/transacted */
@@ -42,6 +44,7 @@ const STATUS_COLORS: Record<AppointmentStatus, string> = {
 
 export function AppointmentsTableView({
   appointments,
+  branchNameById,
   onEdit,
   onDelete,
   checkedOutAppointmentIds,
@@ -64,6 +67,22 @@ export function AppointmentsTableView({
   }
 
   const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+
+  const getBranchBadge = (appointment: Appointment) => {
+    if (!appointment.branch_id) return null
+    const branchName = branchNameById?.[appointment.branch_id] || "Unknown branch"
+    const isCrossBranch = Boolean(
+      userProfile?.role === "super_admin" ||
+      (userProfile?.branch_id && appointment.branch_id !== userProfile.branch_id),
+    )
+
+    return (
+      <Badge variant={isCrossBranch ? "warning" : "outline"} className="gap-1 px-2 py-0 text-[10px] font-medium">
+        <Building2 className="h-3 w-3" />
+        {isCrossBranch ? "Cross-Branch" : "Branch"}: {branchName}
+      </Badge>
+    )
+  }
 
   // Filter appointments based on user role
   const filteredAppointments = useMemo(() => {
@@ -277,6 +296,7 @@ export function AppointmentsTableView({
                   Customer {getSortIcon("customer_name")}
                 </Button>
               </th>
+              <th className="px-4 py-3 text-left font-semibold">Branch</th>
               <th className="px-4 py-3 text-left font-semibold">
                 <Button variant="ghost" onClick={() => requestSort("title")} className="flex items-center p-0 hover:bg-transparent h-auto font-semibold">
                   Service {getSortIcon("title")}
@@ -294,7 +314,7 @@ export function AppointmentsTableView({
             {paginatedGroups.length === 0 ? (
               <tr>
                 <td
-                  colSpan={isAdmin ? 6 : 5}
+                  colSpan={isAdmin ? 7 : 6}
                   className="px-4 py-8 text-center text-muted-foreground"
                 >
                   No appointments found
@@ -353,6 +373,11 @@ export function AppointmentsTableView({
                                 ID: {appointment.customer_id}
                               </span>
                             )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            {getBranchBadge(appointment)}
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -441,7 +466,7 @@ export function AppointmentsTableView({
                       </tr>
                       {expandedRow === appointment.id && (
                         <tr className="bg-muted/30">
-                          <td colSpan={isAdmin ? 6 : 5} className="px-4 py-4">
+                          <td colSpan={isAdmin ? 7 : 6} className="px-4 py-4">
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
                                 <div className="font-semibold text-muted-foreground mb-2">Appointment Details</div>

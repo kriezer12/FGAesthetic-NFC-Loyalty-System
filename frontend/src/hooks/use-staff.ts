@@ -7,7 +7,7 @@
  * Returns staff formatted for the calendar StaffMember type.
  */
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import type { StaffMember } from "@/types/appointment"
 import { STAFF_COLORS } from "@/components/features/calendar/calendar-parts/calendar-config"
 import { useAuth } from "@/contexts/auth-context"
@@ -18,7 +18,10 @@ interface UserProfile {
   full_name: string | null
   role: string | null
   avatar_url: string | null
-  branch_id: string | null
+  branch_id?: string | null
+  is_temporary_assignment?: boolean
+  home_branch_name?: string | null
+  host_branch_name?: string | null
 }
 
 interface UseStaffReturn {
@@ -28,13 +31,18 @@ interface UseStaffReturn {
   refetch: () => Promise<void>
 }
 
-export function useStaff(): UseStaffReturn {
+interface UseStaffOptions {
+  rangeStart?: string
+  rangeEnd?: string
+}
+
+export function useStaff(options: UseStaffOptions = {}): UseStaffReturn {
   const { userProfile, session } = useAuth()
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchStaff = async () => {
+  const fetchStaff = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -44,7 +52,11 @@ export function useStaff(): UseStaffReturn {
         return
       }
 
-      const response = await apiCall("/staff/list", {
+      const params = new URLSearchParams()
+      if (options.rangeStart) params.set("range_start", options.rangeStart)
+      if (options.rangeEnd) params.set("range_end", options.rangeEnd)
+
+      const response = await apiCall(`/staff/list${params.toString() ? `?${params.toString()}` : ""}`, {
         authToken: session.access_token,
       })
 
@@ -55,13 +67,26 @@ export function useStaff(): UseStaffReturn {
       const { staff: data } = await response.json()
 
       const staffMembers: StaffMember[] = (data || []).map(
-        (profile: UserProfile, index: number) => ({
-          id: profile.id,
-          name: profile.full_name || "Unknown Staff",
-          role: profile.role || "Staff",
-          color: STAFF_COLORS[index % STAFF_COLORS.length],
-          branch_id: profile.branch_id || undefined,
-        })
+        (profile: UserProfile, index: number) => {
+          // Only branch admins need to see cross-branch origin context.
+          // Staff users should see a neutral status label.
+          const showTemporaryOrigin =
+            userProfile?.role === "branch_admin" && Boolean(profile.is_temporary_assignment)
+
+          const roleLabel = showTemporaryOrigin
+            ? `Temporary from ${profile.home_branch_name || "Other Branch"}`
+            : profile.is_temporary_assignment
+              ? `Staff - Active Branches: ${profile.home_branch_name || "Home Branch"} + ${profile.host_branch_name || "Assigned Branch"}`
+              : (profile.role || "Staff")
+
+          return {
+            id: profile.id,
+            name: profile.full_name || "Unknown Staff",
+            role: roleLabel,
+            branch_id: profile.branch_id || undefined,
+            color: STAFF_COLORS[index % STAFF_COLORS.length],
+          }
+        }
       )
 
       setStaff(staffMembers)
@@ -71,13 +96,13 @@ export function useStaff(): UseStaffReturn {
     } finally {
       setLoading(false)
     }
-  }
+  }, [options.rangeEnd, options.rangeStart, session, userProfile?.role])
 
   useEffect(() => {
     if (userProfile && session) {
-      fetchStaff()
+      void fetchStaff()
     }
-  }, [userProfile, session])
+  }, [userProfile, session, fetchStaff])
 
   return { staff, loading, error, refetch: fetchStaff }
 }

@@ -190,7 +190,10 @@ export function AccountsList({ accounts, onRefresh, isDeletedTab }: AccountsList
     try {
       console.log("[Delete Flow] Verifying password...")
       // Verify the password
-      await verifyPassword(password)
+      const verified = await verifyPassword(password)
+      if (!verified) {
+        throw new Error("Incorrect password")
+      }
       console.log("[Delete Flow] Password verified, deleting account...")
       
       // Password verified, proceed with deletion

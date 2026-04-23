@@ -1,20 +1,23 @@
-import { useEffect, useState, useCallback } from "react"
-import { Calendar, Settings2, Clock, Zap, Building2, ChevronDown } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
-import { useBranches } from "@/hooks/use-branches"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Calendar, Settings2, Clock, Zap } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { DatePicker } from "@/components/ui/date-picker"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { TimePicker12Hour } from "@/components/ui/time-picker-12h"
 import { NotificationToast } from "@/components/ui/notification-toast"
 import { fetchAppointmentSettings, saveAppointmentSettings, type AppointmentSettings } from "@/services/appointment-settings"
+import { useAuth } from "@/contexts/auth-context"
+import { useBranches } from "@/hooks/use-branches"
+import { apiCall } from "@/lib/api"
 
 const defaultSettings: AppointmentSettings = {
   default_duration: 60,
@@ -29,35 +32,276 @@ const defaultSettings: AppointmentSettings = {
   lunch_break_end: "13:00",
 }
 
-export default function AppointmentsSettingsPage() {
-  const { userProfile } = useAuth()
-  const isSuperAdmin = userProfile?.role === "super_admin"
-  const { branches } = useBranches()
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(userProfile?.branch_id || "")
+type CrossBranchAssignment = {
+  id: string
+  staff_id: string
+  staff_name?: string | null
+  home_branch_id?: string | null
+  home_branch_name?: string | null
+  host_branch_id: string
+  host_branch_name?: string | null
+  starts_at: string
+  ends_at: string
+  reason: string
+  status: "active" | "upcoming" | "expired" | "cancelled"
+  computed_status?: "active" | "upcoming" | "expired" | "cancelled"
+  created_by_name?: string | null
+  home_branch_admin_name?: string | null
+  cancelled_reason?: string | null
+}
 
+type CandidateStaff = {
+  id: string
+  full_name: string
+  branch_id?: string | null
+  branch_name?: string | null
+}
+
+type BranchOption = {
+  id: string
+  name: string
+}
+
+type BranchRow = {
+  id: string
+  name: string
+}
+
+const toDatetimeLocalInput = (iso?: string | null) => {
+  if (!iso) return ""
+  const date = new Date(iso)
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return shifted.toISOString().slice(0, 16)
+}
+
+const combineDateAndTime = (date: Date | undefined, time: string) => {
+  if (!date) return ""
+  const [hours, minutes] = time.split(":").map((value) => Number(value))
+  const combined = new Date(date)
+  combined.setHours(hours || 0, minutes || 0, 0, 0)
+  return combined.toISOString()
+}
+
+export default function AppointmentsSettingsPage() {
+  const { userProfile, session } = useAuth()
+  const { branches: availableBranches } = useBranches()
+  const isSuperAdmin = userProfile?.role === "super_admin"
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(userProfile?.branch_id || "")
   const [settings, setSettings] = useState<AppointmentSettings>(defaultSettings)
   const [changes, setChanges] = useState<Partial<AppointmentSettings>>({})
   const [toast, setToast] = useState<{ id: string; title: string; message: string; type: "warning" | "success" } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
+  const [assignments, setAssignments] = useState<CrossBranchAssignment[]>([])
+  const [assignmentLoading, setAssignmentLoading] = useState(false)
+  const [assignmentSaving, setAssignmentSaving] = useState(false)
+  const [assignmentCancellingId, setAssignmentCancellingId] = useState<string | null>(null)
+  const [staffCandidates, setStaffCandidates] = useState<CandidateStaff[]>([])
+
+  const [assignmentStaffId, setAssignmentStaffId] = useState("")
+  const [assignmentHostBranchId, setAssignmentHostBranchId] = useState("")
+  const [assignmentStartsDate, setAssignmentStartsDate] = useState<Date | undefined>()
+  const [assignmentEndsDate, setAssignmentEndsDate] = useState<Date | undefined>()
+  const [assignmentStartsTime, setAssignmentStartsTime] = useState("09:00")
+  const [assignmentEndsTime, setAssignmentEndsTime] = useState("17:00")
+  const [assignmentReason, setAssignmentReason] = useState("")
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<"all" | "active" | "upcoming" | "expired" | "cancelled">("all")
+
+  const canManageAssignments = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+
   useEffect(() => {
-    document.title = "Appointment Settings - FG Aesthetic Centre"
+    document.title = "Appointments - FG Aesthetic Centre"
   }, [])
 
-  // Load settings from database on mount or when branch changes
+  useEffect(() => {
+    if (isSuperAdmin) return
+    setSelectedBranchId(userProfile?.branch_id || "")
+  }, [isSuperAdmin, userProfile?.branch_id])
+
+  useEffect(() => {
+    if (!canManageAssignments) return
+
+    if (isSuperAdmin) {
+      setAssignmentHostBranchId((prev) => prev || "")
+      return
+    }
+
+    setAssignmentHostBranchId(userProfile?.branch_id || "")
+  }, [canManageAssignments, isSuperAdmin, userProfile?.branch_id])
+
+  const filteredAssignments = useMemo(() => {
+    if (assignmentStatusFilter === "all") return assignments
+    return assignments.filter((row) => (row.computed_status || row.status) === assignmentStatusFilter)
+  }, [assignments, assignmentStatusFilter])
+
+  const loadAssignmentData = useCallback(async () => {
+    if (!canManageAssignments || !session) return
+
+    setAssignmentLoading(true)
+    try {
+      const [candidatesRes, assignmentsRes] = await Promise.all([
+        apiCall("/staff/cross-branch-candidates", {
+          method: "GET",
+          authToken: session.access_token,
+        }),
+        apiCall("/staff/cross-branch-assignments", {
+          method: "GET",
+          authToken: session.access_token,
+        }),
+      ])
+
+      const candidatesJson = await candidatesRes.json()
+      if (!candidatesRes.ok) {
+        throw new Error(candidatesJson?.error || "Failed to load candidate staff")
+      }
+
+      const assignmentsJson = await assignmentsRes.json()
+      if (!assignmentsRes.ok) {
+        throw new Error(assignmentsJson?.error || "Failed to load cross-branch assignments")
+      }
+
+      setStaffCandidates((candidatesJson?.staff || []) as CandidateStaff[])
+      setAssignments((assignmentsJson?.assignments || []) as CrossBranchAssignment[])
+    } catch (error) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Load Error",
+        message: error instanceof Error ? error.message : "Failed to load cross-branch assignments.",
+        type: "warning",
+      })
+    } finally {
+      setAssignmentLoading(false)
+    }
+  }, [canManageAssignments, session])
+
+  useEffect(() => {
+    void loadAssignmentData()
+  }, [loadAssignmentData])
+
+  const createAssignment = async () => {
+    if (!session) return
+    if (!assignmentStaffId || !assignmentStartsDate || !assignmentEndsDate || !assignmentReason.trim()) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Validation Error",
+        message: "Staff, start, end, and reason are required.",
+        type: "warning",
+      })
+      return
+    }
+
+    if (isSuperAdmin && !assignmentHostBranchId) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Validation Error",
+        message: "Please select a borrowing branch.",
+        type: "warning",
+      })
+      return
+    }
+
+    const startsIso = combineDateAndTime(assignmentStartsDate, assignmentStartsTime)
+    const endsIso = combineDateAndTime(assignmentEndsDate, assignmentEndsTime)
+    if (!startsIso || !endsIso || new Date(endsIso) <= new Date(startsIso)) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Validation Error",
+        message: "End date/time must be after start date/time.",
+        type: "warning",
+      })
+      return
+    }
+
+    setAssignmentSaving(true)
+    try {
+      const response = await apiCall("/staff/cross-branch-assignments", {
+        method: "POST",
+        authToken: session.access_token,
+        body: JSON.stringify({
+          staff_id: assignmentStaffId,
+          host_branch_id: assignmentHostBranchId || null,
+          starts_at: startsIso,
+          ends_at: endsIso,
+          reason: assignmentReason.trim(),
+        }),
+      })
+
+      const json = await response.json()
+      if (!response.ok) {
+        throw new Error(json?.error || "Failed to create assignment")
+      }
+
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Success",
+        message: "Temporary cross-branch assignment created.",
+        type: "success",
+      })
+
+      setAssignmentStaffId("")
+      setAssignmentStartsDate(undefined)
+      setAssignmentEndsDate(undefined)
+      setAssignmentStartsTime("09:00")
+      setAssignmentEndsTime("17:00")
+      setAssignmentReason("")
+      await loadAssignmentData()
+    } catch (error) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Error",
+        message: error instanceof Error ? error.message : "Failed to create assignment.",
+        type: "warning",
+      })
+    } finally {
+      setAssignmentSaving(false)
+    }
+  }
+
+  const cancelAssignment = async (assignmentId: string) => {
+    if (!session) return
+    setAssignmentCancellingId(assignmentId)
+    try {
+      const response = await apiCall(`/staff/cross-branch-assignments/${assignmentId}/cancel`, {
+        method: "PATCH",
+        authToken: session.access_token,
+      })
+      const json = await response.json()
+      if (!response.ok) {
+        throw new Error(json?.error || "Failed to cancel assignment")
+      }
+
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Success",
+        message: "Assignment cancelled.",
+        type: "success",
+      })
+      await loadAssignmentData()
+    } catch (error) {
+      setToast({
+        id: crypto.randomUUID(),
+        title: "Error",
+        message: error instanceof Error ? error.message : "Failed to cancel assignment.",
+        type: "warning",
+      })
+    } finally {
+      setAssignmentCancellingId(null)
+    }
+  }
+
   const loadSettings = useCallback(async () => {
     try {
       setIsLoading(true)
-      const loadedSettings = await fetchAppointmentSettings(selectedBranchId)
+      const loadedSettings = await fetchAppointmentSettings(selectedBranchId || undefined)
       setSettings(loadedSettings)
-      setChanges({}) // Clear changes when switching branches
+      setChanges({})
     } catch (error) {
       console.error("Error loading settings:", error)
       setToast({
         id: crypto.randomUUID(),
         title: "Load Error",
-        message: "Could not load settings for this branch.",
+        message: "Could not load settings from database, using defaults.",
         type: "warning",
       })
     } finally {
@@ -66,18 +310,18 @@ export default function AppointmentsSettingsPage() {
   }, [selectedBranchId])
 
   useEffect(() => {
-    loadSettings()
+    void loadSettings()
   }, [loadSettings])
 
-  const handleChange = (key: keyof AppointmentSettings, value: any) => {
+  const handleChange = <K extends keyof AppointmentSettings>(key: K, value: AppointmentSettings[K]) => {
     setChanges((prev) => ({
       ...prev,
       [key]: value,
     }))
   }
 
-  const getCurrentValue = (key: keyof AppointmentSettings) => {
-    return changes.hasOwnProperty(key) ? changes[key] : settings[key]
+  const getCurrentValue = <K extends keyof AppointmentSettings>(key: K): AppointmentSettings[K] => {
+    return key in changes ? (changes[key] as AppointmentSettings[K]) : settings[key]
   }
 
   const saveSettings = async () => {
@@ -126,7 +370,7 @@ export default function AppointmentsSettingsPage() {
       return
     }
 
-    const newSettings = { ...settings, ...changes, branch_id: selectedBranchId }
+    const newSettings = { ...settings, ...changes, branch_id: selectedBranchId || settings.branch_id }
     setIsSaving(true)
     
     try {
@@ -168,11 +412,12 @@ export default function AppointmentsSettingsPage() {
       if (!confirmed) return
     }
     
-    setSettings(defaultSettings)
+    const resetSettings = { ...defaultSettings, branch_id: selectedBranchId || settings.branch_id }
+    setSettings(resetSettings)
     setChanges({})
     
     // Also save defaults to database
-    saveAppointmentSettings({ ...defaultSettings, branch_id: selectedBranchId }).then(() => {
+    saveAppointmentSettings(resetSettings).then(() => {
       setToast({
         id: crypto.randomUUID(),
         title: "Success",
@@ -209,35 +454,214 @@ export default function AppointmentsSettingsPage() {
         </div>
       )}
 
+      <div className="flex items-center gap-2">
+        <Calendar className="h-8 w-8 text-primary" />
+        <h1 className="text-3xl font-bold">Appointments</h1>
+      </div>
+
+      {isSuperAdmin && (
+        <Card className="border border-border/50">
+          <CardContent className="pt-6">
+            <div className="max-w-sm">
+              <label className="text-sm font-medium block mb-2">Settings Branch</label>
+              <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBranches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Cross-Branch Temporary Staff Assignment</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!canManageAssignments ? (
+            <p className="text-sm text-muted-foreground">Only borrowing branch admins and super admins can manage temporary cross-branch assignments.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium block mb-2">Borrowed Staff</label>
+                  <Select value={assignmentStaffId} onValueChange={setAssignmentStaffId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select staff" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {staffCandidates.map((row) => (
+                        <SelectItem key={row.id} value={row.id}>
+                          {row.full_name} {row.branch_name ? `(${row.branch_name})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-2">Borrowing Branch</label>
+                  <Select value={assignmentHostBranchId} onValueChange={setAssignmentHostBranchId} disabled={!isSuperAdmin}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableBranches.map((row) => (
+                        <SelectItem key={row.id} value={row.id}>{row.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-2">Start Date</label>
+                  <DatePicker
+                    value={assignmentStartsDate}
+                    onChange={setAssignmentStartsDate}
+                    placeholder="Pick start date"
+                    captionLayout="dropdown"
+                  />
+                  <div className="mt-2">
+                    <TimePicker12Hour
+                      color="primary"
+                      label="Start Time"
+                      value={assignmentStartsTime}
+                      onChange={setAssignmentStartsTime}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-2">End Date</label>
+                  <DatePicker
+                    value={assignmentEndsDate}
+                    onChange={setAssignmentEndsDate}
+                    placeholder="Pick end date"
+                    captionLayout="dropdown"
+                  />
+                  <div className="mt-2">
+                    <TimePicker12Hour
+                      color="primary"
+                      label="End Time"
+                      value={assignmentEndsTime}
+                      onChange={setAssignmentEndsTime}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-2">Reason</label>
+                <Input
+                  value={assignmentReason}
+                  onChange={(e) => setAssignmentReason(e.target.value)}
+                  placeholder="Reason for temporary borrowing"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="button" onClick={createAssignment} disabled={assignmentSaving || assignmentLoading}>
+                  {assignmentSaving ? "Assigning..." : "Create Assignment"}
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Current Assignments</p>
+                <div className="flex items-center gap-2">
+                  <Select value={assignmentStatusFilter} onValueChange={(value) => setAssignmentStatusFilter(value as "all" | "active" | "upcoming" | "expired" | "cancelled") }>
+                    <SelectTrigger className="h-8 w-[160px] text-xs">
+                      <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="upcoming">Upcoming</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void loadAssignmentData()} disabled={assignmentLoading}>
+                    {assignmentLoading ? "Refreshing..." : "Refresh"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Staff</th>
+                      <th className="px-3 py-2 text-left">Route</th>
+                      <th className="px-3 py-2 text-left">Window</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Reason</th>
+                      <th className="px-3 py-2 text-left">Home Admin</th>
+                      <th className="px-3 py-2 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAssignments.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-5 text-center text-muted-foreground">No assignments found.</td>
+                      </tr>
+                    ) : (
+                      filteredAssignments.map((row) => {
+                        const status = row.computed_status || row.status
+                        return (
+                          <tr key={row.id} className="border-t">
+                            <td className="px-3 py-2">{row.staff_name || "Unknown"}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-col gap-1">
+                                <span>{row.home_branch_name || "Unknown"} -&gt; {row.host_branch_name || "Unknown"}</span>
+                                {row.home_branch_admin_name && (
+                                  <Badge variant="outline" className="w-fit text-[10px] font-medium">
+                                    Original admin: {row.home_branch_admin_name}
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">{toDatetimeLocalInput(row.starts_at).replace("T", " ")} to {toDatetimeLocalInput(row.ends_at).replace("T", " ")}</td>
+                            <td className="px-3 py-2 capitalize">{status}</td>
+                            <td className="px-3 py-2">{row.reason}</td>
+                            <td className="px-3 py-2">{row.home_branch_admin_name || "-"}</td>
+                            <td className="px-3 py-2 text-right">
+                              {status !== "cancelled" && status !== "expired" ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={assignmentCancellingId === row.id}
+                                  onClick={() => void cancelAssignment(row.id)}
+                                >
+                                  {assignmentCancellingId === row.id ? "Cancelling..." : "Cancel"}
+                                </Button>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Calendar className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">Appointment Settings</h1>
-          
-          {isSuperAdmin && branches && branches.length > 0 && (
-            <div className="ml-4">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-10 border-primary/30 bg-primary/5 min-w-[200px]">
-                    <Building2 className="mr-2 h-4 w-4 text-primary" />
-                    <span>
-                      {branches.find(b => b.id === selectedBranchId)?.name || "Select Branch"}
-                    </span>
-                    <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[200px]">
-                  <DropdownMenuRadioGroup value={selectedBranchId} onValueChange={setSelectedBranchId}>
-                    {branches.map((branch) => (
-                      <DropdownMenuRadioItem key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
+          <h2 className="text-2xl font-bold">Appointments</h2>
         </div>
 
         <div className="flex gap-2">

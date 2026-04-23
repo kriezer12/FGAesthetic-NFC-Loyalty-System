@@ -7,12 +7,15 @@
  * Positioned near the clicked card using Radix Popover.
  */
 
+import { useEffect, useState } from "react"
 import {
   Popover,
   PopoverContent,
   PopoverAnchor,
 } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { formatTime, minutesSinceMidnight } from "./calendar-utils"
 import {
@@ -23,6 +26,7 @@ import {
   CircleDot,
   Repeat,
   Home,
+  Building2,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -62,11 +66,48 @@ export function AppointmentDetailPopover({
   onOpenChange,
   anchorPosition,
 }: AppointmentDetailPopoverProps) {
-  if (!appointment || !anchorPosition) return null
+  const { userProfile } = useAuth()
+  const [externalBranchName, setExternalBranchName] = useState<string | null>(null)
 
-  const startLabel = formatTime(minutesSinceMidnight(appointment.start_time))
-  const endLabel = formatTime(minutesSinceMidnight(appointment.end_time))
-  const status = STATUS_CONFIG[appointment.status]
+  const hasRenderableTarget = Boolean(appointment && anchorPosition)
+
+  const startLabel = appointment ? formatTime(minutesSinceMidnight(appointment.start_time)) : ""
+  const endLabel = appointment ? formatTime(minutesSinceMidnight(appointment.end_time)) : ""
+  const status = appointment ? STATUS_CONFIG[appointment.status] : STATUS_CONFIG.scheduled
+  const isViewingBranchScopedAppt =
+    Boolean(appointment?.branch_id) &&
+    (userProfile?.role === "super_admin" ||
+      (userProfile?.role === "staff" &&
+        Boolean(userProfile.branch_id) &&
+        appointment?.branch_id !== userProfile.branch_id))
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadExternalBranchName = async () => {
+      setExternalBranchName(null)
+      if (!hasRenderableTarget || !isViewingBranchScopedAppt || !appointment?.branch_id) return
+
+      const { data, error } = await supabase
+        .from("branches")
+        .select("name")
+        .eq("id", appointment.branch_id)
+        .maybeSingle()
+
+      if (!mounted) return
+      if (!error && data?.name) {
+        setExternalBranchName(data.name)
+      }
+    }
+
+    void loadExternalBranchName()
+
+    return () => {
+      mounted = false
+    }
+  }, [appointment?.branch_id, isViewingBranchScopedAppt, hasRenderableTarget])
+
+  if (!hasRenderableTarget || !appointment || !anchorPosition) return null
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -107,6 +148,12 @@ export function AppointmentDetailPopover({
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[11px] font-medium">
                 <Home className="h-3 w-3" />
                 Home Service Appointment
+              </span>
+            )}
+            {isViewingBranchScopedAppt && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[11px] font-medium">
+                <Building2 className="h-3 w-3" />
+                {`Cross-Branch: ${externalBranchName || "Other Branch"}`}
               </span>
             )}
           </div>
