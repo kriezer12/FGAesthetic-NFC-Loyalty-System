@@ -89,3 +89,6 @@ wheels/
 *~
 *.swp
 *.sw?
+
+# Copilot local instructions artifact
+.github/copilot-instructions.md
