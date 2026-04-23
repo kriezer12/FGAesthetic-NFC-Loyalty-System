@@ -43,6 +43,7 @@ import { AppointmentCard } from "./appointment-card"
 import { AppointmentDetailPopover } from "./appointment-detail-popover"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -77,6 +78,7 @@ interface CalendarGridProps {
   staff: StaffMember[]
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
+  branchNameById?: Record<string, string>
   /** When true, columns stretch to fill the available width instead of fixed 200px */
   snapColumnsToFit?: boolean
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
@@ -99,6 +101,7 @@ export function CalendarGrid({
   staff,
   appointments,
   blockedTimes,
+  branchNameById,
   snapColumnsToFit = true,
   onAppointmentUpdate,
   onSlotClick,
@@ -108,6 +111,8 @@ export function CalendarGrid({
   checkedOutAppointmentIds,
 }: CalendarGridProps) {
   const navigate = useNavigate()
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragInfo | null>(null)
   const lastPreviewRef = useRef<DragPreview | null>(null)
@@ -178,6 +183,22 @@ export function CalendarGrid({
         const dy = e.clientY - (drag.startY - gridRef.current.scrollTop + gridRef.current.getBoundingClientRect().top)
         if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return
         drag.activated = true
+      }
+
+      const activeAppointment = appointments.find((a) => a.id === drag.appointmentId)
+      if (
+        isStaff &&
+        userProfile?.branch_id &&
+        activeAppointment?.branch_id &&
+        activeAppointment.branch_id !== userProfile.branch_id
+      ) {
+        setValidationError(
+          "Cannot modify appointment because its a cross-branch appointment. Contact branch admin of that branch.",
+        )
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
       }
 
       const gridRect = gridRef.current.getBoundingClientRect()
@@ -362,6 +383,7 @@ export function CalendarGrid({
   const handleCardPointerDown = useCallback(
     (e: React.PointerEvent, appointment: Appointment, staffIndex: number) => {
       if (!gridRef.current) return
+
       e.preventDefault()
       const gridRect = gridRef.current.getBoundingClientRect()
       const scrollTop = gridRef.current.scrollTop
@@ -409,7 +431,7 @@ export function CalendarGrid({
         staffIndex,
       }
     },
-    [clinicHours.open],
+    [clinicHours.open, isStaff, userProfile?.branch_id],
   )
 
   // ---- slot click (create) ----
@@ -604,6 +626,8 @@ export function CalendarGrid({
                     key={appt.id}
                     appointment={appt}
                     staffColor={s.color}
+                    staffBranchId={s.branch_id}
+                    branchNameById={branchNameById}
                     top={top}
                     height={height}
                     isDragging={isDragging}

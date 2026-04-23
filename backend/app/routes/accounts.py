@@ -10,6 +10,9 @@ from flask import Blueprint, request, jsonify
 from gotrue.types import AdminUserAttributes
 from app.services.supabase_client import get_supabase, get_supabase_admin
 import jwt
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from app.config import config
 import sys
 
@@ -594,6 +597,12 @@ def verify_password():
             user_id = get_user_from_token()
         except ValueError as e:
             return jsonify({'error': str(e)}), 401
+
+        auth_header = request.headers.get('Authorization', '')
+        token = ''
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() == 'bearer':
+            token = parts[1].strip()
         
         data = request.get_json()
         if not data or 'password' not in data:
@@ -603,44 +612,81 @@ def verify_password():
         if not password:
             return jsonify({'error': 'Password cannot be empty'}), 400
         
-        # Get the user email from user_profiles
+        # Get the user email from the access token first, then fall back to Auth admin.
         try:
-            supabase_admin = get_supabase_admin()
-            user_profile = supabase_admin.table('user_profiles').select('email').eq('id', user_id).single().execute()
-            
-            if not user_profile.data:
-                return jsonify({'error': 'User not found'}), 404
-            
-            email = user_profile.data.get('email')
+            email = None
+
+            if token:
+                try:
+                    decoded = jwt.decode(token, options={"verify_signature": False})
+                    email = decoded.get('email') or decoded.get('user_metadata', {}).get('email')
+                except Exception:
+                    email = None
+
+            if not email:
+                supabase_admin = get_supabase_admin()
+                user_response = supabase_admin.auth.admin.get_user_by_id(user_id)
+                auth_user = getattr(user_response, 'user', None)
+                if auth_user:
+                    email = getattr(auth_user, 'email', None)
+
+            if not email:
+                return jsonify({'error': 'User email not available for password verification'}), 404
         except Exception as e:
             return jsonify({'error': f'Failed to retrieve user email: {str(e)}'}), 500
         
-        # Attempt to verify password using the auth API
+        # Attempt to verify password using Supabase Auth directly.
         try:
-            # Use the existing anon client to verify credentials
-            supabase_verify = get_supabase()
-            
-            # Try to authenticate with the provided password
-            auth_response = supabase_verify.auth.sign_in_with_password(
-                credentials={
-                    'email': email,
-                    'password': password
-                }
+            auth_url = f"{config.SUPABASE_URL}/auth/v1/token?grant_type=password"
+            payload = json.dumps({
+                'email': email,
+                'password': password,
+            }).encode('utf-8')
+
+            request_obj = Request(
+                auth_url,
+                data=payload,
+                headers={
+                    'apikey': config.SUPABASE_KEY,
+                    'Authorization': f'Bearer {config.SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                method='POST',
             )
-            
-            # If we get here without exception and have a session, password is correct
-            if auth_response and auth_response.session:
-                return jsonify({
-                    'success': True,
-                    'verified': True
-                }), 200
-            else:
+
+            with urlopen(request_obj, timeout=15) as response:
+                if response.status == 200:
+                    return jsonify({
+                        'success': True,
+                        'verified': True
+                    }), 200
+
                 return jsonify({
                     'success': False,
                     'verified': False,
                     'error': 'Password verification failed'
-                }), 401
-                
+                }), 200
+
+        except HTTPError as auth_error:
+            if auth_error.code in (400, 401):
+                return jsonify({
+                    'success': False,
+                    'verified': False,
+                    'error': 'Incorrect password'
+                }), 200
+
+            return jsonify({
+                'success': False,
+                'verified': False,
+                'error': f'Password verification failed ({auth_error.code})'
+            }), 500
+
+        except URLError as auth_error:
+            return jsonify({
+                'success': False,
+                'verified': False,
+                'error': f'Password verification failed: {auth_error.reason}'
+            }), 500
         except Exception as auth_error:
             # Authentication failed - password is incorrect
             error_message = str(auth_error).lower()
@@ -649,13 +695,13 @@ def verify_password():
                     'success': False,
                     'verified': False,
                     'error': 'Incorrect password'
-                }), 401
+                }), 200
             else:
                 return jsonify({
                     'success': False,
                     'verified': False,
                     'error': 'Password verification failed'
-                }), 401
+                }), 500
     
     except Exception as e:
         return jsonify({

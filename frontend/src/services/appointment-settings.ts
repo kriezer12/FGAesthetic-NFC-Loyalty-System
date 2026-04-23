@@ -33,33 +33,53 @@ const DEFAULT_SETTINGS: AppointmentSettings = {
 // Fallback to localStorage key for settings
 const LOCAL_STORAGE_KEY = 'fg_appointment_settings'
 
+function sanitizeBusinessId(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const value = raw.trim()
+  if (!value) return null
+
+  // Reject obvious URL/corrupted values that break PostgREST filter parsing.
+  if (value.includes('http://') || value.includes('https://') || value.includes('/rest/v1/')) {
+    return null
+  }
+
+  // Keep a conservative allowlist for stable query parameters.
+  if (!/^[a-zA-Z0-9._-]{1,80}$/.test(value)) {
+    return null
+  }
+
+  return value
+}
+
 /**
- * Get branch ID - try to get from auth or use a default branch ID
+ * Resolve a branch/business context ID used by appointment settings.
  */
-async function getBranchId(): Promise<string> {
+async function getContextBranchId(): Promise<string | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser()
-    if (user?.user_metadata?.branch_id) {
-      return user.user_metadata.branch_id
+    const authBranchId = sanitizeBusinessId(
+      user?.user_metadata?.branch_id ?? user?.user_metadata?.business_id,
+    )
+    if (authBranchId) {
+      return authBranchId
     }
-    
-    // Check user_profiles table if not in metadata
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('branch_id')
-      .eq('id', user?.id)
-      .single()
-    
-    if (profile?.branch_id) return profile.branch_id
   } catch (error) {
-    console.error('Error getting branch ID:', error)
+    console.error('Error getting context branch ID from auth:', error)
   }
   
   // Fallback to localStorage
-  const stored = localStorage.getItem('branch_id')
-  if (stored) return stored
+  const stored = localStorage.getItem('branch_id') || localStorage.getItem('business_id')
+  const storedBranchId = sanitizeBusinessId(stored)
+  if (storedBranchId) return storedBranchId
+
+  // Clean up invalid/corrupted local value to avoid repeated bad requests.
+  if (stored) {
+    localStorage.removeItem('branch_id')
+    localStorage.removeItem('business_id')
+  }
   
-  return 'default-branch-id'
+  // No valid business context available.
+  return null
 }
 
 /**
@@ -67,7 +87,15 @@ async function getBranchId(): Promise<string> {
  */
 export async function fetchAppointmentSettings(branchId?: string): Promise<AppointmentSettings> {
   try {
-    const targetBranchId = branchId || await getBranchId()
+    const targetBranchId = branchId || await getContextBranchId()
+
+    if (!targetBranchId) {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
+      if (stored) {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+      }
+      return DEFAULT_SETTINGS
+    }
     
     const { data, error } = await supabase
       .from('appointment_settings')
@@ -79,7 +107,7 @@ export async function fetchAppointmentSettings(branchId?: string): Promise<Appoi
     if (error && error.code !== 'PGRST116') {
       console.warn('Could not fetch from database, using defaults:', error)
       // Try localStorage as fallback
-      const stored = localStorage.getItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`)
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
       if (stored) {
         return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
       }
@@ -107,7 +135,7 @@ export async function fetchAppointmentSettings(branchId?: string): Promise<Appoi
     }
 
     // If no record found, try localStorage fallback
-    const stored = localStorage.getItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`)
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
     if (stored) {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
     }
@@ -115,6 +143,11 @@ export async function fetchAppointmentSettings(branchId?: string): Promise<Appoi
     return DEFAULT_SETTINGS
   } catch (error) {
     console.error('Error fetching appointment settings:', error)
+    // Fallback to localStorage
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
+    if (stored) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
+    }
     return DEFAULT_SETTINGS
   }
 }
@@ -124,7 +157,12 @@ export async function fetchAppointmentSettings(branchId?: string): Promise<Appoi
  */
 export async function saveAppointmentSettings(settings: AppointmentSettings): Promise<{ success: boolean; error?: string }> {
   try {
-    const targetBranchId = settings.branch_id || await getBranchId()
+    const targetBranchId = settings.branch_id || await getContextBranchId()
+
+    if (!targetBranchId) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
+      return { success: true, error: 'Saved locally (no business context)' }
+    }
 
     // Prepare data with snake_case for database
     const dbData = {
@@ -150,7 +188,7 @@ export async function saveAppointmentSettings(settings: AppointmentSettings): Pr
         .update(dbData)
         .eq('id', settings.id)
     } else {
-      // Upsert on branch_id
+      // Upsert on branch_id - create if doesn't exist, update if it does
       result = await supabase
         .from('appointment_settings')
         .upsert([dbData], { onConflict: 'branch_id' })
@@ -158,16 +196,20 @@ export async function saveAppointmentSettings(settings: AppointmentSettings): Pr
 
     if (result.error) {
       console.error('Database error:', result.error)
-      localStorage.setItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`, JSON.stringify(settings))
+      // Fallback to localStorage
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
       return { success: true, error: 'Saved locally (database unavailable)' }
     }
 
-    localStorage.setItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`, JSON.stringify(settings))
+    // Also save to localStorage as backup
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
 
     return { success: true }
   } catch (error) {
     console.error('Error saving appointment settings:', error)
-    return { success: false, error: String(error) }
+    // Fallback to localStorage
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings))
+    return { success: true, error: 'Saved locally (database error)' }
   }
 }
 
@@ -176,7 +218,12 @@ export async function saveAppointmentSettings(settings: AppointmentSettings): Pr
  */
 export async function deleteAppointmentSettings(branchId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const targetBranchId = branchId || await getBranchId()
+    const targetBranchId = branchId || await getContextBranchId()
+
+    if (!targetBranchId) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY)
+      return { success: true }
+    }
 
     const { error } = await supabase
       .from('appointment_settings')
@@ -188,7 +235,7 @@ export async function deleteAppointmentSettings(branchId?: string): Promise<{ su
     }
 
     // Also clear localStorage
-    localStorage.removeItem(`${LOCAL_STORAGE_KEY}_${targetBranchId}`)
+    localStorage.removeItem(LOCAL_STORAGE_KEY)
 
     return { success: true }
   } catch (error) {

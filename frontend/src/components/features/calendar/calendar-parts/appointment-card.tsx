@@ -32,8 +32,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { useState } from "react"
-import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X, ShoppingCart } from "lucide-react"
+import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X, ShoppingCart, User, Building2 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -54,6 +55,8 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
 interface AppointmentCardProps {
   appointment: Appointment
   staffColor: string
+  staffBranchId?: string | null
+  branchNameById?: Record<string, string>
   top: number
   height: number
   isDragging: boolean
@@ -72,6 +75,8 @@ interface AppointmentCardProps {
 export function AppointmentCard({
   appointment,
   staffColor,
+  staffBranchId,
+  branchNameById,
   top,
   height,
   isDragging,
@@ -87,6 +92,8 @@ export function AppointmentCard({
   const endLabel   = formatTime(minutesSinceMidnight(appointment.end_time))
 
   const renderHeight = Math.max(height - 2, 22)
+  const appointmentBranchName = appointment.branch_id ? branchNameById?.[appointment.branch_id] : null
+  const isCrossBranch = Boolean(appointment.branch_id && staffBranchId && appointment.branch_id !== staffBranchId)
 
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false)
   const [cancelAlertOpen, setCancelAlertOpen] = useState(false)
@@ -131,7 +138,7 @@ export function AppointmentCard({
             </button>
             <AlertDialogCancel>Keep appointment</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => onStatusChange?.("cancelled")}
+              onClick={onDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Yes, cancel
@@ -215,10 +222,24 @@ export function AppointmentCard({
                   <Repeat className="ml-1 h-3 w-3 text-muted-foreground" />
                 )}
               </p>
-              {renderHeight > 40 && appointment.customer_name && (
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {appointment.customer_name}
-                </p>
+              {renderHeight > 36 && (appointment.customer_name || appointment.branch_id) && (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {appointment.customer_name && (
+                    <Badge variant="secondary" className="h-5 gap-1 px-2 py-0 text-[10px] font-medium">
+                      <User className="h-3 w-3" />
+                      <span className="truncate max-w-[8rem]">{appointment.customer_name}</span>
+                    </Badge>
+                  )}
+                  {appointment.branch_id && (
+                    <Badge variant={isCrossBranch ? "warning" : "outline"} className="h-5 gap-1 px-2 py-0 text-[10px] font-medium">
+                      <Building2 className="h-3 w-3" />
+                      <span className="truncate max-w-[8rem]">
+                        {isCrossBranch ? "Cross-Branch" : "Branch"}
+                        {appointmentBranchName ? `: ${appointmentBranchName}` : ""}
+                      </span>
+                    </Badge>
+                  )}
+                </div>
               )}
               {renderHeight > 56 && (
                 <p className="text-[10px] tabular-nums text-muted-foreground">
@@ -304,8 +325,7 @@ export function AppointmentCard({
         )}
         {canDeleteAppointment && (
           <ContextMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
+            onClick={() => {
               if (appointment.recurrence_group_id) {
                 // Recurring — go straight to the recurrence scope dialog
                 onDelete()

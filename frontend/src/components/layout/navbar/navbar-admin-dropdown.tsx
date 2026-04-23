@@ -54,7 +54,7 @@ const adminCategories: AdminCategory[] = [
     title: "Business",
     links: [
       { title: "Reports", url: "/dashboard/reports", icon: BarChart3 },
-      { title: "Appointment Settings", url: "/dashboard/appointments-settings", icon: Calendar },
+      { title: "Appointments", url: "/dashboard/appointments-settings", icon: Calendar },
     ],
   },
 ]
