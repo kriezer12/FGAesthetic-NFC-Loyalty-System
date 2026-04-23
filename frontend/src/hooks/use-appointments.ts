@@ -54,6 +54,8 @@ export function useAppointments(): UseAppointmentsReturn {
       // Filter by staff_id if the current user is a staff member
       if (isStaff && userProfile?.id) {
         query = query.eq('staff_id', userProfile.id)
+      } else if (userProfile?.role === "branch_admin" && userProfile?.branch_id) {
+        query = query.eq('branch_id', userProfile.branch_id)
       }
 
       const { data, error: queryError } = await query
@@ -69,7 +71,7 @@ export function useAppointments(): UseAppointmentsReturn {
     } finally {
       setLoading(false)
     }
-  }, [isStaff, userProfile?.id])
+  }, [isStaff, userProfile?.branch_id, userProfile?.id, userProfile?.role])
 
   const addAppointment = useCallback(async (appt: Appointment) => {
     // Role-based access control: staff and admins can create appointments
@@ -81,27 +83,37 @@ export function useAppointments(): UseAppointmentsReturn {
     }
 
     try {
+      const payload: Appointment = {
+        ...appt,
+        branch_id: appt.branch_id || userProfile?.branch_id || undefined,
+      }
+
+      if (!payload.branch_id) {
+        throw new Error("Unable to save appointment: missing branch ownership.")
+      }
+
       const { error: insertError } = await supabase
         .from("appointments")
-        .insert([appt])
+        .insert([payload])
 
       if (insertError) throw insertError
 
       // Update local state (realtime will also push, but this is instant)
-      setAppointments((prev) => [...prev, appt])
+      setAppointments((prev) => [...prev, payload])
 
       await logUserAction({
         actionType: "appointed_schedule",
         entityType: "appointment",
-        entityId: appt.id,
-        entityName: appt.customer_name || "Appointment",
-        changes: { before: null, after: appt },
+        entityId: payload.id,
+        entityName: payload.customer_name || "Appointment",
+        changes: { before: null, after: payload },
         metadata: {
           operation: "create",
-          staff_id: appt.staff_id,
-          staff_name: appt.staff_name,
-          start_time: appt.start_time,
-          end_time: appt.end_time,
+          staff_id: payload.staff_id,
+          staff_name: payload.staff_name,
+          start_time: payload.start_time,
+          end_time: payload.end_time,
+          branch_id: payload.branch_id,
         },
       })
     } catch (err) {
@@ -109,7 +121,7 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to add appointment")
       throw err
     }
-  }, [canCreateOrEdit])
+  }, [canCreateOrEdit, userProfile?.branch_id])
 
   const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>) => {
     // Role-based access control: staff and admins can edit appointments
@@ -123,16 +135,39 @@ export function useAppointments(): UseAppointmentsReturn {
     try {
       const existing = appointments.find((a) => a.id === id) || null
 
+      if (
+        isStaff &&
+        (
+          !existing?.branch_id ||
+          !userProfile?.branch_id ||
+          existing.branch_id !== userProfile.branch_id
+        )
+      ) {
+        throw new Error("You can only modify appointments that belong to your home branch.")
+      }
+
+      // Keep branch ownership immutable once set.
+      const sanitizedUpdates: Partial<Appointment> = { ...updates }
+      if (existing?.branch_id) {
+        sanitizedUpdates.branch_id = existing.branch_id
+      } else {
+        sanitizedUpdates.branch_id = updates.branch_id || userProfile?.branch_id || undefined
+      }
+
+      if (!sanitizedUpdates.branch_id) {
+        throw new Error("Unable to update appointment: missing branch ownership.")
+      }
+
       const { error: updateError } = await supabase
         .from("appointments")
-        .update(updates)
+        .update(sanitizedUpdates)
         .eq("id", id)
 
       if (updateError) throw updateError
 
       // Update local state
       setAppointments((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, ...updates } : a))
+        prev.map((a) => (a.id === id ? { ...a, ...sanitizedUpdates } : a))
       )
 
       await logUserAction({
@@ -140,10 +175,10 @@ export function useAppointments(): UseAppointmentsReturn {
         entityType: "appointment",
         entityId: id,
         entityName: existing?.customer_name || "Appointment",
-        changes: { before: existing, after: existing ? { ...existing, ...updates } : updates },
+        changes: { before: existing, after: existing ? { ...existing, ...sanitizedUpdates } : sanitizedUpdates },
         metadata: {
           operation: "update",
-          updated_fields: Object.keys(updates),
+          updated_fields: Object.keys(sanitizedUpdates),
         },
       })
     } catch (err) {
@@ -151,7 +186,7 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to update appointment")
       throw err
     }
-  }, [appointments, canCreateOrEdit])
+  }, [appointments, canCreateOrEdit, isStaff, userProfile?.branch_id])
 
   const deleteAppointment = useCallback(async (id: string) => {
     // Role-based access control: staff and admins can delete appointments
@@ -164,6 +199,17 @@ export function useAppointments(): UseAppointmentsReturn {
 
     try {
       const existing = appointments.find((a) => a.id === id) || null
+
+      if (
+        isStaff &&
+        (
+          !existing?.branch_id ||
+          !userProfile?.branch_id ||
+          existing.branch_id !== userProfile.branch_id
+        )
+      ) {
+        throw new Error("You can only delete appointments that belong to your home branch.")
+      }
 
       const { error: deleteError } = await supabase
         .from("appointments")
@@ -194,7 +240,7 @@ export function useAppointments(): UseAppointmentsReturn {
       setError(err instanceof Error ? err.message : "Failed to delete appointment")
       throw err
     }
-  }, [appointments, canDelete])
+  }, [appointments, canDelete, isStaff, userProfile?.branch_id])
 
   useEffect(() => {
     // Return early if auth state is still loading
@@ -217,6 +263,7 @@ export function useAppointments(): UseAppointmentsReturn {
           if (payload.eventType === "INSERT") {
             const newAppt = payload.new as Appointment
             if (isStaff && newAppt.staff_id !== userProfile?.id) return;
+            if (userProfile?.role === "branch_admin" && userProfile?.branch_id && newAppt.branch_id !== userProfile.branch_id) return;
             
             setAppointments((prev) => {
               // Avoid duplicates (we also update locally on insert)
@@ -225,7 +272,14 @@ export function useAppointments(): UseAppointmentsReturn {
             })
           } else if (payload.eventType === "UPDATE") {
             const updated = payload.new as Appointment
-            if (isStaff && updated.staff_id !== userProfile?.id) return;
+            if (isStaff && updated.staff_id !== userProfile?.id) {
+              setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
+              return;
+            }
+            if (userProfile?.role === "branch_admin" && userProfile?.branch_id && updated.branch_id !== userProfile.branch_id) {
+              setAppointments((prev) => prev.filter((a) => a.id !== updated.id))
+              return;
+            }
             
             setAppointments((prev) =>
               prev.map((a) => (a.id === updated.id ? updated : a))
@@ -245,7 +299,7 @@ export function useAppointments(): UseAppointmentsReturn {
         supabase.removeChannel(channelRef.current)
       }
     }
-  }, [authLoading, fetchAppointments, isStaff, userProfile?.id])
+  }, [authLoading, fetchAppointments, isStaff, userProfile?.branch_id, userProfile?.id, userProfile?.role])
 
   return {
     appointments,
