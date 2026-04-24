@@ -11,6 +11,7 @@
 import type { Appointment, AppointmentStatus } from "@/types/appointment"
 import { minutesSinceMidnight, formatTime } from "./calendar-utils"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -31,8 +32,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { useState } from "react"
-import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X } from "lucide-react"
+import { Pencil, Trash2, Repeat, TriangleAlert, Home, CheckCircle, Play, Check, X, ShoppingCart, User, Building2 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // Status dot colours
@@ -53,6 +55,8 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
 interface AppointmentCardProps {
   appointment: Appointment
   staffColor: string
+  staffBranchId?: string | null
+  branchNameById?: Record<string, string>
   top: number
   height: number
   isDragging: boolean
@@ -64,11 +68,15 @@ interface AppointmentCardProps {
   onStatusChange?: (status: AppointmentStatus) => void
   /** Navigate to customer profile */
   onGoToProfile?: () => void
+  /** Whether this appointment has already been checked out/transacted */
+  isCheckedOut?: boolean
 }
 
 export function AppointmentCard({
   appointment,
   staffColor,
+  staffBranchId,
+  branchNameById,
   top,
   height,
   isDragging,
@@ -78,14 +86,23 @@ export function AppointmentCard({
   onDelete,
   onStatusChange,
   onGoToProfile,
+  isCheckedOut = false,
 }: AppointmentCardProps) {
   const startLabel = formatTime(minutesSinceMidnight(appointment.start_time))
   const endLabel   = formatTime(minutesSinceMidnight(appointment.end_time))
 
   const renderHeight = Math.max(height - 2, 22)
+  const appointmentBranchName = appointment.branch_id ? branchNameById?.[appointment.branch_id] : null
+  const isCrossBranch = Boolean(appointment.branch_id && staffBranchId && appointment.branch_id !== staffBranchId)
 
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false)
   const [cancelAlertOpen, setCancelAlertOpen] = useState(false)
+
+  const { hasRole } = useAuth()
+  const canDeleteAppointment = hasRole(['super_admin', 'branch_admin'])
+  const isAdmin = hasRole(['super_admin', 'branch_admin'])
+  const isStaff = hasRole(['staff'])
+  const canEdit = isStaff || isAdmin
 
   return (
     <>
@@ -121,7 +138,7 @@ export function AppointmentCard({
             </button>
             <AlertDialogCancel>Keep appointment</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => onStatusChange?.("cancelled")}
+              onClick={onDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Yes, cancel
@@ -205,10 +222,24 @@ export function AppointmentCard({
                   <Repeat className="ml-1 h-3 w-3 text-muted-foreground" />
                 )}
               </p>
-              {renderHeight > 40 && appointment.customer_name && (
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {appointment.customer_name}
-                </p>
+              {renderHeight > 36 && (appointment.customer_name || appointment.branch_id) && (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {appointment.customer_name && (
+                    <Badge variant="secondary" className="h-5 gap-1 px-2 py-0 text-[10px] font-medium">
+                      <User className="h-3 w-3" />
+                      <span className="truncate max-w-[8rem]">{appointment.customer_name}</span>
+                    </Badge>
+                  )}
+                  {appointment.branch_id && (
+                    <Badge variant={isCrossBranch ? "warning" : "outline"} className="h-5 gap-1 px-2 py-0 text-[10px] font-medium">
+                      <Building2 className="h-3 w-3" />
+                      <span className="truncate max-w-[8rem]">
+                        {isCrossBranch ? "Cross-Branch" : "Branch"}
+                        {appointmentBranchName ? `: ${appointmentBranchName}` : ""}
+                      </span>
+                    </Badge>
+                  )}
+                </div>
               )}
               {renderHeight > 56 && (
                 <p className="text-[10px] tabular-nums text-muted-foreground">
@@ -265,26 +296,49 @@ export function AppointmentCard({
             Go to profile
           </ContextMenuItem>
         )}
-        <ContextMenuItem onClick={onEdit} className="gap-2">
-          <Pencil className="h-4 w-4" />
-          Edit Appointment
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={(e) => {
-            e.preventDefault()
-            if (appointment.recurrence_group_id) {
-              // Recurring — go straight to the recurrence scope dialog
-              onDelete()
-            } else {
-              setDeleteAlertOpen(true)
-            }
-          }}
-          className="gap-2 text-destructive focus:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete Appointment
-        </ContextMenuItem>
+        {canEdit && (
+          <>
+            <ContextMenuItem onClick={onEdit} className="gap-2">
+              <Pencil className="h-4 w-4" />
+              Edit Appointment
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {!isCheckedOut && (
+          <>
+            <ContextMenuItem onClick={() => window.location.href = `/dashboard/checkout?appointmentId=${appointment.id}`} className="gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Proceed to Checkout
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {isCheckedOut && (
+          <>
+            <ContextMenuItem disabled className="gap-2 text-muted-foreground">
+              <ShoppingCart className="h-4 w-4" />
+              Already checked out
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {canDeleteAppointment && (
+          <ContextMenuItem
+            onClick={() => {
+              if (appointment.recurrence_group_id) {
+                // Recurring — go straight to the recurrence scope dialog
+                onDelete()
+              } else {
+                setDeleteAlertOpen(true)
+              }
+            }}
+            className="gap-2 text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Appointment
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
     </>

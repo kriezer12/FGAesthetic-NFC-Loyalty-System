@@ -32,7 +32,7 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
     { value: "staff", label: "Staff" },
     { value: "branch_admin", label: "Branch Admin" },
     { value: "super_admin", label: "Super Admin" },
-  ]
+  ].filter(r => !r.value.toLowerCase().includes('customer'))
   const roleOptions = isSuper ? allRoleOptions : allRoleOptions.filter(r => r.value === "staff")
 
   const { branches } = useBranches()
@@ -59,7 +59,7 @@ export function CreateAccountForm({ onSuccess }: CreateAccountFormProps) {
       } else if (!isSuper && userProfile?.branch_id) {
         body.branch_id = userProfile.branch_id
       }
-      const response = await apiCall("/api/accounts/create", {
+      const response = await apiCall("/accounts/create", {
         method: "POST",
         body: JSON.stringify(body),
         authToken: session?.access_token,

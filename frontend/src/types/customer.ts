@@ -1,6 +1,6 @@
 export interface Customer {
   id: string
-  nfc_uid: string
+  nfc_uid?: string | null
 
   points: number
   visits: number

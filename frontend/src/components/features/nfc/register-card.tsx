@@ -16,7 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Customer } from "@/types/customer"
 
 interface RegisterCardProps {
-  nfcUid: string
+  nfcUid?: string
   onSuccess: (customer: Customer) => void
   onCancel: () => void
 }
@@ -82,7 +82,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
       const { data, error: insertError } = await supabase
         .from("customers")
         .insert({
-          nfc_uid: nfcUid,
+          nfc_uid: nfcUid || null,
           first_name: formData.first_name.trim(),
           middle_name: formData.middle_initial.trim() || null,
           last_name: formData.last_name.trim(),
@@ -132,7 +132,7 @@ export function RegisterCard({ nfcUid, onSuccess, onCancel }: RegisterCardProps)
           before: null,
           after: {
             id: (data as Customer).id,
-            nfc_uid: (data as Customer).nfc_uid,
+            nfc_uid: (data as Customer).nfc_uid || null,
             name: (data as Customer).name,
             email: (data as Customer).email,
             phone: (data as Customer).phone,

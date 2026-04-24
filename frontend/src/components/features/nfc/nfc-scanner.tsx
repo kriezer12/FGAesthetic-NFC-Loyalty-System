@@ -15,10 +15,11 @@ import type { Customer } from "@/types/customer"
 interface NFCScannerProps {
   onCustomerFound: (customer: Customer) => void
   onNewCard: (nfcUid: string) => void
+  onSkipScan?: () => void
   mode?: "scan" | "register"
 }
 
-export function NFCScanner({ onCustomerFound, onNewCard, mode = "scan" }: NFCScannerProps) {
+export function NFCScanner({ onCustomerFound, onNewCard, onSkipScan, mode = "scan" }: NFCScannerProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [lastScanned, setLastScanned] = useState<string | null>(null)
   const [isValidInput, setIsValidInput] = useState(true)
@@ -26,7 +27,7 @@ export function NFCScanner({ onCustomerFound, onNewCard, mode = "scan" }: NFCSca
   const inputRef = useRef<HTMLInputElement>(null)
   const keystrokeTimestamps = useRef<number[]>([])  
   const inputStartTime = useRef<number | null>(null)
-  const warningTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Keep input focused for NFC scanning
   useEffect(() => {
@@ -230,6 +231,14 @@ export function NFCScanner({ onCustomerFound, onNewCard, mode = "scan" }: NFCSca
             showWarning={showWarning}
             onKeyDown={handleKeyDown}
           />
+          {mode === "register" && onSkipScan && (
+            <button
+              onClick={onSkipScan}
+              className="mt-2 text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
+            >
+              Don't have a card? Register without one
+            </button>
+          )}
         </div>
 
         {/* Bottom accent */}

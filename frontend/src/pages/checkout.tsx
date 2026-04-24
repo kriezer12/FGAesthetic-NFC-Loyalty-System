@@ -191,6 +191,7 @@ const defaultAdjustments: AdjustmentOption[] = [
 ]
 
 const localAdjustmentStorageKey = "fg_pos_adjustments"
+const walkInCustomerNotePrefix = "Walk-in Customer:"
 
 export default function CheckoutPage() {
   const { userProfile } = useAuth()
@@ -204,6 +205,8 @@ export default function CheckoutPage() {
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState("")
   const [selectedCustomerId, setSelectedCustomerId] = useState("")
+  const [walkInCustomerName, setWalkInCustomerName] = useState("")
+  const [anonymousCustomer, setAnonymousCustomer] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState("")
   const [productQty, setProductQty] = useState("1")
   const [paymentMethod, setPaymentMethod] = useState("cash")
@@ -361,6 +364,17 @@ export default function CheckoutPage() {
     }
   }, [userProfile?.branch_id])
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const initialApptId = params.get("appointmentId")
+    if (initialApptId && appointments.length > 0 && services.length > 0 && selectedAppointmentId === "") {
+      // Clear the query string to avoid re-triggering if user clears cart
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+      addAppointmentServicesToCart(initialApptId)
+    }
+  }, [location.search, appointments, services, selectedAppointmentId])
+
   const billableAppointments = useMemo(() => {
     const sorted = [...appointments].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
     const groupHasBilled = new Map<string, boolean>()
@@ -489,7 +503,11 @@ export default function CheckoutPage() {
     const appointment = appointments.find((a) => a.id === appointmentId)
     if (!appointment) return
 
-    if (appointment.customer_id) setSelectedCustomerId(appointment.customer_id)
+    if (appointment.customer_id) {
+      setSelectedCustomerId(appointment.customer_id)
+      setWalkInCustomerName("")
+      setAnonymousCustomer(false)
+    }
 
     const ids = appointment.service_ids || []
     const nextItems: CartItem[] = ids
@@ -508,6 +526,56 @@ export default function CheckoutPage() {
 
     setCartItems(nextItems)
     setIsCheckoutStage(false)
+  }
+
+  const setExistingCustomer = (customerId: string) => {
+    setSelectedCustomerId(customerId)
+    if (customerId) {
+      setWalkInCustomerName("")
+      setAnonymousCustomer(false)
+    }
+  }
+
+  const setManualWalkInName = (name: string) => {
+    setWalkInCustomerName(name)
+    setAnonymousCustomer(false)
+    if (name.trim()) {
+      setSelectedCustomerId("")
+    }
+  }
+
+  const useAnonymousCustomer = () => {
+    setAnonymousCustomer(true)
+    setSelectedCustomerId("")
+    setWalkInCustomerName("")
+  }
+
+  const getWalkInLabelFromNotes = (notes?: string | null) => {
+    if (!notes) return ""
+    const match = notes.match(new RegExp(`${walkInCustomerNotePrefix}\\s*(.*)`, "i"))
+    return match?.[1]?.trim() || ""
+  }
+
+  const resolveCheckoutCustomerName = () => {
+    if (selectedCustomerId) {
+      return customers.find((customer) => customer.id === selectedCustomerId)?.name || "Walk-in"
+    }
+
+    if (anonymousCustomer) return "Anonymous"
+
+    const typedName = walkInCustomerName.trim()
+    return typedName || "Walk-in"
+  }
+
+  const resolveTransactionCustomerName = (tx: LogTx) => {
+    if (tx.customer_id) {
+      return logCustomerMap[tx.customer_id] || "Walk-in"
+    }
+
+    const notedLabel = getWalkInLabelFromNotes(tx.notes)
+    if (notedLabel) return notedLabel
+
+    return "Walk-in"
   }
 
   const addProductToCart = () => {
@@ -611,7 +679,7 @@ export default function CheckoutPage() {
 
   const parsePaymentReference = (notes?: string | null) => {
     if (!notes) return ""
-    const match = notes.match(/Payment Reference \([^)]*\):\s*(.*)$/i)
+    const match = notes.match(/Payment Reference \([^)]*\):\s*(.*)/i)
     return match?.[1]?.trim() || ""
   }
 
@@ -631,7 +699,7 @@ export default function CheckoutPage() {
       posSerialNo: businessSettings?.pos_serial_no || undefined,
       transactionDate: new Date(tx.created_at).toLocaleString(),
       receiptNo: tx.receipt_number,
-      customerName: tx.customer_id ? logCustomerMap[tx.customer_id] : undefined,
+      customerName: resolveTransactionCustomerName(tx) || undefined,
       branchName,
       items: (logItemsByTx[tx.id] || []).map((item) => ({
         description: item.description,
@@ -1225,6 +1293,11 @@ export default function CheckoutPage() {
       return
     }
 
+    if (paid < totalDue) {
+      setErrorMessage(`Insufficient payment. Amount must be at least ₱${totalDue.toFixed(2)}.`)
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -1237,7 +1310,10 @@ export default function CheckoutPage() {
         appointment_id: selectedAppointmentId || null,
         customer_id: selectedCustomerId || null,
         payment_method: paymentMethod,
-        notes: paymentReference.trim() ? `Payment Reference (${paymentMethodLabel}): ${paymentReference.trim()}` : null,
+        notes: [
+          paymentReference.trim() ? `Payment Reference (${paymentMethodLabel}): ${paymentReference.trim()}` : null,
+          !selectedCustomerId ? `${walkInCustomerNotePrefix} ${resolveCheckoutCustomerName()}` : null,
+        ].filter(Boolean).join("\n") || null,
         subtotal,
         discount_amount: discount,
         amount_paid: paid,
@@ -1282,7 +1358,7 @@ export default function CheckoutPage() {
         paymentReference: paymentReference.trim(),
         adjustmentLabel: selectedAdjustment ? `${selectedAdjustment.name} (${selectedAdjustment.percent}%)` : "",
         seniorPwdDiscount: selectedAdjustment && ["senior", "pwd"].includes(selectedAdjustment.id) ? discount : 0,
-        customerName: selectedCustomerId ? customers.find(c => c.id === selectedCustomerId)?.name || "Walk-in" : "Walk-in",
+        customerName: resolveCheckoutCustomerName(),
         branchAddress: branchMeta?.address || businessSettings?.address || "NOT SET",
         branchName: branchMeta?.name || "N/A",
         businessSettings,
@@ -1304,6 +1380,8 @@ export default function CheckoutPage() {
       setCartItems([])
       setSelectedAppointmentId("")
       setSelectedCustomerId("")
+      setWalkInCustomerName("")
+      setAnonymousCustomer(false)
       setSelectedProductId("")
       setAmountPaidInput("0")
       setPaymentMethod("cash")
@@ -1356,22 +1434,26 @@ export default function CheckoutPage() {
               <Box className="mr-2 h-4 w-4" />
               Inventory
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/pos-settings")}> 
-              <Settings2 className="mr-2 h-4 w-4" />
-              Settings
-            </Button>
-            <Button
-              type="button"
-              variant={activeView === "logs" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setActiveView("logs")
-                void loadLogs()
-              }}
-            >
-              <Clock3 className="mr-2 h-4 w-4" />
-              Logs
-            </Button>
+            {userProfile?.role !== "staff" && (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/pos-settings")}> 
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeView === "logs" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setActiveView("logs")
+                    void loadLogs()
+                  }}
+                >
+                  <Clock3 className="mr-2 h-4 w-4" />
+                  Logs
+                </Button>
+              </>
+            )}
             <Button
               type="button"
               variant={activeView === "checkout" ? "default" : "outline"}
@@ -1410,12 +1492,36 @@ export default function CheckoutPage() {
               <Combobox
                 options={customerOptions}
                 value={selectedCustomerId}
-                onValueChange={setSelectedCustomerId}
+                onValueChange={setExistingCustomer}
                 placeholder="Walk-in checkout or select profile"
                 emptyMessage="No customers found"
               />
+              <Input
+                value={walkInCustomerName}
+                onChange={(e) => setManualWalkInName(e.target.value)}
+                placeholder="Type walk-in customer name (optional)"
+              />
+              <div className="flex items-center gap-2">
+                <Button type="button" variant={anonymousCustomer ? "default" : "outline"} size="sm" onClick={useAnonymousCustomer}>
+                  Use None / Anonymous
+                </Button>
+                {(selectedCustomerId || walkInCustomerName.trim() || anonymousCustomer) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCustomerId("")
+                      setWalkInCustomerName("")
+                      setAnonymousCustomer(false)
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Automatically selected if loading from an appointment. Use for pure retail walk-in checkouts.
+                Select an existing profile, type a walk-in name, or choose anonymous. Checkout is allowed without a linked customer profile.
               </p>
             </div>
 
@@ -1480,9 +1586,11 @@ export default function CheckoutPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-muted-foreground">Adjustments (Discounts / Promos)</p>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => navigate("/dashboard/pos-settings")}>
-                      Configure in Settings
-                    </Button>
+                    {userProfile?.role !== "staff" && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => navigate("/dashboard/pos-settings")}>
+                        Configure in Settings
+                      </Button>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
@@ -1583,7 +1691,7 @@ export default function CheckoutPage() {
 
             {isCheckoutStage && (
               <div className="grid grid-cols-1 gap-2 pt-1">
-                <Button type="button" disabled={isLoading} onClick={completeSale}>{isLoading ? 'Processing...' : 'Confirm'}</Button>
+                <Button type="button" disabled={isLoading || paid < totalDue} onClick={completeSale}>{isLoading ? 'Processing...' : 'Confirm'}</Button>
               </div>
             )}
 
@@ -1809,6 +1917,7 @@ export default function CheckoutPage() {
                   <tr>
                     <th className="px-3 py-2 text-left">Transaction Ref</th>
                     <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-left">Customer</th>
                     <th className="px-3 py-2 text-left">Payment</th>
                     <th className="px-3 py-2 text-right">Total</th>
                     <th className="px-3 py-2 text-right">Actions</th>
@@ -1817,11 +1926,11 @@ export default function CheckoutPage() {
                 <tbody>
                   {logsLoading ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">Loading logs...</td>
+                      <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Loading logs...</td>
                     </tr>
                   ) : logTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">No transactions found.</td>
+                      <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">No transactions found.</td>
                     </tr>
                   ) : (
                     paginatedTransactions.map((tx) => (
@@ -1837,6 +1946,7 @@ export default function CheckoutPage() {
                               {tx.status === "voided" && <span className="ml-[8px] rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-red-800 uppercase">Voided</span>}
                             </td>
                             <td className="px-3 py-2">{new Date(tx.created_at).toLocaleString()}</td>
+                            <td className="px-3 py-2">{resolveTransactionCustomerName(tx)}</td>
                             <td className="px-3 py-2">{tx.payment_method || "cash"}</td>
                             <td className="px-3 py-2 text-right">{formatMoney(Number(tx.total_due || 0))}</td>
                             <td className="px-3 py-2 text-right text-muted-foreground">

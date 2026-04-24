@@ -1,7 +1,7 @@
 import { Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-type ReportType = "full" | "clients" | "treatments" | "staff_sales"
+type ReportType = "full" | "clients" | "treatments" | "appointments"
 
 interface ExportSectionProps {
   exporting: boolean
@@ -59,11 +59,11 @@ export function ExportSection({ exporting, loading, onExport }: ExportSectionPro
           variant="outline"
           size="sm"
           className="flex-1 md:flex-none transition-all duration-300 hover:bg-muted hover:border-primary/50"
-          onClick={() => onExport("staff_sales")}
+          onClick={() => onExport("appointments")}
           disabled={exporting || loading}
         >
           <Download className="h-4 w-4 mr-2 text-muted-foreground" />
-          Staff Sales
+          Appointments
         </Button>
       </div>
     </div>

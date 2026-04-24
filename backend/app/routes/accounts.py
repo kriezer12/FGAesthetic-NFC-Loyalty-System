@@ -10,6 +10,9 @@ from flask import Blueprint, request, jsonify
 from gotrue.types import AdminUserAttributes
 from app.services.supabase_client import get_supabase, get_supabase_admin
 import jwt
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from app.config import config
 import sys
 
@@ -31,18 +34,32 @@ def get_user_from_token():
         raise ValueError('Authorization header is required')
     
     try:
-        # Extract Bearer token
-        scheme, token = auth_header.split(' ')
+        # Extract Bearer token, handling potential extra spaces
+        parts = auth_header.split()
+        if len(parts) != 2:
+            raise ValueError('Invalid authorization header format')
+        
+        scheme, token = parts
         if scheme.lower() != 'bearer':
             raise ValueError('Invalid authorization scheme')
         
+        if not token or token.strip() == '':
+            raise ValueError('Token cannot be empty')
+        
         # Decode JWT (without verification since Supabase signs it)
-        decoded = jwt.decode(token, options={"verify_signature": False})
+        try:
+            decoded = jwt.decode(token, options={"verify_signature": False})
+        except Exception as decode_err:
+            raise ValueError(f'Invalid token format: {str(decode_err)}')
+        
         user_id = decoded.get('sub')
         if not user_id:
             raise ValueError('Token does not contain user ID')
         
         return user_id
+    except ValueError as ve:
+        # Re-raise ValueError as-is
+        raise ve
     except Exception as e:
         raise ValueError(f'Invalid token format: {str(e)}')
 
@@ -119,7 +136,6 @@ def create_account():
         # Create auth user
         try:
             default_password = "password"
-            print(f"[DEBUG] Creating user with email: {data['email']}", file=sys.stderr)
             user_response = supabase_admin.auth.admin.create_user(
                 AdminUserAttributes(
                     email=data['email'],
@@ -137,7 +153,6 @@ def create_account():
                 return jsonify({'error': 'Failed to create auth user'}), 500
 
             user_id = user_response.user.id
-            print(f"[DEBUG] User created successfully: {user_id}", file=sys.stderr)
 
             # Wait a moment for trigger to fire
             import time
@@ -224,6 +239,18 @@ def list_accounts():
             # Other roles (e.g. staff) are not authorized to list accounts
             return jsonify({'error': 'Unauthorized: Insufficient permissions'}), 403
             
+        # Check status query parameter
+        status_param = request.args.get('status', 'active')
+        
+        # Filter accounts based on status parameter
+        if status_param == 'active':
+            query = query.eq('is_active', True)
+        elif status_param == 'deleted':
+            query = query.eq('is_active', False).not_.is_null('deleted_at')
+        elif status_param == 'all':
+            # No filtering by is_active needed
+            pass
+        
         # Fetch filtered user profiles
         response = query.execute()
         
@@ -343,6 +370,10 @@ def update_account(user_id):
             }), 500
         
         user_obj = response.data[0]
+        # Also clean up deleted_at if account is restored (is_active becomes True)
+        if update_data.get('is_active') is True:
+            supabase.table('user_profiles').update({'deleted_at': None}).eq('id', user_id).execute()
+        
         # fetch branch_name if branch_id present
         if user_obj.get('branch_id'):
             try:
@@ -365,7 +396,13 @@ def update_account(user_id):
 @accounts_bp.route('/<user_id>', methods=['DELETE'])
 def delete_account(user_id):
     """
-    Delete a user account.
+    Delete a user account (soft delete).
+    
+    Instead of permanently deleting the account, we:
+    1. Deactivate the account (is_active = False)
+    2. Keep user_profiles for history and audit trail
+    3. Keep user_logs for backtracking
+    4. Optionally disable auth access if possible
     
     Returns:
     {
@@ -402,20 +439,271 @@ def delete_account(user_id):
         except Exception as e:
             return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
 
-        supabase = get_supabase_admin()
+        # Soft delete: update user_profiles to set is_active=False and deleted_at=now()
+        try:
+            supabase_admin = get_supabase_admin()
+            
+            # Fetch user profile to verify valid user
+            prof = supabase_admin.table('user_profiles').select('id').eq('id', user_id).single().execute()
+            if not prof.data:
+                return jsonify({'error': 'User not found'}), 404
+            
+            from datetime import datetime
+            now_iso = datetime.utcnow().isoformat()
+            
+            update_response = supabase_admin.table('user_profiles').update({
+                'is_active': False,
+                'deleted_at': now_iso
+            }).eq('id', user_id).execute()
+            
+            if not update_response.data:
+                return jsonify({'error': 'Failed to soft delete user profile'}), 500
+
+            return jsonify({
+                'success': True,
+                'message': 'Account soft deleted successfully.'
+            }), 200
         
-        # Delete user auth record using admin API
-        supabase.auth.admin.delete_user(user_id)
+        except Exception as delete_err:
+            import traceback
+            err_str = str(delete_err)
+            with open('delete_err.txt', 'w', encoding='utf-8') as f:
+                f.write(traceback.format_exc())
+            
+            # If the user is already deleted, treat it as a success!
+            if 'User not found' in err_str or '404' in getattr(delete_err, 'message', ''):
+                return jsonify({
+                    'success': True,
+                    'message': 'User was already deleted.'
+                }), 200
+                
+            return jsonify({
+                'error': f'Hard delete failed: {err_str}. Please ensure all database constraints are updated.'
+            }), 500
         
-        # Delete user profile
-        supabase.table('user_profiles').delete().eq('id', user_id).execute()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Account deleted successfully'
-        }), 200
+        except Exception as e:
+            return jsonify({
+                'error': f'Soft delete failed: {str(e)}'
+            }), 500
         
     except Exception as e:
         return jsonify({
             'error': f'Delete failed: {str(e)}'
+        }), 500
+
+@accounts_bp.route('/<user_id>/hard', methods=['DELETE'])
+def hard_delete_account(user_id):
+    """
+    Hard delete a user account permanently.
+    Only accessible by authorized admins.
+    """
+    try:
+        # authorization check before deleting
+        try:
+            caller_id = get_user_from_token()
+            supabase_admin = get_supabase_admin()
+            caller_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', caller_id).single().execute()
+            caller_role = caller_prof.data.get('role') if caller_prof.data else None
+            caller_branch_id = caller_prof.data.get('branch_id')
+
+            if caller_role == 'branch_admin':
+                target_prof = supabase_admin.table('user_profiles').select('role, branch_id').eq('id', user_id).single().execute()
+                if not target_prof.data:
+                    return jsonify({'error': 'Target user not found'}), 404
+                
+                target_role = target_prof.data.get('role')
+                target_branch_id = target_prof.data.get('branch_id')
+
+                if target_role != 'staff':
+                    return jsonify({'error': 'Branch admin may only hard delete staff accounts'}), 403
+                
+                if target_branch_id != caller_branch_id:
+                    return jsonify({'error': 'Branch admin may only hard delete staff in their own branch'}), 403
+            elif caller_role != 'super_admin':
+                return jsonify({'error': 'Unauthorized'}), 403
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
+        except Exception as e:
+            return jsonify({'error': f'Auth check failed: {str(e)}'}), 500
+
+        # Bypass any potentially cached global client state
+        from supabase import create_client
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv(override=True)
+        fresh_service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        fresh_url = os.getenv("SUPABASE_URL", "")
+        
+        fresh_supabase_admin = create_client(fresh_url, fresh_service_key)
+        
+        # Hard delete: remove from auth.users
+        # Due to ON DELETE CASCADE on user_profiles, this will also remove the profile.
+        try:
+            delete_response = fresh_supabase_admin.auth.admin.delete_user(user_id)
+            
+            # Check for error in response if applicable (Supabase-py behavior)
+            if hasattr(delete_response, 'error') and delete_response.error:
+                return jsonify({
+                    'error': f'Auth delete failed: {str(delete_response.error)}'
+                }), 500
+
+            return jsonify({
+                'success': True,
+                'message': 'Account hard deleted successfully.'
+            }), 200
+        
+        except Exception as delete_err:
+            import traceback
+            err_str = str(delete_err)
+            
+            if 'User not found' in err_str or '404' in getattr(delete_err, 'message', ''):
+                return jsonify({
+                    'success': True,
+                    'message': 'User was already deleted.'
+                }), 200
+                
+            return jsonify({
+                'error': f'Hard delete failed: {err_str}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'Delete failed: {str(e)}'
+        }), 500
+
+
+
+@accounts_bp.route('/verify-password', methods=['POST'])
+def verify_password():
+    """
+    Verify the user's password before allowing sensitive operations like deletion.
+    This provides an additional security layer by confirming the user's identity.
+    
+    Request body:
+    {
+        "password": "user_password"
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "verified": true
+    }
+    """
+    try:
+        # Get the current user from token
+        try:
+            user_id = get_user_from_token()
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
+
+        auth_header = request.headers.get('Authorization', '')
+        token = ''
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() == 'bearer':
+            token = parts[1].strip()
+        
+        data = request.get_json()
+        if not data or 'password' not in data:
+            return jsonify({'error': 'Password is required'}), 400
+        
+        password = data.get('password', '').strip()
+        if not password:
+            return jsonify({'error': 'Password cannot be empty'}), 400
+        
+        # Get the user email from the access token first, then fall back to Auth admin.
+        try:
+            email = None
+
+            if token:
+                try:
+                    decoded = jwt.decode(token, options={"verify_signature": False})
+                    email = decoded.get('email') or decoded.get('user_metadata', {}).get('email')
+                except Exception:
+                    email = None
+
+            if not email:
+                supabase_admin = get_supabase_admin()
+                user_response = supabase_admin.auth.admin.get_user_by_id(user_id)
+                auth_user = getattr(user_response, 'user', None)
+                if auth_user:
+                    email = getattr(auth_user, 'email', None)
+
+            if not email:
+                return jsonify({'error': 'User email not available for password verification'}), 404
+        except Exception as e:
+            return jsonify({'error': f'Failed to retrieve user email: {str(e)}'}), 500
+        
+        # Attempt to verify password using Supabase Auth directly.
+        try:
+            auth_url = f"{config.SUPABASE_URL}/auth/v1/token?grant_type=password"
+            payload = json.dumps({
+                'email': email,
+                'password': password,
+            }).encode('utf-8')
+
+            request_obj = Request(
+                auth_url,
+                data=payload,
+                headers={
+                    'apikey': config.SUPABASE_KEY,
+                    'Authorization': f'Bearer {config.SUPABASE_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                method='POST',
+            )
+
+            with urlopen(request_obj, timeout=15) as response:
+                if response.status == 200:
+                    return jsonify({
+                        'success': True,
+                        'verified': True
+                    }), 200
+
+                return jsonify({
+                    'success': False,
+                    'verified': False,
+                    'error': 'Password verification failed'
+                }), 200
+
+        except HTTPError as auth_error:
+            if auth_error.code in (400, 401):
+                return jsonify({
+                    'success': False,
+                    'verified': False,
+                    'error': 'Incorrect password'
+                }), 200
+
+            return jsonify({
+                'success': False,
+                'verified': False,
+                'error': f'Password verification failed ({auth_error.code})'
+            }), 500
+
+        except URLError as auth_error:
+            return jsonify({
+                'success': False,
+                'verified': False,
+                'error': f'Password verification failed: {auth_error.reason}'
+            }), 500
+        except Exception as auth_error:
+            # Authentication failed - password is incorrect
+            error_message = str(auth_error).lower()
+            if 'invalid login credentials' in error_message or 'incorrect password' in error_message or 'unauthorized' in error_message:
+                return jsonify({
+                    'success': False,
+                    'verified': False,
+                    'error': 'Incorrect password'
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'verified': False,
+                    'error': 'Password verification failed'
+                }), 500
+    
+    except Exception as e:
+        return jsonify({
+            'error': f'Verification failed: {str(e)}'
         }), 500

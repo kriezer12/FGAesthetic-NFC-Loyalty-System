@@ -6,7 +6,16 @@
  * interval toggle (15 / 30 / 60 min), and a "New Appointment" action button.
  */
 
-import { ChevronLeft, ChevronRight, CalendarPlus, Settings } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, List, Search, ChevronDown, Building2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import type { Branch } from "@/hooks/use-branches"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { IntervalMinutes, ViewMode } from "@/types/appointment"
@@ -26,11 +35,19 @@ interface CalendarHeaderProps {
   selectedDate: Date
   interval: IntervalMinutes
   viewMode: ViewMode
+  showTableView: boolean
   onDateChange: (date: Date) => void
   onIntervalChange: (interval: IntervalMinutes) => void
   onViewModeChange: (mode: ViewMode) => void
   onNewAppointment: () => void
-  onOpenSettings: () => void
+  onToggleTableView: () => void
+  searchQuery?: string
+  onSearchChange?: (val: string) => void
+  statusFilter?: string
+  onStatusFilterChange?: (val: string) => void
+  branches?: Branch[]
+  selectedBranchId?: string
+  onBranchChange?: (id: string) => void
 }
 
 const INTERVALS: IntervalMinutes[] = [15, 30, 60]
@@ -44,14 +61,23 @@ export function CalendarHeader({
   selectedDate,
   interval,
   viewMode,
+  showTableView,
   onDateChange,
   onIntervalChange,
   onViewModeChange,
   onNewAppointment,
-  onOpenSettings,
+  onToggleTableView,
+  searchQuery,
+  onSearchChange,
+  statusFilter,
+  onStatusFilterChange,
+  branches,
+  selectedBranchId,
+  onBranchChange,
 }: CalendarHeaderProps) {
   const { userProfile } = useAuth()
-  
+  const isSuperAdmin = userProfile?.role === "super_admin"
+  const canCreateAppointments = userProfile?.role === "staff" || userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
   const prev = () => {
     if (viewMode === "day") {
       onDateChange(addDays(selectedDate, -1))
@@ -98,12 +124,85 @@ export function CalendarHeader({
         <Button variant="outline" size="icon-sm" onClick={next} aria-label="Next">
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <h2 className="ml-2 text-base font-semibold sm:text-lg">{dateLabel}</h2>
+        {!showTableView && (
+          <h2 className="ml-2 text-base font-semibold sm:text-lg">{dateLabel}</h2>
+        )}
       </div>
 
       {/* ---- right: view mode + interval toggle + settings + new button ---- */}
       <div className="flex items-center gap-2.5">
-        {/* view mode selector */}
+        {/* table view filters */}
+        {showTableView && (
+          <div className="flex items-center gap-2 border-r pr-3 mr-1">
+            <div className="relative">
+              <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search appointments..."
+                className="pl-7 h-8 w-[150px] sm:w-[200px] border-primary/20 text-xs"
+                value={searchQuery || ""}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+              />
+            </div>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs border-primary/20">
+                  Status: {statusFilter ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : "All"}
+                  <ChevronDown className="ml-1.5 h-3 w-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup value={statusFilter || ""} onValueChange={onStatusFilterChange}>
+                  <DropdownMenuRadioItem value="">All</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="scheduled">Scheduled</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="confirmed">Confirmed</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="in-progress">In Progress</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="completed">Completed</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="cancelled">Cancelled</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+        {/* table view toggle button */}
+        <Button
+          variant={showTableView ? "default" : "outline"}
+          size="sm"
+          onClick={onToggleTableView}
+          title={showTableView ? "Show calendar view" : "Show table view"}
+          className={showTableView ? "" : ""}
+        >
+          <List className="mr-1.5 h-4 w-4" />
+          {showTableView ? "Calendar" : "Table"}
+        </Button>
+
+        {/* Branch Selector for Super Admin */}
+        {isSuperAdmin && branches && branches.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 border-primary/30 bg-primary/5">
+                <Building2 className="mr-2 h-4 w-4 text-primary" />
+                <span className="max-w-[100px] truncate">
+                  {branches.find(b => b.id === selectedBranchId)?.name || "All Branches"}
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[200px]">
+              <DropdownMenuRadioGroup value={selectedBranchId || "all"} onValueChange={(val) => onBranchChange?.(val === "all" ? "" : val)}>
+                <DropdownMenuRadioItem value="all">All Branches</DropdownMenuRadioItem>
+                {branches.map((branch) => (
+                  <DropdownMenuRadioItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* view mode selector (hide when showing table view) */}
+        {!showTableView && (
         <div className="flex items-center rounded-lg border p-1">
           {VIEW_MODES.map((mode) => (
             <button
@@ -120,9 +219,10 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
+        )}
 
-        {/* interval selector (only visible in day/week view) */}
-        {viewMode !== "month" && (
+        {/* interval selector (only visible in day/week view and not in table view) */}
+        {!showTableView && viewMode !== "month" && (
         <div className="flex items-center rounded-lg border p-1">
           {INTERVALS.map((int) => (
             <button
@@ -141,23 +241,16 @@ export function CalendarHeader({
         </div>
         )}
 
-        {/* settings button */}
-        {userProfile?.role !== "staff" && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={onOpenSettings}
-            title="Calendar settings"
-            aria-label="Open calendar settings"
+        {!showTableView && canCreateAppointments && (
+          <Button 
+            size="sm" 
+            onClick={onNewAppointment}
+            title="Create a new appointment"
           >
-            <Settings className="h-4 w-4" />
+            <CalendarPlus className="mr-1.5 h-4 w-4" />
+            New Appointment
           </Button>
         )}
-
-        <Button size="sm" onClick={onNewAppointment}>
-          <CalendarPlus className="mr-1.5 h-4 w-4" />
-          New Appointment
-        </Button>
       </div>
     </div>
   )

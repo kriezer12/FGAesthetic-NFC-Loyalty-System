@@ -15,6 +15,7 @@ export type AppointmentStatus =
 
 export interface Appointment {
   id: string
+  branch_id?: string
   customer_id?: string
   customer_name?: string
   staff_id: string
@@ -38,6 +39,7 @@ export interface Appointment {
   appointment_type?: "consultation" | "treatment" | "followup"
   location_type?: "branch" | "home_based"
   notes?: string
+  branch_id?: string
   created_at?: string
   updated_at?: string
 }
@@ -46,7 +48,9 @@ export interface StaffMember {
   id: string
   name: string
   role: string
+  branch_id?: string
   color: string // hex color used for appointment cards
+  branch_id?: string
 }
 
 export interface BlockedTime {

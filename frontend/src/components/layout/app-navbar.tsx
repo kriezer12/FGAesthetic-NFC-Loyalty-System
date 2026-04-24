@@ -117,22 +117,22 @@ export function AppNavbar() {
           <div className="nav-float-c absolute left-1/3 -top-6 h-16 w-16 rounded-full bg-primary/20 blur-lg" />
         </div>
 
-        <div className="flex h-16 items-center px-6 gap-6 relative">
+        <div className="flex h-16 items-center px-2 sm:px-6 gap-2 sm:gap-6 relative">
           <NavbarLogo />
           <NavbarLinks />
 
-          <div className="flex items-center gap-4 ml-auto">
+          <div className="flex items-center gap-2 sm:gap-4 ml-auto">
             {userProfile && ["super_admin", "branch_admin"].includes(userProfile.role) && (
               <div className="flex items-center gap-1">
                 {userProfile.role === "super_admin" && (
                   <button
                     type="button"
                     onClick={() => setAnnouncementModalOpen(true)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
+                    className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
                     title="Broadcast Announcement"
                     aria-label="Broadcast Announcement"
                   >
-                    <Megaphone className="h-5 w-5" />
+                    <Megaphone className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
 
                 )}
@@ -165,11 +165,11 @@ export function AppNavbar() {
             <button
               type="button"
               onClick={() => navigate("/dashboard/checkout")}
-              className="relative flex items-center justify-center h-9 w-9 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
+              className="relative flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 focus-visible:text-primary focus-visible:bg-primary/10 transition-all duration-200"
               title="Checkout"
               aria-label="Go to checkout"
             >
-              <ShoppingCart className="h-5 w-5" />
+              <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
 
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-foreground shadow-sm">

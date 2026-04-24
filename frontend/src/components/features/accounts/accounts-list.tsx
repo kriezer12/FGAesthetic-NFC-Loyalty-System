@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
-import { Trash2, Edit2, MoreHorizontal } from "lucide-react"
+import { Trash2, Edit2, MoreHorizontal, RotateCcw } from "lucide-react"
 import { Account, useAccounts } from "@/hooks/use-accounts"
 import { useAuth } from "@/contexts/auth-context"
 import { getAvatarSignedUrl } from "@/lib/supabase-storage"
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EditAccountModal } from "./edit-account-modal"
+import { PasswordVerificationDialog } from "@/components/auth/password-verification-dialog"
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,7 @@ import {
 interface AccountsListProps {
   accounts: Account[]
   onRefresh: () => Promise<void>
+  isDeletedTab?: boolean
 }
 
 const RoleBadge = ({ role }: { role: string }) => {
@@ -107,13 +109,27 @@ const AccountAvatarCell = ({ account }: { account: Account }) => {
   )
 }
 
-export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
-  const { updateAccount, deleteAccount } = useAccounts()
+const getTimeLeft = (deletedAt?: string | null) => {
+  if (!deletedAt) return "-"
+  const deletedDate = new Date(deletedAt)
+  const expireDate = new Date(deletedDate.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const now = new Date()
+  const diffDays = Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  
+  if (diffDays <= 0) return "Pending deletion"
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} left`
+}
+
+export function AccountsList({ accounts, onRefresh, isDeletedTab }: AccountsListProps) {
+  const { updateAccount, deleteAccount, hardDeleteAccount, verifyPassword } = useAccounts()
   const { userProfile } = useAuth()
   const isSuper = userProfile?.role === 'super_admin'
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Account | null>(null)
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState<Account | null>(null)
+  const [showPasswordVerification, setShowPasswordVerification] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
 
   // sorting state
   const [sortKey, setSortKey] = useState<keyof Account | null>(null)
@@ -151,18 +167,65 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
     }
   }
 
-  const handleDelete = async () => {
-    if (!deleteConfirm) return
-    setIsDeleting(true)
+  const handleDeleteClick = () => {
+    // First show password verification dialog
+    setVerificationError(null)
+    setShowPasswordVerification(true)
+  }
+
+  const handleRestoreClick = async (account: Account) => {
     try {
-      await deleteAccount(deleteConfirm.id)
+      await updateAccount(account.id, { is_active: true, deleted_at: null })
       await onRefresh()
-      setDeleteConfirm(null)
     } catch (error) {
-      console.error("Failed to delete account:", error)
+      console.error("Failed to restore account:", error)
+    }
+  }
+
+  const handlePasswordVerified = async (password: string) => {
+    if (!deleteConfirm && !hardDeleteConfirm) return
+    
+    setIsDeleting(true)
+    setVerificationError(null)
+    try {
+      console.log("[Delete Flow] Verifying password...")
+      // Verify the password
+      const verified = await verifyPassword(password)
+      if (!verified) {
+        throw new Error("Incorrect password")
+      }
+      console.log("[Delete Flow] Password verified, deleting account...")
+      
+      // Password verified, proceed with deletion
+      if (hardDeleteConfirm) {
+        await hardDeleteAccount(hardDeleteConfirm.id)
+      } else if (deleteConfirm) {
+        await deleteAccount(deleteConfirm.id)
+      }
+      
+      console.log("[Delete Flow] Account deleted, refreshing list...")
+      await onRefresh()
+      console.log("[Delete Flow] Refresh complete")
+      
+      // Close dialogs
+      setShowPasswordVerification(false)
+      setDeleteConfirm(null)
+      setHardDeleteConfirm(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Verification failed"
+      console.error("[Delete Flow] Error:", message)
+      setVerificationError(message)
     } finally {
       setIsDeleting(false)
     }
+  }
+
+  const handleDeleteCancel = () => {
+    console.log("[Delete Flow] Canceling deletion")
+    setDeleteConfirm(null)
+    setHardDeleteConfirm(null)
+    setShowPasswordVerification(false)
+    setVerificationError(null)
   }
 
   return (
@@ -186,8 +249,8 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
               <TableHead onClick={() => handleSort('is_active')} className="cursor-pointer">
                 Status {sortKey === 'is_active' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
               </TableHead>
-              <TableHead onClick={() => handleSort('created_at')} className="cursor-pointer">
-                Created {sortKey === 'created_at' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+              <TableHead onClick={() => handleSort(isDeletedTab ? 'deleted_at' : 'created_at')} className="cursor-pointer">
+                {isDeletedTab ? "Time Left" : "Created"} {sortKey === (isDeletedTab ? 'deleted_at' : 'created_at') ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
               </TableHead>
               <TableHead className="w-10">Actions</TableHead>
             </TableRow>
@@ -215,10 +278,16 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
                   <TableCell>
                     <StatusBadge isActive={account.is_active} />
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {account.created_at
-                      ? new Date(account.created_at).toLocaleDateString()
-                      : "-"}
+                  <TableCell className="text-sm">
+                    {isDeletedTab ? (
+                      <span className="text-red-500 font-medium">{getTimeLeft(account.deleted_at)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {account.created_at
+                          ? new Date(account.created_at).toLocaleDateString()
+                          : "-"}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {/* show trigger only if super_admin or role is staff */}
@@ -230,23 +299,51 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {/* branch admins may only modify staff accounts */}
-                          {(isSuper || account.role === 'staff') && (
-                            <DropdownMenuItem
-                              onClick={() => setEditingAccount(account)}
-                            >
-                              <Edit2 className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                          )}
-                          {(isSuper || account.role === 'staff') && (
-                            <DropdownMenuItem
-                              onClick={() => setDeleteConfirm(account)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
+                          {isDeletedTab ? (
+                            <>
+                              {(isSuper || account.role === 'staff') && (
+                                <DropdownMenuItem
+                                  onClick={() => handleRestoreClick(account)}
+                                  className="text-green-600"
+                                >
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  Restore
+                                </DropdownMenuItem>
+                              )}
+                              {(isSuper || account.role === 'staff') && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setHardDeleteConfirm(account)
+                                  }}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Permanently Delete
+                                </DropdownMenuItem>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {(isSuper || account.role === 'staff') && (
+                                <DropdownMenuItem
+                                  onClick={() => setEditingAccount(account)}
+                                >
+                                  <Edit2 className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              {(isSuper || account.role === 'staff') && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setDeleteConfirm(account)
+                                  }}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
+                            </>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -266,33 +363,56 @@ export function AccountsList({ accounts, onRefresh }: AccountsListProps) {
         onSave={handleEdit}
       />
 
-      <Dialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+      {/* Initial deletion confirmation dialog */}
+      <Dialog 
+        open={(deleteConfirm !== null || hardDeleteConfirm !== null) && !showPasswordVerification} 
+        onOpenChange={(open) => !open && handleDeleteCancel()}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Account</DialogTitle>
+            <DialogTitle>
+              {hardDeleteConfirm ? "Permanently Delete Account" : "Delete Account"}
+            </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {deleteConfirm?.email}? This
-              action cannot be undone.
+              Are you sure you want to {hardDeleteConfirm ? "permanently delete" : "delete"} {deleteConfirm?.email || hardDeleteConfirm?.email}? 
+              {hardDeleteConfirm && " This action cannot be undone."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 justify-end">
             <Button
               variant="outline"
-              onClick={() => setDeleteConfirm(null)}
+              onClick={handleDeleteCancel}
               disabled={isDeleting}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "Verifying..." : "Delete"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Password verification dialog */}
+      <PasswordVerificationDialog
+        open={showPasswordVerification}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            console.log("[Password Dialog] Closed by user")
+            handleDeleteCancel()
+          }
+        }}
+        onVerify={handlePasswordVerified}
+        title={`Verify Password to ${hardDeleteConfirm ? "Permanently " : ""}Delete Account`}
+        description={`Enter your password to confirm deletion of ${deleteConfirm?.email || hardDeleteConfirm?.email}`}
+        actionLabel={`Verify & ${hardDeleteConfirm ? "Permanently " : ""}Delete Account`}
+        isVerifying={isDeleting}
+        error={verificationError}
+      />
     </>
   )
 }

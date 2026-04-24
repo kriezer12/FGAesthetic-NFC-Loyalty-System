@@ -21,6 +21,7 @@ import type {
   IntervalMinutes,
   StaffMember,
 } from "@/types/appointment"
+import { useAuth } from "@/contexts/auth-context"
 import {
   formatTime,
   generateTimeSlots,
@@ -40,6 +41,7 @@ import {
   MIN_APPOINTMENT_DURATION,
 } from "./calendar-config"
 import { AppointmentDetailPopover } from "./appointment-detail-popover"
+import { Badge } from "@/components/ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
   ContextMenu,
@@ -51,7 +53,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuSubContent,
 } from "@/components/ui/context-menu"
-import { Pencil, Trash2, Repeat } from "lucide-react"
+import { Pencil, Trash2, Repeat, Briefcase, Building2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   startOfWeek,
@@ -161,7 +163,8 @@ interface CalendarWeekGridProps {
   staff: StaffMember[]
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
-  onSlotClick: (staffId: string, startMinutes: number) => void
+  branchNameById?: Record<string, string>
+  onSlotClick: (staffId: string, startMinutes: number, date?: Date) => void
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
   onEditAppointment: (appointment: Appointment) => void
   onDeleteAppointment: (id: string) => void
@@ -179,12 +182,16 @@ export function CalendarWeekGrid({
   staff,
   appointments,
   blockedTimes,
+  branchNameById,
   onSlotClick,
   onAppointmentUpdate,
   onEditAppointment,
   onDeleteAppointment,
   onDayClick,
 }: CalendarWeekGridProps) {
+  const { userProfile } = useAuth()
+  const isAdmin = userProfile?.role === "super_admin" || userProfile?.role === "branch_admin"
+
   const weekStart = useMemo(
     () => startOfWeek(selectedDate, { weekStartsOn: 1 }),
     [selectedDate],
@@ -235,6 +242,12 @@ export function CalendarWeekGrid({
   const staffColorMap = useMemo(() => {
     const map = new Map<string, string>()
     staff.forEach((s) => map.set(s.id, s.color))
+    return map
+  }, [staff])
+    
+  const staffById = useMemo(() => {
+    const map = new Map<string, StaffMember>()
+    staff.forEach((s) => map.set(s.id, s))
     return map
   }, [staff])
 
@@ -319,6 +332,22 @@ export function CalendarWeekGrid({
         const dy = Math.abs(e.clientY - drag.startClientY)
         if (dx < THRESHOLD && dy < THRESHOLD) return
         drag.activated = true
+            
+            const activeAppointment = appointments.find((a) => a.id === drag.appointmentId)
+            if (
+              userProfile?.role === "staff" &&
+              userProfile?.branch_id &&
+              activeAppointment?.branch_id &&
+              activeAppointment.branch_id !== userProfile.branch_id
+            ) {
+              setValidationError(
+                "Cannot modify appointment because its a cross-branch appointment. Contact branch admin of that branch.",
+              )
+              dragRef.current = null
+              lastPreviewRef.current = null
+              setDragPreview(null)
+              return
+            }
       }
 
       const gridRect = gridRef.current.getBoundingClientRect()
@@ -435,6 +464,18 @@ export function CalendarWeekGrid({
 
       if (hasBlockedTimeConflict(appt.staff_id, newStartMin, newEndMin, targetDay, blockedTimes)) {
         setValidationError("Cannot schedule during a blocked time.")
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
+      }
+
+      const apptDateOnly = new Date(targetDay)
+      apptDateOnly.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (apptDateOnly < today) {
+        setValidationError("Cannot move appointments to past dates. Please select today or a future date.")
         dragRef.current = null
         lastPreviewRef.current = null
         setDragPreview(null)
@@ -612,7 +653,7 @@ export function CalendarWeekGrid({
                       style={{ height: slotHeight }}
                       onClick={() => {
                         if (dragRef.current) return
-                        if (staff.length > 0) onSlotClick(staff[0].id, minutes)
+                        if (staff.length > 0) onSlotClick(staff[0].id, minutes, day)
                       }}
                     />
                   ))}
@@ -654,6 +695,10 @@ export function CalendarWeekGrid({
                       : getHeightFromDuration(appt.start_time, appt.end_time)
                     const renderHeight = Math.max(height - 2, 20)
                     const color = staffColorMap.get(appt.staff_id) ?? "#6366f1"
+                    const staffMember = staffById.get(appt.staff_id)
+                    const staffBranchId = staffMember?.branch_id
+                    const branchName = appt.branch_id ? branchNameById?.[appt.branch_id] : null
+                    const isCrossBranch = Boolean(appt.branch_id && staffBranchId && appt.branch_id !== staffBranchId)
                     const leftOffset = column * CASCADE_INDENT
                     const zIndex = isDragging ? 50 : 10 + column
 
@@ -696,9 +741,23 @@ export function CalendarWeekGrid({
                                   )}
                                 </p>
                                 {renderHeight > 30 && (
-                                  <p className="truncate text-[9px] text-muted-foreground">
-                                    {staffNameMap.get(appt.staff_id) ?? appt.staff_name}
-                                  </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                                    <Badge variant="secondary" className="h-5 gap-1 px-2 py-0 text-[9px] font-medium">
+                                      <Briefcase className="h-3 w-3" />
+                                      <span className="truncate max-w-[7rem]">
+                                        {staffNameMap.get(appt.staff_id) ?? appt.staff_name}
+                                      </span>
+                                    </Badge>
+                                    {branchName && (
+                                      <Badge variant={isCrossBranch ? "warning" : "outline"} className="h-5 gap-1 px-2 py-0 text-[9px] font-medium">
+                                        <Building2 className="h-3 w-3" />
+                                        <span className="truncate max-w-[8rem]">
+                                          {isCrossBranch ? "Cross-Branch" : "Branch"}
+                                          {branchName ? `: ${branchName}` : ""}
+                                        </span>
+                                      </Badge>
+                                    )}
+                                  </div>
                                 )}
                                 {renderHeight > 44 && (
                                   <p className="text-[9px] tabular-nums text-muted-foreground">
@@ -740,14 +799,18 @@ export function CalendarWeekGrid({
                             </ContextMenuSubContent>
                           </ContextMenuSub>
                           <ContextMenuSeparator />
-                          <ContextMenuItem
-                            onClick={() => onEditAppointment(appt)}
-                            className="gap-2"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Edit Appointment
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
+                          {!isAdmin && (
+                            <>
+                              <ContextMenuItem
+                                onClick={() => onEditAppointment(appt)}
+                                className="gap-2"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Edit Appointment
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                            </>
+                          )}
                           <ContextMenuItem
                             onClick={() => onDeleteAppointment(appt.id)}
                             className="gap-2 text-destructive focus:text-destructive"

@@ -1,7 +1,7 @@
 import { CreditCard, Nfc } from "lucide-react"
 
 type RegisterCardHeaderProps = {
-  nfcUid: string
+  nfcUid?: string
 }
 
 export function RegisterCardHeader({ nfcUid }: RegisterCardHeaderProps) {
@@ -24,21 +24,30 @@ export function RegisterCardHeader({ nfcUid }: RegisterCardHeaderProps) {
             New Client Registration
           </h2>
           <p className="text-sm mt-1 text-muted-foreground">
-            Register this NFC card with client information
+            {nfcUid ? "Register this NFC card with client information" : "Create a new client profile without a physical card"}
           </p>
         </div>
 
-        <div
-          className="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-background/80 backdrop-blur-sm text-xs font-mono tracking-widest shadow-sm text-primary"
-        >
-          <div className="relative flex h-2 w-2 items-center justify-center mr-0.5">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75 animate-ping"></span>
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+        {nfcUid ? (
+          <div
+            className="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-background/80 backdrop-blur-sm text-xs font-mono tracking-widest shadow-sm text-primary"
+          >
+            <div className="relative flex h-2 w-2 items-center justify-center mr-0.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75 animate-ping"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+            </div>
+            <Nfc className="h-3.5 w-3.5 shrink-0" />
+            {nfcUid}
+            <CreditCard className="h-3.5 w-3.5 shrink-0 opacity-60 ml-1.5" />
           </div>
-          <Nfc className="h-3.5 w-3.5 shrink-0" />
-          {nfcUid}
-          <CreditCard className="h-3.5 w-3.5 shrink-0 opacity-60 ml-1.5" />
-        </div>
+        ) : (
+          <div
+            className="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-full border border-dashed border-muted-foreground/30 bg-background/50 backdrop-blur-sm text-[10px] font-medium tracking-tight shadow-sm text-muted-foreground"
+          >
+            <Nfc className="h-3 w-3 shrink-0 opacity-40" />
+            NO CARD LINKED
+          </div>
+        )}
       </div>
     </div>
   )

@@ -8,7 +8,8 @@ import {
   Star, 
   BarChart3, 
   Building2,
-  Wrench
+  Wrench,
+  Calendar
 } from "lucide-react"
 import { useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -53,6 +54,7 @@ const adminCategories: AdminCategory[] = [
     title: "Business",
     links: [
       { title: "Reports", url: "/dashboard/reports", icon: BarChart3 },
+      { title: "Appointments", url: "/dashboard/appointments-settings", icon: Calendar },
     ],
   },
 ]
@@ -73,14 +75,15 @@ export function NavbarAdminDropdown() {
           <button
             type="button"
             className={[
-              "flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[0.95rem] font-medium transition-all duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
+              "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-[0.95rem] font-medium transition-all duration-300 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
               isAdminActive
                 ? "bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20"
                 : "text-muted-foreground hover:text-primary hover:bg-primary/20 hover:text-foreground focus-visible:bg-primary/20 focus-visible:text-primary",
             ].join(" ")}
             aria-label="Administration Menu"
           >
-            <span>Administration</span>
+            <span className="hidden sm:inline">Administration</span>
+            <span className="sm:hidden">Admin</span>
             <ChevronDown className={[
               "h-3.5 w-3.5 transition-transform duration-300",
               "group-data-[state=open]:rotate-180"
@@ -88,14 +91,14 @@ export function NavbarAdminDropdown() {
           </button>
         </DropdownMenuTrigger>
         
-        <DropdownMenuContent align="center" className="bg-popover/98 backdrop-blur-md border border-border/50 rounded-2xl shadow-2xl p-6 min-w-[680px] z-50">
-          <div className="grid grid-cols-3 gap-8 outline-none">
+        <DropdownMenuContent align="center" className="bg-popover/98 backdrop-blur-md border border-border/50 rounded-2xl shadow-2xl p-4 sm:p-6 w-[90vw] sm:w-auto sm:min-w-[680px] z-50">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 outline-none">
             {adminCategories.map((category, idx) => (
               <div 
                 key={category.title} 
                 className={[
-                  "flex flex-col gap-4 focus-visible:outline-none",
-                  idx < 2 ? "border-r border-border/40 pr-8" : ""
+                  "flex flex-col gap-3 sm:gap-4 focus-visible:outline-none",
+                  idx < 2 ? "sm:border-r border-border/40 sm:pr-8" : ""
                 ].join(" ")}
               >
                 <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-2 opacity-60">

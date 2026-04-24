@@ -26,6 +26,7 @@ import {
   Plus,
   Camera,
   Upload,
+  Gift,
 } from "lucide-react"
 import { useCounter } from "@/hooks/use-counter"
 import { useAuth } from "@/contexts/auth-context"
@@ -57,9 +58,10 @@ import { AppointmentDialog } from "@/components/features/calendar/calendar-parts
 import { CameraCaptureDialog } from "@/components/ui/camera-capture-dialog"
 import { NFCScanner } from "@/components/features/nfc"
 import { CustomerPointsDashboard } from "@/components/features/customers/customer-info-parts/customer-points-dashboard"
+import { LoyaltyPointsDisplay } from "@/components/features/customers/customer-info-parts/loyalty-points-display"
 import { PointsHistory } from "@/components/features/customers/customer-info-parts/points-history"
 import { TreatmentHistory } from "@/components/features/customers/treatment-history"
-import { TreatmentStatusManager } from "@/components/features/customers/treatment-status-manager"
+import { DigitalConsentDialog } from "@/components/features/customers/digital-consent-dialog"
 import { LoyaltyReward } from "./loyalty-admin"
 import { supabase } from "@/lib/supabase"
 import { uploadToSupabase, getSignedUrl } from "@/lib/supabase-storage"
@@ -77,6 +79,22 @@ import type { Customer } from "@/types/customer"
 import type { Appointment, IntervalMinutes } from "@/types/appointment"
 import type { Service } from "@/types/service"
 import { DEFAULT_INTERVAL } from "@/components/features/calendar/calendar-parts/calendar-config"
+
+const isBirthdayToday = (dob: string | null | undefined): boolean => {
+  if (!dob) return false
+  try {
+    const today = new Date()
+    const parts = dob.split("T")[0].split("-")
+    if (parts.length !== 3) return false
+    const birthMonth = parseInt(parts[1], 10)
+    const birthDay = parseInt(parts[2], 10)
+    const currentMonth = today.getMonth() + 1
+    const currentDay = today.getDate()
+    return birthMonth === currentMonth && birthDay === currentDay
+  } catch (e) {
+    return false
+  }
+}
 
 export default function CustomersPage() {
   const navigate = useNavigate()
@@ -343,6 +361,7 @@ export default function CustomersPage() {
   const [treatmentPhotos, setTreatmentPhotos] = useState<Array<{ id: string; path: string; url: string; type: 'before' | 'after' | 'other' }>>([])
   const [treatmentConsentPath, setTreatmentConsentPath] = useState<string>("")
   const [treatmentConsentUrl, setTreatmentConsentUrl] = useState<string>("")
+  const [treatmentConsentPdfUrl, setTreatmentConsentPdfUrl] = useState<string>("")
   const [treatmentConsentUploaded, setTreatmentConsentUploaded] = useState(false)
   const [treatmentGalleryError, setTreatmentGalleryError] = useState("")
   const [treatmentConsentError, setTreatmentConsentError] = useState("")
@@ -351,6 +370,8 @@ export default function CustomersPage() {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
   const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false)
   const [cameraCaptureType, setCameraCaptureType] = useState<"before" | "after" | "other" | "consent" | "none">("none")
+  const [digitalConsentOpen, setDigitalConsentOpen] = useState(false)
+  const [confirmDeleteConsent, setConfirmDeleteConsent] = useState(false)
   
   const { appointments, addAppointment, updateAppointment, deleteAppointment } = useAppointments()
 
@@ -746,15 +767,29 @@ export default function CustomersPage() {
         .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 
       if (consentFiles.length > 0) {
-        const mostRecentFile = consentFiles[0]
-        const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentFile.name}`
-        const signedUrl = await getSignedUrl("customer-picture", path, 604800)
-        setTreatmentConsentPath(path)
-        setTreatmentConsentUrl(signedUrl)
-        setTreatmentConsentUploaded(true)
+        // Find most recent image and most recent PDF
+        const mostRecentImage = consentFiles.find(f => f.name.endsWith('.webp') || f.name.endsWith('.png'))
+        const mostRecentPdf = consentFiles.find(f => f.name.endsWith('.pdf'))
+        
+        if (mostRecentImage) {
+          const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentImage.name}`
+          const signedUrl = await getSignedUrl("customer-picture", path, 604800)
+          setTreatmentConsentPath(path)
+          setTreatmentConsentUrl(signedUrl)
+          setTreatmentConsentUploaded(true)
+        }
+
+        if (mostRecentPdf) {
+          const path = `customer-treatment-consents/${customerId}/appointment-${appointmentId}/${mostRecentPdf.name}`
+          const signedUrl = await getSignedUrl("customer-picture", path, 604800)
+          setTreatmentConsentPdfUrl(signedUrl)
+        } else {
+          setTreatmentConsentPdfUrl("")
+        }
       } else {
         setTreatmentConsentPath("")
         setTreatmentConsentUrl("")
+        setTreatmentConsentPdfUrl("")
         setTreatmentConsentUploaded(false)
       }
     } catch (err) {
@@ -838,14 +873,23 @@ export default function CustomersPage() {
     
     setTreatmentConsentError("")
     try {
+      const pathsToDelete = [treatmentConsentPath]
+      // Derive PDF path from image path (they share the same timestamp and folder)
+      if (treatmentConsentPath.endsWith('.webp')) {
+        pathsToDelete.push(treatmentConsentPath.replace('.webp', '.pdf'))
+      } else if (treatmentConsentPath.endsWith('.png')) {
+        pathsToDelete.push(treatmentConsentPath.replace('.png', '.pdf'))
+      }
+
       const { error } = await supabase.storage
         .from("customer-picture")
-        .remove([treatmentConsentPath])
+        .remove(pathsToDelete)
       
       if (error) throw error
       
       setTreatmentConsentPath("")
       setTreatmentConsentUrl("")
+      setTreatmentConsentPdfUrl("")
       setTreatmentConsentUploaded(false)
       setTreatmentConsentError("")
     } catch (err) {
@@ -910,6 +954,12 @@ export default function CustomersPage() {
     } else {
       // default: sort by status then by recent creation date
       filtered.sort((a, b) => {
+        const aBirthday = isBirthdayToday(a.date_of_birth)
+        const bBirthday = isBirthdayToday(b.date_of_birth)
+        
+        if (aBirthday && !bBirthday) return -1
+        if (!aBirthday && bBirthday) return 1
+
         const rankDiff = statusRank(a) - statusRank(b)
         if (rankDiff !== 0) return rankDiff
         return new Date(b.created_at || "").getTime() - new Date(a.created_at || "").getTime()
@@ -1260,7 +1310,7 @@ export default function CustomersPage() {
                                   </span>
                                 </div>
                                 <div>
-                                  <div className="font-medium">
+                                  <div className="font-medium flex items-center">
                                     {(() => {
                                       let displayName = customer.name || 'Unknown'
                                       if (customer.first_name || customer.last_name) {
@@ -1275,6 +1325,13 @@ export default function CustomersPage() {
                                       }
                                       return displayName
                                     })()}
+                                    {isBirthdayToday(customer.date_of_birth) && (
+                                      <div title="It's their birthday today!" className="ml-3 relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-primary/10 via-primary/20 to-primary/10 px-3 py-1 border border-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)] overflow-hidden group cursor-default">
+                                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent transition-transform duration-1000 group-hover:translate-x-full"></div>
+                                        <Gift className="h-3.5 w-3.5 text-primary animate-bounce relative z-10" />
+                                        <span className="text-[10px] uppercase font-extrabold tracking-widest text-primary relative z-10 drop-shadow-sm">Birthday Today!</span>
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="text-xs capitalize text-muted-foreground">
                                     {customer.skin_type && `${customer.skin_type} skin`}
@@ -1301,7 +1358,11 @@ export default function CustomersPage() {
                               </div>
                             </td>
                             <td className="p-4">
-                              <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                              {customer.nfc_uid ? (
+                                <code className="rounded bg-muted px-2 py-1 text-xs">{customer.nfc_uid}</code>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">No card</span>
+                              )}
                             </td>
                             <td className="p-4">
                               {customer.branch_name ? (
@@ -1469,29 +1530,35 @@ export default function CustomersPage() {
               {modalView === "details" ? (
                 <> {/* details view */}
                   {/* Stats Cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
-                      <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
-                      <CardContent className="p-6 relative z-10">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm tracking-tight font-medium text-foreground/70 dark:text-foreground/70">Total Points</p>
-                            <p className="text-3xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
-                          </div>
-                          <Award className="h-10 w-10 text-primary drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="overflow-hidden border-primary/20">
+                      <CardContent className="p-6">
+                        <LoyaltyPointsDisplay 
+                          key={`loyalty-details-${selectedCustomer?.id}-${selectedCustomer?.points}`}
+                          points={selectedCustomer?.points || 0}
+                          showProgression={false}
+                        />
                       </CardContent>
                     </Card>
                     
-                    <Card className="group relative overflow-hidden border-zinc-500/20 bg-gradient-to-br from-zinc-500/10 to-zinc-700/5 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-zinc-500/10">
-                      <div className="absolute -right-4 -top-4 rounded-full bg-zinc-500/10 p-8 transition-transform duration-500 group-hover:scale-125"></div>
-                      <CardContent className="p-6 relative z-10">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <p className="text-sm tracking-tight font-medium text-zinc-500">Total Visits</p>
-                            <p className="text-3xl font-bold text-zinc-700 dark:text-zinc-300">{selectedCustomer?.visits || 0}</p>
+                    <Card className="overflow-hidden border-zinc-500/20 flex flex-col justify-center">
+                      <CardContent className="p-6 flex flex-col justify-center my-auto">
+                        <div className="flex flex-col items-center justify-center gap-4 text-center">
+                          {/* Calendar Icon */}
+                          <Calendar className="w-6 h-6 text-zinc-600 dark:text-zinc-300" />
+                          
+                          {/* Visits Count */}
+                          <div>
+                            <p className="text-5xl font-bold bg-gradient-to-r from-zinc-700 to-zinc-600 dark:from-zinc-200 dark:to-zinc-300 bg-clip-text text-transparent">
+                              {selectedCustomer?.visits || 0}
+                            </p>
+                            <p className="text-xs text-zinc-500 font-medium tracking-wide mt-2 uppercase">Total Visits</p>
                           </div>
-                          <Calendar className="h-10 w-10 text-zinc-500 dark:text-zinc-400" />
+                          
+                          {/* Last Visit */}
+                          {selectedCustomer?.last_visit && (
+                            <p className="text-xs text-zinc-500 mt-2">Last visit: {formatDate(selectedCustomer.last_visit)}</p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -1538,7 +1605,26 @@ export default function CustomersPage() {
                     <div className="grid grid-cols-2 gap-4 pl-6">
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-muted-foreground">NFC Card</p>
-                        <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer?.nfc_uid}</code>
+                        {selectedCustomer?.nfc_uid ? (
+                          <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{selectedCustomer.nfc_uid}</code>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground italic">No card</span>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 px-2 text-[10px] font-medium"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setScanMessage(null)
+                                setReassignPrompt(null)
+                                setAssignNfcModalOpen(true)
+                              }}
+                            >
+                              Link NFC Card
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {selectedCustomer?.date_of_birth && (
@@ -1598,17 +1684,13 @@ export default function CustomersPage() {
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="group relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 to-primary/10 shadow-sm transition-all duration-300 hover:shadow-md hover:shadow-primary/10">
-                        <div className="absolute -right-4 -top-4 rounded-full bg-primary/10 p-12 transition-transform duration-500 group-hover:scale-125"></div>
-                        <CardContent className="p-6 relative z-10">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1" aria-live="polite" aria-atomic="true">
-                              <p className="text-sm font-semibold tracking-tight text-foreground/70 dark:text-foreground/70">Available Points</p>
-                              <p className="text-5xl font-bold text-primary dark:text-primary">{selectedCustomer?.points || 0}</p>
-                            </div>
-
-                            <Award className="h-16 w-16 text-primary/30" />
-                          </div>
+                      <Card className="overflow-hidden border-primary/20">
+                        <CardContent className="p-6">
+                          <LoyaltyPointsDisplay 
+                            key={`loyalty-${selectedCustomer?.id}-${selectedCustomer?.points}`}
+                            points={selectedCustomer?.points || 0}
+                            showProgression={true}
+                          />
                         </CardContent>
                       </Card>
 
@@ -1997,11 +2079,13 @@ export default function CustomersPage() {
             <div className="space-y-2">
               <label id="label-dob" className="text-sm font-medium">Date of Birth</label>
               <DatePicker
-                value={profileForm.date_of_birth ? new Date(profileForm.date_of_birth) : undefined}
+                value={profileForm.date_of_birth ? (() => { const [y, m, d] = profileForm.date_of_birth.split("-").map(Number); return new Date(y, m - 1, d); })() : undefined}
                 onChange={(date) =>
                   setProfileForm((prev) => ({
                     ...prev,
-                    date_of_birth: date ? date.toISOString().slice(0, 10) : "",
+                    date_of_birth: date
+                      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+                      : "",
                   }))
                 }
                 captionLayout="dropdown"
@@ -2573,31 +2657,74 @@ export default function CustomersPage() {
                           <div className="relative overflow-hidden rounded-xl border bg-muted">
                             <button
                               type="button"
-                              className="absolute inset-0"
-                              onClick={() => setEnlargedImage(treatmentConsentUrl)}
+                              className="absolute inset-0 cursor-pointer"
+                              onClick={() => {
+                                if (treatmentConsentPdfUrl) {
+                                  window.open(treatmentConsentPdfUrl, '_blank')
+                                } else {
+                                  setEnlargedImage(treatmentConsentUrl)
+                                }
+                              }}
                             />
                             <img
                               src={treatmentConsentUrl}
                               alt="Consent Form"
-                              className="h-40 w-full object-cover"
+                              className="h-80 w-full object-cover object-top bg-white"
                             />
                           </div>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')}
+                              onClick={() => {
+                                if (treatmentConsentPdfUrl) {
+                                  window.open(treatmentConsentPdfUrl, '_blank')
+                                } else {
+                                  downloadImageAsJpeg(treatmentConsentUrl, 'consent-form')
+                                }
+                              }}
                             >
-                              Download
+                              Download {treatmentConsentPdfUrl ? 'PDF' : ''}
                             </Button>
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={handleDeleteTreatmentConsentForm}
+                              onClick={() => setConfirmDeleteConsent(true)}
                             >
                               Delete
                             </Button>
                           </div>
+
+                          {/* Delete Confirmation Modal */}
+                          <Dialog open={confirmDeleteConsent} onOpenChange={setConfirmDeleteConsent}>
+                            <DialogContent className="max-w-sm">
+                              <DialogHeader>
+                                <DialogTitle>Delete Consent Form</DialogTitle>
+                                <DialogDescription>
+                                  Are you sure you want to delete this consent form? This action cannot be undone.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="flex justify-end gap-2 pt-4">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setConfirmDeleteConsent(false)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    setConfirmDeleteConsent(false)
+                                    handleDeleteTreatmentConsentForm()
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
@@ -2623,6 +2750,16 @@ export default function CustomersPage() {
                             >
                               <Upload className="w-4 h-4 mr-2" />
                               Upload
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => setDigitalConsentOpen(true)}
+                              disabled={treatmentConsentUploading}
+                            >
+                              <Edit className="w-4 h-4 mr-2" />
+                              Sign Digitally
                             </Button>
                           </div>
                         </div>
@@ -2816,6 +2953,20 @@ export default function CustomersPage() {
             handleTreatmentConsentFormUpload(file)
           } else if (cameraCaptureType !== "none") {
             handleTreatmentPhotoUpload(file, cameraCaptureType)
+          }
+        }}
+      />
+
+      <DigitalConsentDialog
+        open={digitalConsentOpen}
+        onOpenChange={setDigitalConsentOpen}
+        customerName={selectedCustomer?.name || `${selectedCustomer?.first_name || ''} ${selectedCustomer?.last_name || ''}`.trim()}
+        customerId={selectedCustomer?.id || ''}
+        appointmentId={selectedAppointment?.id || ''}
+        treatmentName={selectedAppointment?.treatment_name}
+        onSuccess={() => {
+          if (selectedAppointment) {
+            loadTreatmentConsentForm(selectedAppointment.id, selectedAppointment.customer_id)
           }
         }}
       />

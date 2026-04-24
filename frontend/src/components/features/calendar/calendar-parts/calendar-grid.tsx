@@ -43,6 +43,7 @@ import { AppointmentCard } from "./appointment-card"
 import { AppointmentDetailPopover } from "./appointment-detail-popover"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -77,13 +78,16 @@ interface CalendarGridProps {
   staff: StaffMember[]
   appointments: Appointment[]
   blockedTimes: BlockedTime[]
+  branchNameById?: Record<string, string>
   /** When true, columns stretch to fill the available width instead of fixed 200px */
   snapColumnsToFit?: boolean
   onAppointmentUpdate: (id: string, updates: Partial<Appointment>) => void
-  onSlotClick: (staffId: string, startMinutes: number) => void
+  onSlotClick: (staffId: string, startMinutes: number, date?: Date) => void
   onAppointmentClick: (appointment: Appointment) => void
   onEditAppointment: (appointment: Appointment) => void
   onDeleteAppointment: (id: string) => void
+  /** Set of appointment IDs that have already been checked out/transacted */
+  checkedOutAppointmentIds?: Set<string>
 }
 
 // ---------------------------------------------------------------------------
@@ -97,14 +101,18 @@ export function CalendarGrid({
   staff,
   appointments,
   blockedTimes,
+  branchNameById,
   snapColumnsToFit = true,
   onAppointmentUpdate,
   onSlotClick,
   onAppointmentClick,
   onEditAppointment,
   onDeleteAppointment,
+  checkedOutAppointmentIds,
 }: CalendarGridProps) {
   const navigate = useNavigate()
+  const { userProfile } = useAuth()
+  const isStaff = userProfile?.role === "staff"
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragInfo | null>(null)
   const lastPreviewRef = useRef<DragPreview | null>(null)
@@ -175,6 +183,22 @@ export function CalendarGrid({
         const dy = e.clientY - (drag.startY - gridRef.current.scrollTop + gridRef.current.getBoundingClientRect().top)
         if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return
         drag.activated = true
+      }
+
+      const activeAppointment = appointments.find((a) => a.id === drag.appointmentId)
+      if (
+        isStaff &&
+        userProfile?.branch_id &&
+        activeAppointment?.branch_id &&
+        activeAppointment.branch_id !== userProfile.branch_id
+      ) {
+        setValidationError(
+          "Cannot modify appointment because its a cross-branch appointment. Contact branch admin of that branch.",
+        )
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
       }
 
       const gridRect = gridRef.current.getBoundingClientRect()
@@ -308,6 +332,19 @@ export function CalendarGrid({
         return
       }
 
+      // validate past date
+      const apptDateOnly = new Date(selectedDate)
+      apptDateOnly.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (apptDateOnly < today) {
+        setValidationError("Cannot move appointments to past dates. Please select today or a future date.")
+        dragRef.current = null
+        lastPreviewRef.current = null
+        setDragPreview(null)
+        return
+      }
+
       // commit
       const startDate = setTimeOnDate(selectedDate, newStartMin)
       const endDate = setTimeOnDate(selectedDate, newEndMin)
@@ -346,6 +383,7 @@ export function CalendarGrid({
   const handleCardPointerDown = useCallback(
     (e: React.PointerEvent, appointment: Appointment, staffIndex: number) => {
       if (!gridRef.current) return
+
       e.preventDefault()
       const gridRect = gridRef.current.getBoundingClientRect()
       const scrollTop = gridRef.current.scrollTop
@@ -393,7 +431,7 @@ export function CalendarGrid({
         staffIndex,
       }
     },
-    [clinicHours.open],
+    [clinicHours.open, isStaff, userProfile?.branch_id],
   )
 
   // ---- slot click (create) ----
@@ -452,38 +490,45 @@ export function CalendarGrid({
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Sticky headers - outside scroll area */}
-      <div className="flex border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-20">
-        <div
-          className="shrink-0 border-r bg-background/95"
-          style={{ width: TIME_GUTTER_WIDTH }}
-        />
-        {staff.map((s) => (
-          <div
-            key={s.id}
-            className="flex items-center gap-1.5 border-r px-3 py-2"
-            style={
-              snapColumnsToFit
-                ? { flex: `1 1 0%`, minWidth: `${MIN_COL_WIDTH}px` }
-                : { width: `${MIN_COL_WIDTH}px`, minWidth: `${MIN_COL_WIDTH}px` }
-            }
-          >
-            <div
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: s.color }}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium leading-tight">{s.name}</p>
-              <p className="truncate text-[10px] text-muted-foreground leading-tight">
-                {s.role}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Scrollable grid body */}
+      {/* Scrollable grid body — header is inside so it scrolls horizontally together */}
       <ScrollArea className="flex-1 overflow-hidden">
+        <div
+          style={{
+            minWidth: snapColumnsToFit
+              ? undefined
+              : `${TIME_GUTTER_WIDTH + staff.length * MIN_COL_WIDTH}px`,
+          }}
+        >
+        {/* Sticky staff header — inside the scroll container */}
+        <div className="flex border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-20">
+          <div
+            className="shrink-0 border-r bg-background/95"
+            style={{ width: TIME_GUTTER_WIDTH }}
+          />
+          {staff.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-1.5 border-r px-3 py-2"
+              style={
+                snapColumnsToFit
+                  ? { flex: `1 1 0%`, minWidth: `${MIN_COL_WIDTH}px` }
+                  : { width: `${MIN_COL_WIDTH}px`, minWidth: `${MIN_COL_WIDTH}px` }
+              }
+            >
+              <div
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: s.color }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium leading-tight">{s.name}</p>
+                <p className="truncate text-[10px] text-muted-foreground leading-tight">
+                  {s.role}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div
           ref={gridRef}
           className={cn(
@@ -491,9 +536,6 @@ export function CalendarGrid({
             dragPreview && "select-none cursor-grabbing",
           )}
           style={{
-            minWidth: snapColumnsToFit
-              ? undefined
-              : `${TIME_GUTTER_WIDTH + staff.length * MIN_COL_WIDTH}px`,
             paddingTop: "0.5rem",
           }}
         >
@@ -584,6 +626,8 @@ export function CalendarGrid({
                     key={appt.id}
                     appointment={appt}
                     staffColor={s.color}
+                    staffBranchId={s.branch_id}
+                    branchNameById={branchNameById}
                     top={top}
                     height={height}
                     isDragging={isDragging}
@@ -608,6 +652,7 @@ export function CalendarGrid({
                         },
                       })
                     }}
+                    isCheckedOut={checkedOutAppointmentIds?.has(appt.id) ?? false}
                   />
                 )
               })}
@@ -647,6 +692,7 @@ export function CalendarGrid({
             </div>
           </div>
         )}
+        </div>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>

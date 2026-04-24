@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Clock3, Settings2, ShoppingCart } from "lucide-react"
+import { Box, Clock3, Settings2, ShoppingCart, ShieldAlert } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NotificationToast } from "@/components/ui/notification-toast"
+import { useAuth } from "@/contexts/auth-context"
 
 type AdjustmentOption = {
   id: string
@@ -24,6 +25,7 @@ const defaultAdjustments: AdjustmentOption[] = [
 const localAdjustmentStorageKey = "fg_pos_adjustments"
 
 export default function PosSettingsPage() {
+  const { userProfile } = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState("")
   const [percent, setPercent] = useState("")
@@ -135,6 +137,21 @@ export default function PosSettingsPage() {
     setToast({ id: crypto.randomUUID(), title: "POS Confirmation", message: "Reset to default adjustments.", type: "success" })
   }
 
+  if (userProfile?.role === "staff") {
+    return (
+      <div className="flex h-[50vh] flex-col items-center justify-center space-y-4">
+        <ShieldAlert className="h-12 w-12 text-destructive" />
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="text-muted-foreground text-center">
+          You do not have permission to access POS Settings.
+        </p>
+        <Button onClick={() => navigate("/dashboard/checkout")}>
+          Return to POS
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {toast && (
@@ -161,14 +178,18 @@ export default function PosSettingsPage() {
               <Box className="mr-2 h-4 w-4" />
               Inventory
             </Button>
-            <Button type="button" variant="default" size="sm" onClick={() => navigate("/dashboard/pos-settings")}> 
-              <Settings2 className="mr-2 h-4 w-4" />
-              Settings
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/checkout?view=logs")}> 
-              <Clock3 className="mr-2 h-4 w-4" />
-              Logs
-            </Button>
+            {userProfile?.role !== "staff" && (
+              <>
+                <Button type="button" variant="default" size="sm" onClick={() => navigate("/dashboard/pos-settings")}> 
+                  <Settings2 className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/checkout?view=logs")}> 
+                  <Clock3 className="mr-2 h-4 w-4" />
+                  Logs
+                </Button>
+              </>
+            )}
             <Button type="button" variant="outline" size="sm" onClick={() => navigate("/dashboard/checkout")}> 
               <ShoppingCart className="mr-2 h-4 w-4" />
               POS

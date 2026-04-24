@@ -38,8 +38,11 @@ def create_app() -> Flask:
     cors_origins = [
         config.FRONTEND_URL,
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://localhost:5175",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
         "http://fgaesthetic-frontend:5173",  # Docker container hostname
     ]
     print(f"[APP] CORS Origins: {cors_origins}", file=sys.stderr)
@@ -57,11 +60,15 @@ def create_app() -> Flask:
     from app.routes.reports import reports_bp
     from app.routes.pos import pos_bp
     from app.routes.staff import staff_bp
+    from app.routes.admin_cleanup import cleanup_bp
+    from app.routes.inventory import inventory_bp
     
     app.register_blueprint(accounts_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(pos_bp)
     app.register_blueprint(staff_bp)
+    app.register_blueprint(cleanup_bp)
+    app.register_blueprint(inventory_bp)
 
     # ==================== Routes ====================
 
